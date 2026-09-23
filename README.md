@@ -1,6 +1,6 @@
 # Dynamic Delay for OBS
 
-**English** · [Português](README.pt-BR.md)
+**English** · [Português](README.pt-BR.md) · Developed by [ragnarcb](https://github.com/ragnarcb)
 
 Turn your stream delay on and off **at any moment, while you are live**, from a panel inside OBS or with a hotkey.
 
@@ -226,3 +226,7 @@ gh release create vX.Y.Z Dynamic-Delay-Installer.exe Instalar-Delay-Dinamico.exe
 - The delay changes at keyframes: turning it off (or growing in scene/freeze mode) waits for or cuts at a keyframe (up to 2 s with OBS' default interval).
 - In scene and freeze modes the still picture repeats a keyframe at 2 fps to save bandwidth (`filler_fps` in `config.toml`).
 - The installer is for Windows. The relay and the script run on Linux and macOS, but installing there is manual.
+
+---
+
+Developed by [ragnarcb](https://github.com/ragnarcb).

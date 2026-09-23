@@ -2,6 +2,12 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.3.1] - 2026-09-23
+
+### Added
+
+- "Developed by ragnarcb" credit with a link to the author's GitHub in the panel, the installer, the OBS script description and the READMEs. In the OBS dock, the link opens in the system browser.
+
 ## [0.3.0] - 2026-09-23
 
 ### Added

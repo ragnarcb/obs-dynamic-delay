@@ -1,6 +1,6 @@
 # Delay Dinâmico para OBS
 
-[English](README.md) · **Português**
+[English](README.md) · **Português** · Desenvolvido por [ragnarcb](https://github.com/ragnarcb)
 
 Ligue e desligue o delay da sua live **a qualquer momento, com a transmissão no ar**, direto de um painel dentro do OBS ou por atalho de teclado.
 
@@ -227,3 +227,7 @@ gh release create vX.Y.Z Dynamic-Delay-Installer.exe Instalar-Delay-Dinamico.exe
 - Ligar o delay espera o próximo quadro-chave (até 2 s com o intervalo padrão do OBS), e desligar corta num quadro-chave.
 - Nos modos cena e congelar, a imagem parada repete um quadro-chave a 2 fps, para gastar pouca banda (`filler_fps` no `config.toml`).
 - O instalador é para Windows. O relay e o script funcionam em Linux e macOS, mas lá a instalação é manual.
+
+---
+
+Desenvolvido por [ragnarcb](https://github.com/ragnarcb).

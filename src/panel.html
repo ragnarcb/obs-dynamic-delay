@@ -45,6 +45,9 @@
   }
   .actions { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 10px; }
   a { color: var(--muted); font-size: 12px; cursor: pointer; }
+  .credit { text-align: center; color: var(--muted); font-size: 11px; padding: 2px 0 6px; }
+  .credit a { color: var(--busy); font-size: 11px; text-decoration: none; }
+  .credit a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -117,6 +120,8 @@
       <a id="restoreObs" data-t="restoreObs"></a>
     </div>
   </details>
+
+  <footer class="credit"><span data-t="developedBy"></span> <a id="author" href="https://github.com/ragnarcb" target="_blank" rel="noopener">ragnarcb</a></footer>
 </main>
 <script>
   const API = window.DD_API || "";
@@ -139,6 +144,7 @@
       platformState: { idle: "Platform idle", connecting: "Platform connecting...", connected: "Platform connected", reconnecting: "Platform reconnecting..." },
       applying: "Applying in OBS...", confirmRestore: "Click again to confirm: OBS goes back to streaming directly, without the dynamic delay.",
       keySaved: "saved (type to replace)", keyPaste: "paste the key here", noScenes: "(open OBS to list the scenes)",
+      developedBy: "Developed by",
       pickScene: "Pick the scene shown while the delay builds up.", saved: "Saved.", savedNext: "Saved. The new destination applies to the next stream.",
     },
     pt: {
@@ -158,6 +164,7 @@
       platformState: { idle: "Plataforma parada", connecting: "Plataforma conectando...", connected: "Plataforma conectada", reconnecting: "Plataforma reconectando..." },
       applying: "Aplicando no OBS...", confirmRestore: "Clique de novo para confirmar: o OBS volta a transmitir direto, sem o delay dinâmico.",
       keySaved: "salva (digite para trocar)", keyPaste: "cole a chave aqui", noScenes: "(abra o OBS para listar as cenas)",
+      developedBy: "Desenvolvido por",
       pickScene: "Escolha a cena que aparece enquanto o delay enche.", saved: "Salvo.", savedNext: "Salvo. Destino novo vale na próxima live.",
     },
   };
@@ -196,6 +203,11 @@
     post(path).then((r) => ($("msg").textContent = r.ok ? T().applying : r.error));
   }
   $("configureObs").onclick = () => obsAction("/api/obs/configure");
+  // inside an OBS dock a plain link would navigate the dock itself: ask the relay to open the system browser
+  $("author").onclick = (ev) => {
+    ev.preventDefault();
+    post("/api/open/author").catch(() => window.open($("author").href, "_blank"));
+  };
   // two clicks instead of confirm(): dialogs may be blocked inside OBS docks
   let restoreArmed = 0;
   $("restoreObs").onclick = () => {

@@ -36,6 +36,8 @@ pub enum Mode {
 pub fn wizard(mode: Mode) -> Result<()> {
     println!("==============================================");
     println!("{}", t!("  Dynamic Delay for OBS", "  Delay dinamico para OBS"));
+    println!("{}", t!("  Developed by ragnarcb", "  Desenvolvido por ragnarcb"));
+    println!("  {}", crate::control::AUTHOR_URL);
     println!("==============================================\n");
     let r = run(mode);
     if let Err(e) = &r {

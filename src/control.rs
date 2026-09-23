@@ -40,6 +40,7 @@ pub async fn serve_http(listen: String, tx: UnboundedSender<EngineMsg>, shared: 
         .route("/api/config", get(get_config).post(set_config))
         .route("/api/obs/configure", post(obs_configure))
         .route("/api/obs/restore", post(obs_restore))
+        .route("/api/open/author", post(open_author))
         // the OBS dock loads the panel from a local file, so allow cross-origin calls
         .layer(CorsLayer::permissive())
         .with_state(state);
@@ -166,6 +167,20 @@ fn queue_obs_action(s: &AppState, action: ObsAction) -> Json<serde_json::Value> 
     }
     b.pending.push_back(action);
     Json(serde_json::json!({ "ok": true }))
+}
+
+pub const AUTHOR_URL: &str = "https://github.com/ragnarcb";
+
+/// Opens the author's GitHub page in the system browser (the only URL this opens).
+async fn open_author() -> impl IntoResponse {
+    let r = if cfg!(windows) {
+        std::process::Command::new("cmd").args(["/C", "start", "", AUTHOR_URL]).spawn()
+    } else if cfg!(target_os = "macos") {
+        std::process::Command::new("open").arg(AUTHOR_URL).spawn()
+    } else {
+        std::process::Command::new("xdg-open").arg(AUTHOR_URL).spawn()
+    };
+    Json(serde_json::json!({ "ok": r.is_ok() }))
 }
 
 async fn obs_configure(State(s): State<AppState>) -> impl IntoResponse {

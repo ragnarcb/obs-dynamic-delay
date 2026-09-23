@@ -434,9 +434,11 @@ function script_description()
   read_ports()
   return L([[<h2>Dynamic Delay</h2>
 <p>Settings live in the <b>Dynamic Delay</b> panel (<i>Docks</i> menu).
-Hotkeys in <i>Settings &gt; Hotkeys &gt; Dynamic Delay</i>.</p>]], [[<h2>Delay dinâmico</h2>
+Hotkeys in <i>Settings &gt; Hotkeys &gt; Dynamic Delay</i>.</p>
+<p>Developed by <a href="https://github.com/ragnarcb">ragnarcb</a></p>]], [[<h2>Delay dinâmico</h2>
 <p>A configuração fica no painel <b>Delay dinâmico</b> (menu <i>Docks</i>).
-Atalhos em <i>Configurações &gt; Atalhos &gt; Delay dinâmico</i>.</p>]])
+Atalhos em <i>Configurações &gt; Atalhos &gt; Delay dinâmico</i>.</p>
+<p>Desenvolvido por <a href="https://github.com/ragnarcb">ragnarcb</a></p>]])
 end
 
 local function refresh_status()
