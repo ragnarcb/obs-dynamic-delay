@@ -230,9 +230,11 @@ gh release create vX.Y.Z Dynamic-Delay-Installer.exe Instalar-Delay-Dinamico.exe
 
 ## License
 
+**Dynamic Delay was made to be free.** Use it for whatever you want, just don't sell it.
+
 Dynamic Delay's source code is open under the [MIT License with the Commons Clause](LICENSE). You can use, copy, modify and share it, including in your own streams and projects, as long as you **give proper credit**: keep the copyright notice (`Copyright (c) 2026 ragnarcb`) and the license text in copies and derived works, and mention [ragnarcb](https://github.com/ragnarcb) as the original author.
 
-The only thing you **cannot** do is **sell** it: you may not charge for the software itself, or for a product or service whose value comes mainly from it (including paid hosting or support for it).
+The only thing you **cannot** do is **sell** it: you may not charge for the software itself, or for a product or service whose value comes mainly from it (including paid hosting or support for it). Using it in your own streams is fine, monetized ones included: that is using the program, not selling it.
 
 Contributions are welcome: open an issue or a pull request.
 

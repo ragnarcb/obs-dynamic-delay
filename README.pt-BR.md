@@ -231,9 +231,11 @@ gh release create vX.Y.Z Dynamic-Delay-Installer.exe Instalar-Delay-Dinamico.exe
 
 ## Licença
 
+**O Delay Dinâmico foi feito para ser gratuito.** Use para o que quiser, só não venda.
+
 O código do Delay Dinâmico é aberto, sob a [licença MIT com a Commons Clause](LICENSE). Você pode usar, copiar, modificar e compartilhar, inclusive nas suas lives e nos seus projetos, desde que **dê os devidos créditos**: mantenha o aviso de copyright (`Copyright (c) 2026 ragnarcb`) e o texto da licença nas cópias e nos trabalhos derivados, e cite [ragnarcb](https://github.com/ragnarcb) como autor original.
 
-A única coisa que você **não** pode fazer é **vender**: não pode cobrar pelo software em si, nem por um produto ou serviço cujo valor venha principalmente dele (incluindo hospedagem ou suporte pagos).
+A única coisa que você **não** pode fazer é **vender**: não pode cobrar pelo software em si, nem por um produto ou serviço cujo valor venha principalmente dele (incluindo hospedagem ou suporte pagos). Usar nas suas lives pode, inclusive nas monetizadas: isso é usar o programa, não vender.
 
 Contribuições são bem-vindas: abra uma issue ou um pull request.
 
