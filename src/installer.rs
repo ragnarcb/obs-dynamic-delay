@@ -1,4 +1,5 @@
-//! Console installer shown when the exe is double-clicked: copies the relay and
+//! Installer shown when the exe is double-clicked (native dialogs on Windows,
+//! console with --console or --install): copies the relay and
 //! the OBS script to a fixed folder and wires them into OBS (script, dock,
 //! stream settings). OBS rewrites its config on exit, so it must be closed.
 
@@ -31,6 +32,21 @@ pub enum Mode {
     Ask,
     Install,
     Uninstall,
+}
+
+/// Steps done so far, shown in the final message of the windowed installer.
+static STEPS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// Double-click entry point: native dialogs on Windows, the console elsewhere.
+pub fn start() -> Result<()> {
+    #[cfg(windows)]
+    {
+        if !std::env::args().any(|a| a == "--console") {
+            gui::run();
+            return Ok(());
+        }
+    }
+    wizard(Mode::Ask)
 }
 
 pub fn wizard(mode: Mode) -> Result<()> {
@@ -88,7 +104,14 @@ fn run(mode: Mode) -> Result<()> {
     wait_obs_closed();
     match mode {
         Mode::Uninstall => uninstall(&p),
-        _ => install(&p),
+        _ => {
+            install(&p, true)?;
+            if ask(&t!("Open OBS now? [Y/n] ", "Abrir o OBS agora? [S/n] ")).to_lowercase().starts_with('n') {
+                return Ok(());
+            }
+            launch_obs();
+            Ok(())
+        }
     }
 }
 
@@ -180,7 +203,9 @@ fn default_obs_dir() -> Result<PathBuf> {
     }
 }
 
-fn install(p: &Paths) -> Result<()> {
+/// Installs or updates. `interactive` asks for the destination on the console when
+/// none could be imported (the windowed installer leaves that to the panel).
+fn install(p: &Paths, interactive: bool) -> Result<Config> {
     std::fs::create_dir_all(&p.install_dir)?;
 
     // 1. files
@@ -219,7 +244,7 @@ fn install(p: &Paths) -> Result<()> {
             step(&t!("destination imported from OBS: {}", "destino importado do OBS: {}", cfg.upstream_url));
         }
     }
-    if !imported && cfg.stream_key.is_empty() {
+    if interactive && !imported && cfg.stream_key.is_empty() {
         ask_destination(&mut cfg);
     }
     cfg.save(&p.config())?;
@@ -300,11 +325,7 @@ fn install(p: &Paths) -> Result<()> {
             "Falta so a chave de transmissao: preencha no painel \"{dock}\" dentro do OBS."
         ));
     }
-    if ask(&t!("Open OBS now? [Y/n] ", "Abrir o OBS agora? [S/n] ")).to_lowercase().starts_with('n') {
-        return Ok(());
-    }
-    launch_obs();
-    Ok(())
+    Ok(cfg)
 }
 
 fn uninstall(p: &Paths) -> Result<()> {
@@ -363,6 +384,7 @@ fn ask_destination(cfg: &mut Config) {
 
 fn step(msg: &str) {
     println!("  [ok] {msg}");
+    STEPS.lock().unwrap().push(msg.to_string());
 }
 
 fn ask(prompt: &str) -> String {
@@ -587,5 +609,103 @@ mod tests {
         let u = uuid();
         assert_eq!(u.len(), 36);
         assert_eq!(u.matches('-').count(), 4);
+    }
+}
+
+/// Windowed installer: native message boxes, no console.
+#[cfg(windows)]
+mod gui {
+    use std::time::Duration;
+
+    use windows_sys::Win32::System::Console::FreeConsole;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        IDCANCEL, IDNO, IDYES, MB_ICONERROR, MB_ICONINFORMATION, MB_ICONQUESTION, MB_ICONWARNING, MB_OKCANCEL,
+        MB_OK, MB_SETFOREGROUND, MB_TOPMOST, MB_YESNO, MB_YESNOCANCEL, MessageBoxW,
+    };
+
+    use super::{Mode, Paths, STEPS, dock_title, install, launch_obs, obs_running, uninstall};
+    use crate::t;
+
+    fn wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain(Some(0)).collect()
+    }
+
+    fn msg(text: &str, flags: u32) -> i32 {
+        let title = t!("Dynamic Delay for OBS", "Delay dinâmico para OBS");
+        unsafe {
+            MessageBoxW(std::ptr::null_mut(), wide(text).as_ptr(), wide(&title).as_ptr(), flags | MB_SETFOREGROUND | MB_TOPMOST)
+        }
+    }
+
+    pub fn run() {
+        // double-clicked: drop the empty console window
+        unsafe {
+            FreeConsole();
+        }
+        let credit = format!("\n\n{}", t!("Developed by ragnarcb - github.com/ragnarcb", "Desenvolvido por ragnarcb - github.com/ragnarcb"));
+        let p = match Paths::detect() {
+            Ok(p) => p,
+            Err(e) => {
+                msg(&format!("{e:#}"), MB_OK | MB_ICONERROR);
+                return;
+            }
+        };
+        let dock = dock_title();
+        let mode = if p.is_installed() {
+            let text = t!(
+                "Dynamic Delay is already installed.\n\nYes = update / reinstall (keeps your settings)\nNo = uninstall\nCancel = close",
+                "O Delay dinâmico já está instalado.\n\nSim = atualizar / reinstalar (mantém sua configuração)\nNão = desinstalar\nCancelar = fechar"
+            );
+            match msg(&(text + &credit), MB_YESNOCANCEL | MB_ICONQUESTION) {
+                IDYES => Mode::Install,
+                IDNO => Mode::Uninstall,
+                _ => return,
+            }
+        } else {
+            let text = t!(
+                "Install Dynamic Delay into OBS?\n\n- adds the \"{dock}\" panel and the script to OBS\n- makes OBS stream through the relay (your current settings are backed up)\n- turns off OBS' built-in Stream Delay",
+                "Instalar o Delay dinâmico no OBS?\n\n- adiciona o painel \"{dock}\" e o script ao OBS\n- faz o OBS transmitir pelo relay (a configuração atual fica salva)\n- desliga o Stream Delay nativo do OBS"
+            );
+            if msg(&(text + &credit), MB_YESNO | MB_ICONQUESTION) != IDYES {
+                return;
+            }
+            Mode::Install
+        };
+        while obs_running() {
+            let text = t!(
+                "Close OBS to continue (it rewrites its settings when it closes), then click OK.",
+                "Feche o OBS para continuar (ele regrava as configurações ao fechar) e clique em OK."
+            );
+            if msg(&text, MB_OKCANCEL | MB_ICONWARNING) == IDCANCEL {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(800));
+        }
+        let result = match mode {
+            Mode::Uninstall => uninstall(&p).map(|_| None),
+            _ => install(&p, false).map(Some),
+        };
+        let steps = STEPS.lock().unwrap().iter().map(|s| format!("- {s}")).collect::<Vec<_>>().join("\n");
+        match result {
+            Ok(Some(cfg)) => {
+                let mut text = format!("{}\n\n{steps}", t!("Done!", "Pronto!"));
+                if cfg.stream_key.is_empty() {
+                    text += &format!("\n\n{}", t!(
+                        "Only the stream key is missing: fill it in the \"{dock}\" panel inside OBS (Docks menu).",
+                        "Falta só a chave de transmissão: preencha no painel \"{dock}\" dentro do OBS (menu Docks)."
+                    ));
+                }
+                text += &format!("\n\n{}", t!("Open OBS now?", "Abrir o OBS agora?"));
+                if msg(&text, MB_YESNO | MB_ICONINFORMATION) == IDYES {
+                    launch_obs();
+                }
+            }
+            Ok(None) => {
+                msg(&format!("{}\n\n{steps}", t!("Uninstalled.", "Desinstalado.")), MB_OK | MB_ICONINFORMATION);
+            }
+            Err(e) => {
+                msg(&format!("{}\n\n{e:#}", t!("Something went wrong:", "Algo deu errado:")), MB_OK | MB_ICONERROR);
+            }
+        }
     }
 }

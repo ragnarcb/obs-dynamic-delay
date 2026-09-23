@@ -1,6 +1,6 @@
 [package]
 name = "obs-dynamic-delay"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2024"
 description = "Dynamic stream delay for OBS: switch the delay on and off while live"
 readme = "README.md"
@@ -30,3 +30,6 @@ tokio-native-tls = "0.3.1"
 toml = "1.1.6"
 tower-http = { version = "0.7.1", features = ["cors"] }
 url = "2.5.8"
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_UI_WindowsAndMessaging", "Win32_System_Console", "Win32_Foundation"] }

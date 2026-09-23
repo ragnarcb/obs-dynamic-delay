@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Dynamic Delay plugin</title></head>
+<body>
+<script>
+// Stream Deck plugin (HTML runtime). Talks to the Dynamic Delay relay API with the
+// token saved in the global settings (see pi.html).
+const COMMANDS = {
+  "com.ragnarcb.dynamicdelay.toggle": "toggle",
+  "com.ragnarcb.dynamicdelay.censor": "censor",
+  "com.ragnarcb.dynamicdelay.replay": "replay",
+  "com.ragnarcb.dynamicdelay.clip": "clip",
+  "com.ragnarcb.dynamicdelay.panic": "panic",
+};
+let ws = null;
+let uuid = null;
+let settings = { api: "http://127.0.0.1:8787", token: "" };
+const contexts = {}; // context -> action UUID
+
+function send(obj) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+}
+
+async function api(path, method) {
+  const r = await fetch(settings.api.replace(/\/+$/, "") + path, { method: method || "GET", headers: { "x-dd-token": settings.token } });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+
+// eslint-disable-next-line no-unused-vars
+function connectElgatoStreamDeckSocket(port, pluginUUID, registerEvent) {
+  uuid = pluginUUID;
+  ws = new WebSocket("ws://127.0.0.1:" + port);
+  ws.onopen = () => {
+    send({ event: registerEvent, uuid });
+    send({ event: "getGlobalSettings", context: uuid });
+  };
+  ws.onmessage = async (msg) => {
+    const m = JSON.parse(msg.data);
+    if (m.event === "didReceiveGlobalSettings") {
+      settings = Object.assign(settings, m.payload.settings || {});
+    } else if (m.event === "willAppear") {
+      contexts[m.context] = m.action;
+    } else if (m.event === "willDisappear") {
+      delete contexts[m.context];
+    } else if (m.event === "keyDown") {
+      const c = COMMANDS[m.action];
+      try {
+        const r = await api("/api/cmd/" + c, "POST");
+        send({ event: r.ok ? "showOk" : "showAlert", context: m.context });
+      } catch (e) {
+        send({ event: "showAlert", context: m.context });
+      }
+      refresh();
+    }
+  };
+}
+
+// keeps the toggle keys showing LIVE / the delay, and the panic key its state
+async function refresh() {
+  if (!settings.token) return;
+  let s = null;
+  try { s = await api("/api/status"); } catch (e) { /* relay closed */ }
+  for (const [ctx, action] of Object.entries(contexts)) {
+    if (action === "com.ragnarcb.dynamicdelay.toggle") {
+      send({ event: "setState", context: ctx, payload: { state: s && s.enabled ? 1 : 0 } });
+      const title = !s ? "OFF" : s.engine ? `${Math.round(s.engine.current_ms / 1000)}s` : s.enabled ? `${s.delay_seconds}s` : "";
+      send({ event: "setTitle", context: ctx, payload: { title } });
+    } else if (action === "com.ragnarcb.dynamicdelay.panic") {
+      send({ event: "setTitle", context: ctx, payload: { title: s && s.panic ? "ON" : "" } });
+    }
+  }
+}
+setInterval(refresh, 1000);
+</script>
+</body>
+</html>

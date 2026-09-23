@@ -2,99 +2,103 @@
 
 **English** · [Português](README.pt-BR.md) · Developed by [ragnarcb](https://github.com/ragnarcb)
 
-Turn your stream delay on and off **at any moment, while you are live**, from a panel inside OBS or with a hotkey.
+Turn your stream delay on and off **at any moment, while you are live**, and get a toolkit around it: delete what should not air, instant replays, clips, multistream, protection against connection drops, and more. Everything lives in a panel inside OBS that you shape to your needs.
 
-![Dynamic Delay panel: live, adjusting and delayed](docs/img/en/panel-states.png)
+![Delay block: live, adjusting and delayed](docs/img/en/panel-states.png)
 
 OBS' built-in "Stream Delay" can only be changed while the stream is stopped. With Dynamic Delay you go live as usual and, whenever you need it (spoilers, personal info on screen, a competitive match), you press a button and the stream becomes 30 s delayed. Press it again and it is back to live, without the stream dropping.
 
 ## Contents
 
 - [Features](#features)
-- [Installation (step by step)](#installation-step-by-step)
-- [Using it while live](#using-it-while-live)
+- [Installation](#installation)
+- [The panel](#the-panel)
 - [What viewers see](#what-viewers-see)
+- [Features in detail](#features-in-detail)
+- [Hotkeys](#hotkeys)
+- [Stream Deck](#stream-deck)
 - [Troubleshooting](#troubleshooting)
 - [Updating and uninstalling](#updating-and-uninstalling)
+- [Security](#security)
 - [How it works](#how-it-works)
-- [API and integrations](#api-and-integrations)
+- [API](#api)
 - [Development](#development)
 - [Known limitations](#known-limitations)
 - [License](#license)
 
 ## Features
 
-- **Delay you can switch while live:** on, off, presets (10, 30, 60, 120 s) and ±5 s steps, without restarting the stream.
-- **Three ways to apply the delay:** rewind (no freeze), show one of your OBS scenes, or freeze the picture.
-- **Panel inside OBS:** a dock with the stream state, the real delay viewers get and all the settings.
-- **Hotkeys** in OBS' own hotkey settings.
-- **Two-click install:** the installer configures OBS for you and backs up everything it changes.
-- **Twitch, YouTube, Kick** and any RTMP/RTMPS destination.
-- **English and Portuguese:** panel, installer, script and messages in both languages.
-- **Lightweight:** nothing is re-encoded. The relay only buffers and forwards the video OBS already encoded, with negligible CPU use.
-- **Resilient:** reconnects on its own if the platform connection drops, and finishes sending the delayed tail when you end the stream.
+**Delay**
+- Switch the delay on and off while live, presets (10, 30, 60, 120 s) and ±5 s steps.
+- Three ways to apply it: **rewind** (no freeze), show one of your **OBS scenes**, or **freeze** the picture.
+- **Delay by scene:** the delay switches by itself when a scene goes on air (for example on in "Ranked", off in "Just chatting").
 
-## Installation (step by step)
+**Protection**
+- **Delete before it airs:** leaked an address, a password or a notification? One press removes the last seconds before viewers see them.
+- **Panic button:** covers the stream with a scene, mutes all audio and deletes the unaired part, in one press.
+
+**Content and reach**
+- **Instant replay** of the last seconds on air, like a sports replay.
+- **Clips:** saves the last seconds as MP4, ready for TikTok and Shorts.
+- **Multistream:** Twitch, YouTube, Kick and any RTMP/RTMPS destination at the same time, from a single OBS output.
+- **Connection drop protection:** if a platform connection drops, what could not be sent is kept and sent after it reconnects, so viewers miss nothing.
+
+**Control**
+- A **panel inside OBS** made of blocks: show only what you use, in the order you want.
+- OBS **hotkeys**, a **Stream Deck plugin**, **Twitch chat commands** for you and your mods, and **phone control** with a QR code.
+- **Stream health:** input bitrate, per destination status, and a beep when a connection drops.
+- **English and Portuguese** everywhere.
+
+**Lightweight:** nothing is re-encoded. The relay only buffers and forwards the video OBS already encoded, with negligible CPU use.
+
+## Installation
 
 > Requirements: Windows 10/11 and OBS Studio 28 or newer, opened at least once.
 
-**1. Download the installer.** From the [Releases](../../releases/latest) page, download `Dynamic-Delay-Installer.exe` (English). `Instalar-Delay-Dinamico.exe` is the Portuguese version; the language can be changed later in the panel.
+1. From the [Releases](../../releases/latest) page, download **`Dynamic-Delay-Installer.exe`** (English). `Instalar-Delay-Dinamico.exe` is the Portuguese version; the language can be changed later in the panel.
+2. Double-click it. Windows may show "Windows protected your PC" because the exe is not code-signed: click **More info > Run anyway**.
+3. Click **Yes** to install. If OBS is open, the installer asks you to close it (OBS rewrites its settings when it closes).
+4. When it is done, the installer shows everything it did and offers to open OBS.
 
-**2. Double-click it.** A console window opens and explains what it will do. Press Enter to install.
-
-**3. Close OBS if it is open.** The installer waits for it: OBS rewrites its settings when it closes, so they must be changed while it is closed.
-
-**4. Enter your platform and stream key.** If OBS was already set up for Twitch or YouTube, the installer imports the destination and key by itself. Otherwise it asks:
-
-```
-Where do you stream to?
-  1 = Twitch   2 = YouTube   3 = Kick / other (paste URL)
-Option (Enter = Twitch):
-Stream key (Enter = fill in later in the panel):
-```
-
-**5. Done.** The installer:
-
-- copies the relay and the script to `%APPDATA%\obs-dynamic-delay`;
-- makes OBS stream through the local relay (`rtmp://127.0.0.1:1935/live`);
-- turns off OBS' built-in Stream Delay;
+The installer:
+- copies the relay and the OBS script to `%APPDATA%\obs-dynamic-delay`;
+- imports the destination and stream key already set in OBS, when there are any;
+- makes OBS stream through the local relay (`rtmp://127.0.0.1:1935/live`) and turns off OBS' built-in Stream Delay;
 - adds the script and the **Dynamic Delay** panel to OBS;
 - backs up every file it changes (`*.dd-backup` and `obs-service-backup.json`).
 
-At the end it offers to open OBS.
+In OBS, the panel is under **Docks > Dynamic Delay**: drag it wherever you like, for example next to "Controls". If the stream key is missing, the panel asks for it under **Settings**.
 
-**6. Place the panel.** In OBS, the panel is under **Docks > Dynamic Delay**. Drag it wherever you like, for example next to "Controls".
+Do an unlisted or test stream first. The step by step checklist is in [docs/TESTING.md](docs/TESTING.md).
 
-**7. (Optional) Set hotkeys.** In **Settings > Hotkeys**, look for "Dynamic Delay":
+## The panel
 
-| Hotkey | What it does |
+Every feature is a block. In **Customize panel** you tick the blocks you want and set their order with the arrows. Someone who only wants the delay keeps only the **Delay** block; hidden features keep working through hotkeys, chat and Stream Deck.
+
+![Customize panel](docs/img/en/panel-customize.png)
+
+By default the panel shows **Delay**, **Delete before it airs** and **Stream health**. With every block turned on:
+
+![All the blocks](docs/img/en/panel-all-modules.png)
+
+| Block | What it is for |
 |---|---|
-| Dynamic Delay: toggle on/off | switches between live and delayed |
-| Dynamic Delay: turn on | turns the delay on |
-| Dynamic Delay: turn off (back to live) | goes back to live |
-| Dynamic Delay: increase / decrease | adds or removes 5 s (the step is set in the script options) |
-
-**8. Do a test stream.** Use an unlisted or test stream before using it on an important one.
-
-## Using it while live
-
-Start streaming as usual with the OBS button. The panel shows:
-
-| Indicator | Meaning |
-|---|---|
-| **LIVE** (green) | viewers see the stream in real time |
-| **ADJUSTING** (blue) | the delay is being applied or removed |
-| **DELAY** (orange) | the stream is delayed; the big number is the real delay |
-| OBS streaming / OBS ready | OBS is connected to the relay |
-| Platform connected | the relay is sending to Twitch/YouTube/... |
-
-In the panel's **Settings** section you change platform, URL, key, [what viewers see when the delay turns on](#what-viewers-see), "Start every stream with the delay on" and the **language** (hotkey names switch language the next time OBS opens). Destination or key changes made during a stream apply from the next stream on; the delay length changes right away.
+| Delay | state (LIVE, ADJUSTING, DELAY, REPLAY, PANIC), real delay for viewers, on/off, presets |
+| Delete before it airs | removes the last seconds before viewers see them |
+| Instant replay | replays the last seconds on air |
+| Clips | saves the last seconds as MP4 and opens the clips folder |
+| Panic button | cover scene, mute and delete in one press |
+| Stream health | time live, bitrate from OBS, status and bitrate of each destination, catch up after a drop, alert beep |
+| Multistream | extra destinations with name, URL, key and an on/off switch |
+| Delay by scene | rules: scene X on air turns the delay on, off, or on with N seconds |
+| Twitch chat commands | channel, who may use them, command name |
+| Phone control | QR code to open the panel on your phone (same Wi-Fi) |
+| Stream Deck / API | access token for the plugin and ready-made links |
+| Settings (always there) | platform, URL, key, what viewers see when the delay turns on, start every stream with the delay on, language |
 
 ## What viewers see
 
-For the stream to be 30 s behind, viewers have to "lose" 30 s at some point. You choose how, in the panel, under **Settings > When the delay is switched on or increased**:
-
-![Panel settings](docs/img/en/panel-settings.png)
+For the stream to be 30 s behind, viewers have to "lose" 30 s at some point. You choose how, under **Settings > When the delay is switched on or increased**:
 
 | Mode | What viewers see when the delay turns on |
 |---|---|
@@ -102,15 +106,13 @@ For the stream to be 30 s behind, viewers have to "lose" 30 s at some point. You
 | **Show an OBS scene** | OBS briefly switches to the chosen scene (for example an "Applying delay..." image), and that picture stays on screen, still and muted, while the delay builds up. Then OBS switches back to your scene by itself. |
 | **Freeze the picture** | The live picture freezes on the next keyframe, with muted audio, while the delay builds up. |
 
-Otherwise the three modes behave the same:
+In every mode:
 
 | Action | What viewers see |
 |---|---|
 | **Turn the delay off** | A hard cut to the present: the buffered part is dropped and the stream is live again (within about 2 s). |
 | **Increase / decrease** | Increasing applies the chosen mode for the difference only; decreasing cuts by the difference. |
 | **End the stream with the delay on** | The relay finishes sending the delayed tail and only then ends the stream on the platform. To end right away, turn the delay off after stopping. |
-
-Details of each mode:
 
 - **Rewind:** the relay always keeps the last seconds it sent (about 23 MB for 30 s at 6 Mbps). If the stream started less than the delay ago, it rewinds what it has and freezes for the rest. The jump happens at a keyframe, so it may go back up to about 1 s more than asked.
 - **Show a scene:** the scene is visible live for up to 2 s (until the next keyframe) before it holds still. Videos and animations in the scene do not play. If the scene does not exist or the OBS script does not answer, the relay freezes the live picture instead.
@@ -125,108 +127,178 @@ Real output tests (the numbers are seconds of the source video):
 
 ![Freeze mode test](docs/img/test-freeze.png)
 
+## Features in detail
+
+### Delete before it airs
+
+With the delay on, whatever you did in the last seconds has not reached viewers yet. Press **Delete** (block, hotkey, chat `!delay censor` or Stream Deck) and the newest seconds (10 by default) are removed from the buffer. Viewers see the stream hold its last frame, muted, over the gap, and then continue. The delay stays the same. The deleted part does not go to clips either.
+
+### Instant replay
+
+Replays the last seconds (10 by default) on air, then cuts back to the normal delay. Works with or without the delay on.
+
+### Clips
+
+Saves the last seconds (30 by default, up to 120) as `clip_<date>.mp4` in `Videos\Dynamic Delay` (or the folder in the settings). It includes what has not aired yet, so you can clip something that just happened. H.264 + AAC becomes MP4; other codecs (HEVC, AV1) are saved as FLV.
+
+### Panic button
+
+One press: switches OBS to the panic scene (for example "Be right back"), mutes every audio source and, with the delay on, deletes the unaired seconds. Press again to go back: the previous scene returns and only the sources the panic muted are unmuted.
+
+### Multistream
+
+Add destinations in the **Multistream** block (name, server URL, key). Each one gets the same delayed stream over its own connection, and a problem in one does not affect the others. Your upload has to carry the bitrate once per destination.
+
+### Connection drop protection
+
+When a platform connection drops, the relay keeps what could not be sent (up to 60 s by default, set in **Stream health**) and sends it after reconnecting, in real time. Viewers of that platform miss nothing; that destination then runs that much behind, and the **Catch up** button brings it back. On a network too slow for the bitrate, the relay skips ahead instead of using more and more memory.
+
+### Delay by scene
+
+Rules such as "**Ranked** on air: turn on with 60 s" and "**Just chatting**: turn off". The scene the delay mode and the panic button switch to never triggers rules.
+
+### Twitch chat commands
+
+Turn it on in the **Twitch chat commands** block with your channel name. The relay reads the chat anonymously (no login, no token) and only accepts commands from you, your mods, or also VIPs:
+
+`!delay on` · `!delay off` · `!delay 60` · `!delay censor [s]` · `!delay replay [s]` · `!delay clip [s]` · `!delay panic` (Portuguese aliases work too: `ligar`, `desligar`, `apagar`, `clipe`, `panico`).
+
+### Phone control
+
+Tick **Allow access from phones on this network** and scan the QR code with the phone camera (same Wi-Fi). Windows may ask to allow the connection the first time. The link carries the access token: anyone with it can control the delay, so do not share it.
+
+## Hotkeys
+
+In **Settings > Hotkeys**, look for "Dynamic Delay":
+
+| Hotkey | What it does |
+|---|---|
+| toggle on/off | switches between live and delayed |
+| turn on / turn off (back to live) | sets the delay state |
+| increase / decrease | adds or removes 5 s (the step is set in the script options) |
+| delete before it airs | removes the newest unaired seconds |
+| instant replay | replays the last seconds |
+| save clip | saves the last seconds as MP4 |
+| panic button | panic mode on / off |
+
+## Stream Deck
+
+**Plugin (experimental):** download `Dynamic-Delay-StreamDeck.streamDeckPlugin` from the releases and double-click it. Drag the "Dynamic Delay" actions to your keys; in the settings of any of them paste the access token from the panel's **Stream Deck / API** block. The toggle key shows LIVE or DELAY with the current seconds, and the panic key shows ON while active.
+
+![Stream Deck keys](docs/img/streamdeck-keys.png)
+
+The plugin was tested against a simulated Stream Deck, not on real hardware yet: please report any problem.
+
+**Without the plugin:** use the "Website" action with "Access in background" and one of the links from the **Stream Deck / API** block (they already contain your token).
+
 ## Troubleshooting
 
 | Symptom | What to do |
 |---|---|
 | The panel shows **RELAY CLOSED** | Normal while OBS is starting. If it stays, open **Tools > Scripts**, check that `obs-dynamic-delay.lua` is listed and click "Restart relay". |
-| **Platform reconnecting** with an error | Almost always a wrong key or URL. Check the panel's Settings section. |
+| The panel says the access token is missing | Open it from OBS (Docks menu) or the script's "Open panel" button, not by typing the address. |
+| **Platform reconnecting** with an error | Almost always a wrong key or URL. Check **Settings**. |
 | **OBS not configured** | Click **Configure OBS automatically** in the panel. |
-| OBS says it could not connect to the server | The relay did not start. See the log at `%APPDATA%\obs-dynamic-delay\obs-dynamic-delay.log`. |
-| The panel does not show up | **Docks > Dynamic Delay** menu. If it is not there, run the installer again with OBS closed. |
-| I want to stream without the relay again | In the panel: Settings > "Restore OBS' original stream settings" (click twice to confirm). |
+| OBS cannot connect to the server | The relay did not start. See `%APPDATA%\obs-dynamic-delay\obs-dynamic-delay.log`. |
+| The panel does not show up | **Docks > Dynamic Delay**. If it is not there, run the installer again with OBS closed. |
+| "Windows protected your PC" | The exe is not code-signed. Click **More info > Run anyway**. |
+| Chat commands do nothing | Check the channel name and who may use them; the log shows `[chat] listening to #channel`. |
+| Phone cannot open the panel | Same Wi-Fi, allow the connection in the Windows firewall prompt, and use the link from the QR code. |
+| I want to stream without the relay again | **Settings > Restore OBS' original stream settings** (click twice to confirm). |
 
-When opening an issue, attach `obs-dynamic-delay.log`. The stream key is not written to it.
+When opening an issue, attach `obs-dynamic-delay.log`. The stream keys are not written to it.
 
 ## Updating and uninstalling
 
-Double-click the installer again. It detects the existing install and offers:
+The panel tells you when a new version is out. Download the installer again and double-click it: **Yes** updates (your settings and keys are kept), **No** uninstalls (removes the script and the panel and restores the original stream settings). From the command line: `Dynamic-Delay-Installer.exe --install` or `--uninstall` (`--console` runs the text installer).
 
-- **1:** update/reinstall, keeping your settings;
-- **2:** uninstall, removing the script and the panel and restoring the original stream settings.
+## Security
 
-The command line works too: `Dynamic-Delay-Installer.exe --install` or `--uninstall`. Installing with the other language's installer switches the app language.
+- Every API call needs the access token created on first start (`api_token` in `config.toml`). Websites open in your browser cannot control the delay or read your settings.
+- The API never returns stream keys or the token.
+- By default the panel only listens on your PC (`127.0.0.1`). **Phone control** opens it to your local network, still protected by the token.
+- The relay only ever opens three fixed places on your PC when asked (the author's GitHub, the releases page, the clips folder).
 
 ## How it works
 
 ```
-                    ┌──────────────── obs-dynamic-delay (relay) ────────────────┐
-OBS ──RTMP──▶ 127.0.0.1:1935 ──▶ buffer + delay engine ──▶ RTMP/RTMPS client ──▶ Twitch / YouTube / Kick
- ▲                                   ▲            ▲
- │ Lua script (hotkeys, bridge)  UDP 8788     HTTP 8787 (API)
- └───────────────────────────────────┘            ▲
-                                       OBS dock panel · Stream Deck
+                  ┌──────────────────── obs-dynamic-delay (relay) ────────────────────┐
+OBS ──RTMP──▶ 127.0.0.1:1935 ──▶ delay engine ──▶ one RTMP/RTMPS client per destination ──▶ Twitch / YouTube / Kick
+ ▲                                  │   ▲                      (own buffer: drops, slow networks)
+ │ Lua script (hotkeys, scenes,     │   └── HTTP 8787 + token ◀── dock panel · phone · Stream Deck
+ │ panic, OBS settings) ◀── UDP 8788┘                  ▲
+ └────────────────────────────────── clips (MP4) ◀─────┘         Twitch chat (IRC, read only)
 ```
 
 - **Relay (Rust, `src/`):** receives RTMP from OBS, keeps the already encoded packets and forwards them with the current delay.
-  - **When the delay grows:** in rewind mode it puts recently sent packets back in the queue and sends them again; in scene and freeze modes it repeats a keyframe (plus muted AAC audio) until the buffer is full. In scene mode the repeated frame is the first one encoded after the script switched scenes in OBS.
-  - **When it shrinks:** it cuts at the most recent possible keyframe.
-  - Timestamps are rewritten so the platform gets a continuous timeline, B-frames included (PTS and DTS).
-- **OBS script (Lua, `obs/`):** registers the hotkeys, starts and closes the relay with OBS and applies inside OBS what the panel asks for (stream settings and the delay scene). It uses the LuaJIT bundled with OBS, so no Python install is needed.
-- **Panel (`src/panel.html`):** page served by the relay and installed as an OBS dock.
+  - Growing the delay: rewind puts recently sent packets back in the queue; scene and freeze repeat a keyframe (plus muted AAC audio) until the buffer is full.
+  - Shrinking cuts at the most recent possible keyframe; deleting drops the newest unaired packets and holds the last frame over the gap.
+  - Timestamps are rewritten so every platform gets a continuous timeline, B-frames included.
+- **OBS script (Lua, `obs/`):** hotkeys, starts and closes the relay with OBS, reports the scene on air and applies what the relay asks inside OBS (stream settings, delay scene, panic). It uses the LuaJIT bundled with OBS, so no Python install is needed.
+- **Panel (`src/panel.html`):** written by the relay as `dock.html` with the token, loaded as an OBS dock.
 - **Installer (`src/installer.rs`):** the same exe; double-clicked, it configures OBS.
 
-**Why Rust:** the heavy lifting is an RTMP server and client that hold minutes of video in memory and resend everything at the right time for hours. Rust delivers that as a single dependency-free `.exe`, with no garbage-collector pauses and near-zero CPU. A Python script inside OBS has no access to the encoded video, and every streamer would need a compatible interpreter installed.
+**Why Rust:** the heavy lifting is an RTMP server and several clients that hold minutes of video in memory and resend everything at the right time for hours. Rust delivers that as a single dependency-free `.exe`, with no garbage-collector pauses and near-zero CPU.
 
-**Memory:** roughly bitrate times delay (6 Mbps × 30 s ≈ 23 MB).
+## API
 
-## API and integrations
-
-The HTTP API at `http://127.0.0.1:8787` accepts GET and POST, so it works directly with Stream Deck ("Website" action), Touch Portal, chat bots, etc.
+`http://127.0.0.1:8787`, token in the `x-dd-token` header or the `?token=` query. GET and POST both work for commands, so Stream Deck and bots can use them directly.
 
 | Route | Action |
 |---|---|
-| `/api/toggle` | toggles the delay |
-| `/api/on` · `/api/off` | turns it on · off |
-| `/api/delay/{s}` | sets the delay in seconds |
-| `/api/add/{s}` | adds (negative works: `/api/add/-5`) |
-| `/api/status` | state as JSON |
-| `/api/config` | reads (GET) or writes (POST JSON) destination, key and options |
+| `/api/cmd/{cmd}` · `/api/cmd/{cmd}/{arg}` | `toggle`, `on`, `off`, `set/30`, `add/-5`, `censor[/s]`, `replay[/s]`, `clip[/s]`, `panic`, `catchup` |
+| `/api/status` | state as JSON (delay, engine, destinations, health, panic, last clip, events) |
+| `/api/config` | reads (GET) or changes (POST JSON, only the fields you send) the settings |
 | `/api/obs/configure` · `/api/obs/restore` | asks the OBS script to configure or restore the stream settings |
+| `/api/lan` | phone link and QR code |
 
-UDP port `8788` takes text commands: `toggle`, `on`, `off`, `set 30`, `add -5` and `status`, plus the ones used by the script (`poll`, `import`, `result`, `quit`, `stay`, `scenes`, `scene_shown`, `scene_failed`).
-
-Settings live in `%APPDATA%\obs-dynamic-delay\config.toml`, normally edited from the panel.
+UDP port `8788` takes the same commands as text (`toggle`, `set 30`, `censor`, ...) plus the ones used by the OBS script.
 
 ## Development
 
 Requires stable [Rust](https://rustup.rs). The end-to-end test also needs `ffmpeg` and `curl` on the PATH.
 
 ```sh
-cargo build --release        # target/release/obs-dynamic-delay.exe (English)
-cargo build --release --features pt   # same, Portuguese by default
-cargo test                   # delay engine, FLV parser, config, INI, commands, texts
-bash scripts/e2e-test.sh     # ffmpeg plays OBS and the platform; toggles the delay mid-stream
+cargo build --release                  # target/release/obs-dynamic-delay.exe (English)
+cargo build --release --features pt    # same, Portuguese by default
+cargo test                             # engine, FLV, clips, config, chat, installer, commands
+bash scripts/e2e-test.sh               # ffmpeg plays OBS and the platform
 ```
 
-Run only the relay, without installing: `obs-dynamic-delay.exe path\config.toml` (the file is created with comments if missing). Handy variables to test the installer without touching your real OBS: `DD_OBS_CONFIG_DIR`, `DD_INSTALL_DIR` and `DD_SKIP_OBS_CHECK=1`.
+Run only the relay: `obs-dynamic-delay.exe path\config.toml`. Test the installer without touching your OBS: `DD_OBS_CONFIG_DIR`, `DD_INSTALL_DIR`, `DD_SKIP_OBS_CHECK=1`.
 
 | File | Contents |
 |---|---|
-| `src/engine.rs` | delay engine: buffer, rewind, freeze, cuts, timestamps |
-| `src/flv.rs` | FLV packet inspection (AVC/HEVC/AV1, AAC), muted AAC |
+| `src/engine.rs` | delay engine: buffer, rewind, freeze, cuts, delete, replay, clip snapshot, timestamps |
+| `src/upstream.rs` | one RTMP/RTMPS client per destination, outage buffer, catch up |
 | `src/ingest.rs` | RTMP server receiving from OBS |
-| `src/upstream.rs` | RTMP/RTMPS client to the platform, with reconnection |
-| `src/control.rs` | HTTP API and UDP commands |
-| `src/installer.rs` | installer and uninstaller |
+| `src/control.rs` | HTTP API (token, LAN, QR) and UDP commands |
+| `src/clip.rs` | MP4/FLV clip writer |
+| `src/chat.rs` | Twitch chat commands |
+| `src/installer.rs` | windowed and console installer |
 | `src/i18n.rs` | English and Portuguese texts (`t!` macro) |
-| `src/panel.html` | panel (texts in its `TEXT` dictionary) |
+| `src/panel.html` | panel; each block is an entry in `MODULES`, texts in `TEXT` |
 | `obs/obs-dynamic-delay.lua` | OBS script (texts through `L()`) |
+| `streamdeck/` | Stream Deck plugin and its icon generator |
 
-**Releasing:** bump `version` in `Cargo.toml`, update `CHANGELOG.md`, build both installers and create the release:
+**Adding a panel block:** add its id to `ALL_MODULES` in `src/config.rs` and `src/panel.html`, write an entry in `MODULES` (`build()` returns the content, `update(status)` refreshes it) and its texts in both languages.
+
+**Releasing:** bump `version` in `Cargo.toml` and the plugin `manifest.json`, update `CHANGELOG.md`, then:
 
 ```sh
 cargo build --release && cp target/release/obs-dynamic-delay.exe Dynamic-Delay-Installer.exe
 cargo build --release --features pt && cp target/release/obs-dynamic-delay.exe Instalar-Delay-Dinamico.exe
-gh release create vX.Y.Z Dynamic-Delay-Installer.exe Instalar-Delay-Dinamico.exe --notes-file notes.md
+python scripts/package_streamdeck.py    # Dynamic-Delay-StreamDeck.streamDeckPlugin
+gh release create vX.Y.Z Dynamic-Delay-Installer.exe Instalar-Delay-Dinamico.exe Dynamic-Delay-StreamDeck.streamDeckPlugin --notes-file notes.md
 ```
 
 ## Known limitations
 
+- Tested end to end locally (ffmpeg as OBS and as the platforms, a simulated OBS and Stream Deck). Do a test stream on your platform before an important one: [docs/TESTING.md](docs/TESTING.md).
 - RTMP/RTMPS only. WHIP, SRT and Twitch's "Enhanced Broadcasting" (multitrack) do not go through the relay.
-- The delay changes at keyframes: turning it off (or growing in scene/freeze mode) waits for or cuts at a keyframe (up to 2 s with OBS' default interval).
-- In scene and freeze modes the still picture repeats a keyframe at 2 fps to save bandwidth (`filler_fps` in `config.toml`).
-- The installer is for Windows. The relay and the script run on Linux and macOS, but installing there is manual.
+- The delay changes at keyframes (about 2 s with OBS' default interval).
+- The exe is not code-signed, so Windows SmartScreen warns on first run.
+- The installer configures the OBS profile in use and a standard (non portable) OBS install. It is for Windows; the relay and the script also run on Linux and macOS with a manual setup.
 
 ## License
 

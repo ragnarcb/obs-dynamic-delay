@@ -1,0 +1,52 @@
+{
+  "Name": "Dynamic Delay",
+  "Author": "ragnarcb",
+  "URL": "https://github.com/ragnarcb/obs-dynamic-delay",
+  "Description": "Control the OBS Dynamic Delay: toggle the delay, delete before it airs, instant replay, clips and panic.",
+  "Version": "0.4.0.0",
+  "SDKVersion": 2,
+  "Software": { "MinimumVersion": "5.0" },
+  "OS": [{ "Platform": "windows", "MinimumVersion": "10" }],
+  "CodePath": "plugin.html",
+  "PropertyInspectorPath": "pi.html",
+  "Icon": "images/plugin",
+  "Category": "Dynamic Delay",
+  "CategoryIcon": "images/category",
+  "Actions": [
+    {
+      "UUID": "com.ragnarcb.dynamicdelay.toggle",
+      "Name": "Toggle delay",
+      "Tooltip": "Turns the delay on or off. Shows LIVE or the current delay.",
+      "Icon": "images/toggle_list",
+      "States": [{ "Image": "images/toggle_off" }, { "Image": "images/toggle_on" }]
+    },
+    {
+      "UUID": "com.ragnarcb.dynamicdelay.censor",
+      "Name": "Delete before it airs",
+      "Tooltip": "Removes the last seconds before viewers see them (needs the delay on).",
+      "Icon": "images/censor_list",
+      "States": [{ "Image": "images/censor" }]
+    },
+    {
+      "UUID": "com.ragnarcb.dynamicdelay.replay",
+      "Name": "Instant replay",
+      "Tooltip": "Replays the last seconds on air.",
+      "Icon": "images/replay_list",
+      "States": [{ "Image": "images/replay" }]
+    },
+    {
+      "UUID": "com.ragnarcb.dynamicdelay.clip",
+      "Name": "Save clip",
+      "Tooltip": "Saves the last seconds as an MP4.",
+      "Icon": "images/clip_list",
+      "States": [{ "Image": "images/clip" }]
+    },
+    {
+      "UUID": "com.ragnarcb.dynamicdelay.panic",
+      "Name": "Panic button",
+      "Tooltip": "Covers the stream and mutes the audio. Press again to end.",
+      "Icon": "images/panic_list",
+      "States": [{ "Image": "images/panic" }]
+    }
+  ]
+}

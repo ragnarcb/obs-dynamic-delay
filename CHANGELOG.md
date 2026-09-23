@@ -2,6 +2,34 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.4.0] - 2026-09-23
+
+### Added
+
+- **Modular panel:** every feature is a block; "Customize panel" picks which ones show and their order.
+- **Delete before it airs:** removes the newest unaired seconds; the stream holds its last frame over the gap and keeps the delay.
+- **Instant replay** of the last seconds on air, then back to the normal delay.
+- **Clips** of the last seconds as MP4 (H.264 + AAC) or FLV, including what has not aired yet.
+- **Multistream** to extra destinations, each on its own connection.
+- **Connection drop protection:** what could not be sent is kept and sent after the reconnect, with a catch-up button.
+- **Delay by scene** rules and a **panic button** (cover scene, mute all audio, delete the unaired part).
+- **Twitch chat commands** (`!delay on/off/60/censor/replay/clip/panic`) for the streamer, mods or VIPs.
+- **Phone control** on the local network with a QR code.
+- **Stream health:** input bitrate, time live, per destination status and bitrate, alert beep.
+- **Stream Deck plugin** (experimental) with live state on the keys; ready-made API links.
+- Update notice when a new release is out.
+- Windowed installer (native dialogs); the text installer stays available with `--console`.
+- Hotkeys for delete, replay, clip and panic.
+
+### Security
+
+- Every HTTP API call now needs an access token, generated on first start; websites open in the browser can no longer control the relay or change the destination. The API never returns stream keys or the token.
+
+### Changed
+
+- The relay writes `dock.html` (with the token) at every start, so the dock always matches the installed version.
+- Per destination buffers bound memory on a slow network.
+
 ## [0.3.1] - 2026-09-23
 
 ### Added

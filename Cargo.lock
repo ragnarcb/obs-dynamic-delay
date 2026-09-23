@@ -823,7 +823,7 @@ dependencies = [
 
 [[package]]
 name = "obs-dynamic-delay"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -841,6 +841,7 @@ dependencies = [
  "toml",
  "tower-http",
  "url",
+ "windows-sys",
 ]
 
 [[package]]

@@ -1,0 +1,62 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Dynamic Delay settings</title>
+<style>
+  body { background: #2d2d2d; color: #d8d8d8; font: 12px system-ui, "Segoe UI", sans-serif; margin: 0; padding: 10px; }
+  label { display: grid; gap: 4px; margin-bottom: 10px; }
+  input { background: #3d3d3d; color: #fff; border: 1px solid #555; border-radius: 3px; padding: 5px; font: inherit; }
+  p { color: #9a9a9a; margin: 0 0 8px; line-height: 1.4; }
+  #state { font-weight: 600; }
+</style>
+</head>
+<body>
+<p>Token: in OBS open the <b>Dynamic Delay</b> panel, <b>Stream Deck / API</b> block, and copy it. / Token: no OBS, abra o painel <b>Delay dinâmico</b>, bloco <b>Stream Deck / API</b>, e copie.</p>
+<label>Token<input id="token" type="password" autocomplete="off"></label>
+<label>Relay<input id="api" type="text" placeholder="http://127.0.0.1:8787"></label>
+<p id="state"></p>
+<script>
+let ws = null;
+let uuid = null;
+let settings = { api: "http://127.0.0.1:8787", token: "" };
+const $ = (id) => document.getElementById(id);
+
+async function check() {
+  try {
+    const r = await fetch(settings.api.replace(/\/+$/, "") + "/api/status", { headers: { "x-dd-token": settings.token } });
+    $("state").textContent = r.ok ? "✔ Connected / Conectado" : r.status === 401 ? "✘ Wrong token / Token errado" : "✘ HTTP " + r.status;
+  } catch (e) {
+    $("state").textContent = "✘ Relay closed (open OBS) / Relay fechado (abra o OBS)";
+  }
+}
+
+function save() {
+  settings = { api: $("api").value.trim() || "http://127.0.0.1:8787", token: $("token").value.trim() };
+  ws.send(JSON.stringify({ event: "setGlobalSettings", context: uuid, payload: settings }));
+  check();
+}
+
+// eslint-disable-next-line no-unused-vars
+function connectElgatoStreamDeckSocket(port, piUUID, registerEvent) {
+  uuid = piUUID;
+  ws = new WebSocket("ws://127.0.0.1:" + port);
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ event: registerEvent, uuid }));
+    ws.send(JSON.stringify({ event: "getGlobalSettings", context: uuid }));
+  };
+  ws.onmessage = (msg) => {
+    const m = JSON.parse(msg.data);
+    if (m.event === "didReceiveGlobalSettings") {
+      settings = Object.assign(settings, m.payload.settings || {});
+      $("token").value = settings.token || "";
+      $("api").value = settings.api || "";
+      check();
+    }
+  };
+}
+$("token").addEventListener("change", save);
+$("api").addEventListener("change", save);
+</script>
+</body>
+</html>

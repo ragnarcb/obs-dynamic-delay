@@ -81,7 +81,8 @@ fn main() -> Result<()> {
         Some("--install") => return installer::wizard(installer::Mode::Install),
         Some("--uninstall") => return installer::wizard(installer::Mode::Uninstall),
         // double-clicked in Explorer: show the installer
-        None if std::io::stdin().is_terminal() => return installer::wizard(installer::Mode::Ask),
+        None if std::io::stdin().is_terminal() => return installer::start(),
+        Some("--console") => return installer::wizard(installer::Mode::Ask),
         _ => {}
     }
     tokio::runtime::Runtime::new()?.block_on(relay())

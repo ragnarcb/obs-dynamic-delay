@@ -121,7 +121,8 @@ const TEXT = {
     chatOn: "Listen to chat commands", channel: "Channel", allow: "Who can use them", allowB: "only me", allowM: "me and mods", allowV: "me, mods and VIPs", prefix: "Command",
     chatHint: (p) => `In chat: ${p} on · ${p} off · ${p} 60 · ${p} censor · ${p} replay · ${p} clip · ${p} panic`,
     lanOn: "Allow access from phones on this network", lanHint: "Scan with the phone camera (same Wi-Fi). Windows may ask to allow the connection. Anyone with this link can control the delay: do not share it.",
-    sdHint: "Stream Deck: use the \"Website\" action with \"Access in background\". Each link already contains your token.", copy: "Copy", copied: "Copied!",
+    sdPlugin: "With the Dynamic Delay Stream Deck plugin (see the releases page), paste this token in its settings:", token: "Access token",
+    sdHint: "Without the plugin: use the \"Website\" action with \"Access in background\" and one of these links (they already contain your token).", copy: "Copy", copied: "Copied!",
     toggle: "Toggle delay", on: "Delay on", off: "Delay off",
     settings: "Settings", platform: "Platform", other: "Other", serverUrl: "Server URL (copy it from the platform dashboard)", streamKey: "Stream key",
     keySaved: "saved (type to replace)", keyPaste: "paste the key here", growLabel: "When the delay is switched on or increased",
@@ -163,7 +164,8 @@ const TEXT = {
     chatOn: "Ouvir comandos no chat", channel: "Canal", allow: "Quem pode usar", allowB: "só eu", allowM: "eu e os mods", allowV: "eu, mods e VIPs", prefix: "Comando",
     chatHint: (p) => `No chat: ${p} on · ${p} off · ${p} 60 · ${p} apagar · ${p} replay · ${p} clipe · ${p} panico`,
     lanOn: "Permitir acesso pelo celular nesta rede", lanHint: "Aponte a câmera do celular (mesmo Wi-Fi). O Windows pode pedir para liberar a conexão. Quem tiver este link controla o delay: não compartilhe.",
-    sdHint: "Stream Deck: use a ação \"Website\" com \"Acessar em segundo plano\". Cada link já tem o seu token.", copy: "Copiar", copied: "Copiado!",
+    sdPlugin: "Com o plugin Delay Dinâmico para Stream Deck (na página de releases), cole este token nas configurações dele:", token: "Token de acesso",
+    sdHint: "Sem o plugin: use a ação \"Website\" com \"Acessar em segundo plano\" e um destes links (eles já têm o seu token).", copy: "Copiar", copied: "Copiado!",
     toggle: "Ligar/desligar delay", on: "Ligar delay", off: "Desligar delay",
     settings: "Configuração", platform: "Plataforma", other: "Outra", serverUrl: "URL do servidor (copie do painel da plataforma)", streamKey: "Chave de transmissão",
     keySaved: "salva (digite para trocar)", keyPaste: "cole a chave aqui", growLabel: "Ao ligar ou aumentar o delay",
@@ -421,7 +423,10 @@ const MODULES = {
     build() {
       const base = (API || location.origin) + "/api/cmd/";
       const rows = [[T().toggle, "toggle"], [T().on, "on"], [T().off, "off"], [T().m.censor, "censor"], [T().m.replay, "replay"], [T().m.clips, "clip"], [T().m.panic, "panic"]];
-      return [h("p", { class: "muted", style: "margin-top:0", text: T().sdHint }), ...rows.map(([label, c]) => {
+      const tokenBtn = h("button", { class: "small", text: T().copy, onclick: () => copyText(TOKEN).then(() => { tokenBtn.textContent = T().copied; setTimeout(() => (tokenBtn.textContent = T().copy), 1500); }) });
+      return [h("p", { class: "muted", style: "margin-top:0", text: T().sdPlugin }),
+        h("div", { class: "line" }, h("span", { class: "grow" }, h("b", { text: T().token })), tokenBtn),
+        h("p", { class: "muted", text: T().sdHint }), ...rows.map(([label, c]) => {
         const url = `${base}${c}?token=${TOKEN}`;
         const btn = h("button", { class: "small", text: T().copy, onclick: () => copyText(url).then(() => { btn.textContent = T().copied; setTimeout(() => (btn.textContent = T().copy), 1500); }) });
         return h("div", { class: "line" }, h("span", { class: "grow", text: label }), btn);
