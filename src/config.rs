@@ -181,6 +181,7 @@ impl Config {
         if !["broadcaster", "mods", "vips"].contains(&self.twitch_chat.allow.as_str()) {
             self.twitch_chat.allow = "mods".into();
         }
+        self.twitch_chat.channel = crate::chat::channel_name(&self.twitch_chat.channel);
         let mut seen = Vec::new();
         self.panel_modules.retain(|m| ALL_MODULES.contains(&m.as_str()) && !seen.contains(m) && {
             seen.push(m.clone());

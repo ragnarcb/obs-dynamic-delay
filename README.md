@@ -161,7 +161,7 @@ Rules such as "**Ranked** on air: turn on with 60 s" and "**Just chatting**: tur
 
 Turn it on in the **Twitch chat commands** block with your channel name. The relay reads the chat anonymously (no login, no token) and only accepts commands from you, your mods, or also VIPs:
 
-`!delay on` · `!delay off` · `!delay 60` · `!delay censor [s]` · `!delay replay [s]` · `!delay clip [s]` · `!delay panic` (Portuguese aliases work too: `ligar`, `desligar`, `apagar`, `clipe`, `panico`).
+`!delay on` · `!delay off` · `!delay 60` (turns on with 60 s) · `!delay censor [s]` · `!delay replay [s]` · `!delay clip [s]` · `!delay panic` (Portuguese aliases work too: `ligar`, `desligar`, `apagar`, `clipe`, `panico`).
 
 ### Phone control
 
@@ -202,7 +202,7 @@ The plugin was tested against a simulated Stream Deck, not on real hardware yet:
 | OBS cannot connect to the server | The relay did not start. See `%APPDATA%\obs-dynamic-delay\obs-dynamic-delay.log`. |
 | The panel does not show up | **Docks > Dynamic Delay**. If it is not there, run the installer again with OBS closed. |
 | "Windows protected your PC" | The exe is not code-signed. Click **More info > Run anyway**. |
-| Chat commands do nothing | Check the channel name and who may use them; the log shows `[chat] listening to #channel`. |
+| Chat commands do nothing | In the **Twitch chat commands** block, tick "Listen to chat commands" and use just the channel name. The log (`obs-dynamic-delay.log`) must show `[chat] joined #yourchannel`. |
 | Phone cannot open the panel | Same Wi-Fi, allow the connection in the Windows firewall prompt, and use the link from the QR code. |
 | I want to stream without the relay again | **Settings > Restore OBS' original stream settings** (click twice to confirm). |
 

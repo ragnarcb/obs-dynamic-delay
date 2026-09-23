@@ -161,7 +161,7 @@ Regras como "**Ranqueada** no ar: ligar com 60 s" e "**Conversa**: desligar". As
 
 Ative no bloco **Comandos no chat da Twitch** com o nome do seu canal. O relay lê o chat de forma anônima (sem login, sem token) e só aceita comandos de você, dos seus mods, ou também dos VIPs:
 
-`!delay on` · `!delay off` · `!delay 60` · `!delay apagar [s]` · `!delay replay [s]` · `!delay clipe [s]` · `!delay panico` (também em inglês: `on`, `off`, `censor`, `clip`, `panic`).
+`!delay on` · `!delay off` · `!delay 60` (liga com 60 s) · `!delay apagar [s]` · `!delay replay [s]` · `!delay clipe [s]` · `!delay panico` (também em inglês: `on`, `off`, `censor`, `clip`, `panic`).
 
 ### Controle pelo celular
 
@@ -202,7 +202,7 @@ O plugin foi testado com um Stream Deck simulado, ainda não num aparelho de ver
 | O OBS não consegue conectar ao servidor | O relay não abriu. Veja `%APPDATA%\obs-dynamic-delay\obs-dynamic-delay.log`. |
 | O painel não aparece | **Docks > Delay dinâmico**. Se não estiver lá, rode o instalador de novo com o OBS fechado. |
 | "O Windows protegeu o computador" | O exe não tem assinatura digital. Clique em **Mais informações > Executar assim mesmo**. |
-| Os comandos do chat não fazem nada | Confira o nome do canal e quem pode usar; o log mostra `[chat] listening to #canal`. |
+| Os comandos do chat não fazem nada | No bloco **Comandos no chat da Twitch**, marque "Ouvir comandos no chat" e use só o nome do canal. O log (`obs-dynamic-delay.log`) precisa mostrar `[chat] joined #seucanal`. |
 | O celular não abre o painel | Mesmo Wi-Fi, libere a conexão no aviso do firewall do Windows e use o link do QR code. |
 | Quero voltar a transmitir sem o relay | **Configuração > Restaurar a configuração original de transmissão do OBS** (clique duas vezes para confirmar). |
 

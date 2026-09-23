@@ -32,7 +32,23 @@ pub async fn run(shared: Arc<Shared>, tx: UnboundedSender<EngineMsg>) {
 }
 
 fn channel(cfg: &TwitchChat) -> String {
-    cfg.channel.trim().trim_start_matches('#').trim_start_matches("https://www.twitch.tv/").to_lowercase()
+    channel_name(&cfg.channel)
+}
+
+/// Channel login from whatever was typed: "name", "@name", "#name",
+/// "twitch.tv/name" or a full https://www.twitch.tv/name link.
+pub fn channel_name(typed: &str) -> String {
+    let mut c = typed.trim().to_lowercase();
+    if let Some(i) = c.find("twitch.tv/") {
+        c = c[i + "twitch.tv/".len()..].to_string();
+    }
+    c.trim_start_matches(['#', '@'])
+        .split(['/', '?', '#', ' '])
+        .next()
+        .unwrap_or("")
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric() || *ch == '_')
+        .collect()
 }
 
 async fn listen(shared: &Shared, tx: &UnboundedSender<EngineMsg>, cfg: &TwitchChat) -> Result<()> {
@@ -53,9 +69,19 @@ async fn listen(shared: &Shared, tx: &UnboundedSender<EngineMsg>, cfg: &TwitchCh
                     w.write_all(b"\r\n").await?;
                     continue;
                 }
+                if line.contains(" 366 ") {
+                    log::info!("[chat] joined #{chan}, waiting for commands");
+                }
+                if line.contains(" NOTICE ") {
+                    log::warn!("[chat] {line}");
+                }
                 if let Some((user, cmd)) = parse_command(&line, cfg) {
                     log::info!("[chat] {user}: {cmd:?}");
                     let _ = tx.send(EngineMsg::Cmd(cmd));
+                    if let Cmd::Set(_) = cmd {
+                        // "!delay 60" means "delay of 60 s": also turn it on
+                        let _ = tx.send(EngineMsg::Cmd(Cmd::On));
+                    }
                 }
             }
             _ = check.tick() => {
@@ -130,6 +156,20 @@ mod tests {
         assert_eq!(parse_command(&msg("moderator/1", "!delay apagar 8"), &c).unwrap().1, Cmd::Censor(Some(8)));
         assert_eq!(parse_command(&msg("moderator/1", "!DELAY off"), &c).unwrap().1, Cmd::Off);
         assert_eq!(parse_command(&msg("moderator/1", "!delay"), &c).unwrap().1, Cmd::Toggle);
+    }
+
+    #[test]
+    fn channel_names_are_cleaned() {
+        for typed in ["ragnar_cb", "@Ragnar_CB", "#ragnar_cb", "twitch.tv/ragnar_cb", "https://www.twitch.tv/ragnar_cb", "www.twitch.tv/ragnar_cb/videos", " ragnar_cb "] {
+            assert_eq!(channel_name(typed), "ragnar_cb", "{typed}");
+        }
+    }
+
+    #[test]
+    fn broadcaster_badge_from_real_chat() {
+        // the streamer typing in their own chat (broadcaster + subscriber badges)
+        let line = "@badge-info=subscriber/71;badges=broadcaster/1,subscriber/3072,clips-leader/1;color=#1E90FF;display-name=ragnar_cb;mod=0 :ragnar_cb!ragnar_cb@ragnar_cb.tmi.twitch.tv PRIVMSG #ragnar_cb :!delay 10";
+        assert_eq!(parse_command(line, &cfg("mods")).unwrap().1, Cmd::Set(10));
     }
 
     #[test]

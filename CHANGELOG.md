@@ -2,6 +2,17 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.4.1] - 2026-09-23
+
+### Fixed
+
+- Twitch chat commands did nothing when the channel was typed as `twitch.tv/name` or as a link: the relay joined a channel that does not exist. Any form (name, `@name`, `twitch.tv/name`, full link) now works and is saved as the plain name.
+- `!delay 60` now also turns the delay on (it only changed the length).
+
+### Added
+
+- The log shows `[chat] joined #channel` once the chat is really joined, and Twitch notices.
+
 ## [0.4.0] - 2026-09-23
 
 ### Added
