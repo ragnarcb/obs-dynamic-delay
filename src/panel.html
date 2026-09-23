@@ -195,7 +195,7 @@
     $("obsBox").classList.toggle("hidden", !(o.script && !o.configured));
     $("obsText").innerHTML = "O OBS ainda não está transmitindo pelo delay dinâmico.";
     $("keyBox").classList.toggle("hidden", !cfg || cfg.stream_key_set);
-    $("obs").className = "dot " + (s.obs_connected ? "ok" : o.script ? (o.configured ? "" : "warn") : "bad");
+    $("obs").className = "dot " + (o.script ? (o.configured ? "ok" : "warn") : "bad");
     $("obs").textContent = s.obs_connected ? "OBS transmitindo" : !o.script ? "script do OBS não está rodando" : o.configured ? "OBS pronto" : "OBS não configurado";
     const upCls = { connected: "ok", connecting: "warn", reconnecting: "bad", idle: "" }[s.upstream];
     $("up").className = "dot " + upCls;
