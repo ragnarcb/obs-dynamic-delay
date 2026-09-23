@@ -7,7 +7,9 @@ mod rtmp_io;
 mod status;
 mod upstream;
 
-use std::path::PathBuf;
+use std::fs::File;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -40,11 +42,44 @@ fn config_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("config.toml"))
 }
 
+/// Writes log lines to stderr and to a log file next to the config.
+struct Tee(File);
+
+impl Write for Tee {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let _ = std::io::stderr().write_all(buf);
+        self.0.write_all(buf)?;
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.0.flush()
+    }
+}
+
+fn init_logging(config: &Path) {
+    let mut b = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
+    let log_path = config.with_file_name("obs-dynamic-delay.log");
+    if let Ok(f) = File::create(&log_path) {
+        b.target(env_logger::Target::Pipe(Box::new(Tee(f))));
+    }
+    b.init();
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let path = config_path();
     let cfg = Config::load_or_create(&path)?;
+    // The UDP port doubles as a single-instance lock: bind it before touching the log file.
+    let udp = match std::net::UdpSocket::bind(&cfg.udp_listen) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("obs-dynamic-delay ja esta rodando (porta {} ocupada): {e}", cfg.udp_listen);
+            std::process::exit(2);
+        }
+    };
+    udp.set_nonblocking(true)?;
+    let udp = tokio::net::UdpSocket::from_std(udp)?;
+    init_logging(&path);
     log::info!("config {} | upstream {} | delay {}s", path.display(), cfg.upstream_url, cfg.delay_seconds);
 
     let status = Arc::new(Mutex::new(Status {
@@ -61,7 +96,7 @@ async fn main() -> Result<()> {
 
     tokio::spawn(upstream::run(cfg.upstream_url.clone(), cfg.stream_key.clone(), up_rx, status.clone()));
     tokio::spawn(run_engine(cfg.clone(), rx, up_tx, status.clone()));
-    tokio::spawn(control::serve_udp(cfg.udp_listen.clone(), tx.clone()));
+    tokio::spawn(control::serve_udp(udp, tx.clone(), status.clone()));
     let http = tokio::spawn(control::serve_http(cfg.http_listen.clone(), tx.clone(), status));
 
     tokio::select! {
@@ -86,6 +121,7 @@ async fn run_engine(
     let mut upstream_active = false;
     let mut out = Vec::new();
     let mut ticks = 0u64;
+    let mut quit = false;
 
     let target = |enabled: bool, delay: u32| Duration::from_secs(if enabled { delay as u64 } else { 0 });
     engine.set_target(target(enabled, delay));
@@ -126,6 +162,15 @@ async fn run_engine(
                             Cmd::Add(d) => {
                                 delay = (delay as i64 + d).clamp(0, cfg.max_delay_seconds as i64) as u32
                             }
+                            Cmd::Quit => {
+                                log::info!("quit requested, exiting when no stream is active");
+                                quit = true;
+                                continue;
+                            }
+                            Cmd::Stay => {
+                                quit = false;
+                                continue;
+                            }
                         }
                         log::info!("delay {} ({}s)", if enabled { "ON" } else { "OFF" }, delay);
                         engine.set_target(target(enabled, delay));
@@ -145,6 +190,10 @@ async fn run_engine(
                     engine = Engine::new(cfg.filler_fps);
                     engine.set_target(target(enabled, delay));
                     unwrapper = TsUnwrapper::new();
+                }
+                if quit && !upstream_active {
+                    log::info!("bye");
+                    std::process::exit(0);
                 }
                 ticks += 1;
                 if ticks.is_multiple_of(20) {

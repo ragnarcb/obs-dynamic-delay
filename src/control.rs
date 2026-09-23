@@ -62,13 +62,18 @@ async fn add_delay(State(s): State<AppState>, Path(secs): Path<i64>) -> impl Int
     send(&s, Cmd::Add(secs))
 }
 
-pub async fn serve_udp(listen: String, tx: UnboundedSender<EngineMsg>) -> Result<()> {
-    let sock = UdpSocket::bind(&listen).await?;
-    log::info!("UDP commands on {listen}");
+/// Text commands over UDP (used by the OBS script). `status` is answered with a summary.
+pub async fn serve_udp(sock: UdpSocket, tx: UnboundedSender<EngineMsg>, status: Arc<Mutex<Status>>) -> Result<()> {
+    log::info!("UDP commands on {}", sock.local_addr()?);
     let mut buf = [0u8; 256];
     loop {
-        let Ok((n, _)) = sock.recv_from(&mut buf).await else { continue };
+        let Ok((n, from)) = sock.recv_from(&mut buf).await else { continue };
         let text = String::from_utf8_lossy(&buf[..n]);
+        if text.trim() == "status" {
+            let summary = status.lock().unwrap().summary();
+            let _ = sock.send_to(summary.as_bytes(), from).await;
+            continue;
+        }
         match Cmd::parse(&text) {
             Some(cmd) => {
                 let _ = tx.send(EngineMsg::Cmd(cmd));

@@ -15,7 +15,7 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact: obs-dynamic-delay-windows-x64.exe
+            artifact: obs-dynamic-delay-windows-x64
             bin: target/release/obs-dynamic-delay.exe
           - os: ubuntu-latest
             artifact: obs-dynamic-delay-linux-x64
@@ -33,9 +33,9 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          mkdir dist
-          cp "${{ matrix.bin }}" "dist/${{ matrix.artifact }}"
-          cp obs/obs-dynamic-delay.lua dist/
+          mkdir -p pkg/obs-dynamic-delay dist
+          cp "${{ matrix.bin }}" obs/obs-dynamic-delay.lua pkg/obs-dynamic-delay/
+          cd pkg && 7z a "../dist/${{ matrix.artifact }}.zip" obs-dynamic-delay
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
