@@ -18,6 +18,7 @@ use crate::config::destination_from_obs;
 use crate::status::{Cmd, ObsAction, ObsInfo, Shared, Status};
 
 pub const PANEL: &str = include_str!("panel.html");
+const CLOCK: &str = include_str!("clock.html");
 
 #[derive(Clone)]
 struct AppState {
@@ -29,6 +30,7 @@ pub async fn serve_http(listen: String, tx: UnboundedSender<EngineMsg>, shared: 
     let state = AppState { tx, shared };
     let app = Router::new()
         .route("/", get(|| async { Html(PANEL) }))
+        .route("/clock", get(|| async { Html(CLOCK) }))
         .route("/api/status", get(status_handler))
         .route("/api/on", get(on).post(on))
         .route("/api/off", get(off).post(off))

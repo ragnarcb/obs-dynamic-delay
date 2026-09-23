@@ -1,64 +1,159 @@
-# obs-dynamic-delay
+# Delay Dinâmico para OBS
 
-Delay dinâmico para lives no OBS: o streamer **liga e desliga o delay quando quiser, com a live no ar**, sem derrubar a transmissão.
+Ligue e desligue o delay da sua live **a qualquer momento, com a transmissão no ar**, direto de um painel dentro do OBS ou por atalho de teclado.
 
-O "Stream Delay" nativo do OBS (Configurações > Avançado) só pode ser alterado com a live parada. Este projeto resolve isso com um relay local escrito em Rust que fica entre o OBS e a plataforma:
+![Painel Delay dinâmico: ao vivo, ajustando e com delay](docs/img/painel-estados.png)
+
+O "Stream Delay" que já vem no OBS só pode ser mudado com a live parada. Com o Delay Dinâmico você entra ao vivo normalmente e, quando precisar (spoiler, informação pessoal na tela, partida competitiva), aperta um botão e a live passa a ter 30 s de atraso. Aperta de novo e ela volta para o ao vivo, sem cair.
+
+## Sumário
+
+- [Funcionalidades](#funcionalidades)
+- [Instalação (passo a passo)](#instalação-passo-a-passo)
+- [Usando durante a live](#usando-durante-a-live)
+- [O que o público vê](#o-que-o-público-vê)
+- [Medindo o delay com um relógio](#medindo-o-delay-com-um-relógio)
+- [Solução de problemas](#solução-de-problemas)
+- [Atualizar e desinstalar](#atualizar-e-desinstalar)
+- [Como funciona](#como-funciona)
+- [API e integrações](#api-e-integrações)
+- [Desenvolvimento](#desenvolvimento)
+- [Limitações conhecidas](#limitações-conhecidas)
+
+## Funcionalidades
+
+- **Delay ligável em tempo real:** ligar, desligar, presets (10, 30, 60, 120 s) e ajuste fino de ±5 s, sem reiniciar a live.
+- **Painel dentro do OBS:** um dock com o estado da live, o atraso real para o público e toda a configuração.
+- **Atalhos de teclado** nas configurações de atalhos do próprio OBS.
+- **Instalação com dois cliques:** o instalador configura o OBS sozinho e guarda backup de tudo o que alterar.
+- **Twitch, YouTube, Kick** e qualquer destino RTMP/RTMPS.
+- **Leve:** nada é re-encodado. O relay só guarda e reenvia o vídeo que o OBS já codificou, com uso de CPU desprezível.
+- **Resistente:** reconecta sozinho se a conexão com a plataforma cair, e termina de enviar o trecho atrasado quando você encerra a live.
+
+## Instalação (passo a passo)
+
+> Requisitos: Windows 10/11 e OBS Studio 28 ou mais novo, aberto pelo menos uma vez.
+
+**1. Baixe o instalador.** Na página de [Releases](../../releases/latest), baixe `Instalar-Delay-Dinamico.exe`.
+
+**2. Dê dois cliques nele.** Uma janela de console abre e explica o que vai ser feito. Aperte Enter para instalar.
+
+**3. Feche o OBS, se estiver aberto.** O instalador espera sozinho: o OBS regrava as configurações ao fechar, então elas precisam ser alteradas com ele fechado.
+
+**4. Informe plataforma e chave.** Se o OBS já estava configurado para a Twitch ou o YouTube, o instalador importa o destino e a chave sozinho. Se não achar, ele pergunta:
 
 ```
-OBS ──RTMP──▶ obs-dynamic-delay (127.0.0.1:1935) ──RTMP/RTMPS──▶ Twitch / YouTube / Kick ...
-                    ▲            ▲
-          hotkeys (script Lua)   painel web / API HTTP (dock no OBS, Stream Deck)
+Para onde voce transmite?
+  1 = Twitch   2 = YouTube   3 = Kick / outra (colar URL)
+Opcao (Enter = Twitch):
+Chave de transmissao (Enter = preencher depois no painel):
 ```
+
+**5. Pronto.** O instalador:
+
+- copia o relay e o script para `%APPDATA%\obs-dynamic-delay`;
+- faz o OBS transmitir pelo relay local (`rtmp://127.0.0.1:1935/live`);
+- desliga o Stream Delay nativo do OBS;
+- adiciona o script e o painel **Delay dinâmico** ao OBS;
+- guarda backup de cada arquivo alterado (`*.dd-backup` e `obs-service-backup.json`).
+
+No final ele oferece abrir o OBS.
+
+**6. Posicione o painel.** No OBS, o painel fica em **Docks > Delay dinâmico**. Arraste para onde preferir, por exemplo ao lado de "Controles".
+
+**7. (Opcional) Defina os atalhos.** Em **Configurações > Atalhos**, procure "Delay dinâmico":
+
+| Atalho | O que faz |
+|---|---|
+| Delay dinâmico: ligar/desligar | alterna entre ao vivo e com delay |
+| Delay dinâmico: ligar | liga o delay |
+| Delay dinâmico: desligar (voltar ao vivo) | volta para o ao vivo |
+| Delay dinâmico: aumentar / diminuir | soma ou tira 5 s (o passo muda nas opções do script) |
+
+**8. Faça uma live de teste.** Use uma live não listada ou de teste antes de usar numa live importante. Veja [Medindo o delay com um relógio](#medindo-o-delay-com-um-relógio).
+
+## Usando durante a live
+
+Inicie a transmissão normalmente pelo botão do OBS. O painel mostra:
+
+| Indicador | Significado |
+|---|---|
+| **AO VIVO** (verde) | o público vê a live em tempo real |
+| **AJUSTANDO** (azul) | o delay está sendo aplicado ou removido |
+| **DELAY** (laranja) | a live está atrasada; o número grande é o atraso real |
+| OBS transmitindo / OBS pronto | o OBS está conectado ao relay |
+| Plataforma conectada | o relay está enviando para a Twitch/YouTube/... |
+
+Na seção **Configuração** do painel você troca plataforma, URL, chave e a opção "Começar toda live já com delay". Trocas de destino ou chave feitas durante a live valem a partir da próxima live. Já o tempo do delay muda na hora.
 
 ## O que o público vê
 
 | Ação | Efeito para quem assiste |
 |---|---|
-| **Ligar o delay** (ex.: 30 s) | A imagem congela no próximo keyframe (com áudio mudo) durante 30 s, enquanto o buffer enche. Depois a live continua normalmente, 30 s atrasada. A conexão com a plataforma nunca cai. |
-| **Desligar o delay** | Corte seco para o presente: o trecho em buffer é descartado e a live volta a ficar ao vivo (com precisão de ~1 GOP, 2 s no padrão do OBS). |
-| **Aumentar / diminuir** (±5 s, presets) | Mesma lógica: aumentar congela pela diferença, diminuir corta pela diferença. |
-| **Parar a live no OBS com delay ligado** | O relay termina de enviar o trecho atrasado e só então encerra a live na plataforma. Para encerrar na hora, desligue o delay depois de parar. |
+| **Ligar o delay** (ex.: 30 s) | A imagem congela no próximo quadro-chave, com o áudio mudo, por 30 s enquanto o buffer enche. Depois a live segue normalmente, 30 s atrasada. A conexão com a plataforma não cai. |
+| **Desligar o delay** | Corte seco para o presente: o trecho guardado é descartado e a live volta a ficar ao vivo (com precisão de cerca de 2 s). |
+| **Aumentar / diminuir** | Mesma lógica: aumentar congela pela diferença, diminuir corta pela diferença. |
+| **Encerrar a live com delay ligado** | O relay termina de enviar o trecho atrasado e só então encerra a live na plataforma. Para encerrar na hora, desligue o delay depois de parar. |
 
-Nada é re-encodado: o relay só guarda e reenvia os pacotes que o OBS já codificou (CPU quase zero), reescrevendo os timestamps para a plataforma receber uma linha do tempo contínua. A memória usada é mais ou menos o bitrate vezes o delay (6 Mbps × 30 s ≈ 23 MB).
+Teste real da saída (os números são os segundos do vídeo original): ao vivo, congelado no 6 enquanto o delay é aplicado, segue atrasado, e corta para o 24 quando o delay é desligado.
 
-## Instalação
+![Linha do tempo da saída em um teste](docs/img/teste-linha-do-tempo.png)
 
-1. Baixe o `obs-dynamic-delay.exe` (aba Releases) ou compile com `cargo build --release`.
-2. **Dê dois cliques nele.** O instalador:
-   - espera o OBS fechar (o OBS regrava a configuração ao sair);
-   - copia o relay e o script para `%APPDATA%\obs-dynamic-delay`;
-   - importa o destino e a chave que estavam no OBS (ou pergunta, se não achar);
-   - faz o OBS transmitir pelo relay (`rtmp://127.0.0.1:1935/live`) e desliga o Stream Delay nativo;
-   - adiciona o script e o painel **Delay dinâmico** na tela do OBS;
-   - guarda backup de tudo que alterou (`.dd-backup` e `obs-service-backup.json`).
-3. Abra o OBS. O painel aparece como um dock (menu **Docks > Delay dinâmico**); arraste para onde quiser, por exemplo ao lado de "Controles".
-4. Em **Configurações > Atalhos**, procure "Delay dinâmico" e defina as teclas.
+## Medindo o delay com um relógio
 
-Para atualizar ou desinstalar, dê dois cliques no exe de novo (ou `obs-dynamic-delay.exe --install` / `--uninstall`). A desinstalação remove o script e o painel e devolve a configuração de transmissão original.
+1. Em **Fontes**, clique em **+ > Navegador** e use a URL `http://127.0.0.1:8787/clock`, com largura 500 e altura 120. Ela mostra a hora com décimos de segundo e fundo transparente.
+   Opções: `?size=40` muda o tamanho e `?bg=0` tira a caixa escura.
+2. Abra a live no celular, ao lado de um relógio de referência (o do PC ou <https://time.is>).
+3. A diferença entre as duas horas é o atraso total. Ele inclui a latência normal da plataforma (uns 2 a 5 s na Twitch) somada ao delay ligado.
 
-### O painel "Delay dinâmico"
+## Solução de problemas
 
-- **Estado e atraso real** para o público (AO VIVO / AJUSTANDO / DELAY).
-- **Ligar/desligar**, presets (10, 30, 60, 120 s) e ±5 s.
-- **Configuração:** plataforma (Twitch, YouTube, Kick, outra), URL, chave, "começar toda live com delay".
-- **Configurar o OBS automaticamente** (aparece se o OBS não estiver apontando para o relay) e **Restaurar a configuração original**.
-- Status do OBS e da conexão com a plataforma, com a mensagem de erro quando houver.
+| Sintoma | O que fazer |
+|---|---|
+| O painel mostra **RELAY FECHADO** | Normal enquanto o OBS está abrindo. Se continuar, abra **Ferramentas > Scripts** e confira se `obs-dynamic-delay.lua` está na lista; clique em "Reiniciar relay". |
+| **Plataforma reconectando** com erro | Quase sempre é chave ou URL errada. Confira na seção Configuração do painel. |
+| **OBS não configurado** | Clique em **Configurar o OBS automaticamente** no painel. |
+| O OBS diz que não conseguiu conectar ao servidor | O relay não abriu. Veja o log em `%APPDATA%\obs-dynamic-delay\obs-dynamic-delay.log`. |
+| O painel não aparece | Menu **Docks > Delay dinâmico**. Se não estiver lá, rode o instalador de novo com o OBS fechado. |
+| Quero voltar a transmitir sem o relay | No painel: Configuração > "Restaurar a configuração original de transmissão do OBS" (clique duas vezes para confirmar). |
 
-O relay abre escondido junto com o OBS (e também ao clicar em "Iniciar transmissão", se estiver fechado) e fecha junto com o OBS, depois de terminar de enviar o trecho atrasado. O log fica em `obs-dynamic-delay.log`, na pasta de instalação. Mudanças de destino ou chave durante a live valem a partir da próxima live.
+Ao abrir uma issue, anexe o `obs-dynamic-delay.log`. A chave de transmissão não aparece nele.
 
-### Como as peças conversam
+## Atualizar e desinstalar
 
-- **Painel:** página local (`dock.html`) que fala com a API HTTP do relay.
-- **Script Lua do OBS:** atalhos, abre e fecha o relay, e executa dentro do OBS o que o painel pede (trocar a configuração de transmissão), consultando o relay via UDP a cada segundo.
-- **Relay:** guarda a configuração em `config.toml`.
+Dê dois cliques no instalador de novo. Ele detecta que já está instalado e oferece:
 
-### Sem o instalador
+- **1:** atualizar/reinstalar, mantendo sua configuração;
+- **2:** desinstalar, removendo o script e o painel e restaurando a configuração de transmissão original.
 
-`obs-dynamic-delay.exe caminho\config.toml` roda só o relay (se o arquivo não existir, ele cria um comentado). O script `obs/obs-dynamic-delay.lua` pode ser adicionado à mão em Ferramentas > Scripts, com o exe na mesma pasta.
+Pela linha de comando também funciona: `Instalar-Delay-Dinamico.exe --install` ou `--uninstall`.
 
-## API
+## Como funciona
 
-Aceita GET e POST, então funciona direto no Stream Deck (ação "Website"), no Touch Portal, em bots etc.
+```
+                    ┌──────────────── obs-dynamic-delay (relay) ────────────────┐
+OBS ──RTMP──▶ 127.0.0.1:1935 ──▶ buffer + motor de delay ──▶ cliente RTMP/RTMPS ──▶ Twitch / YouTube / Kick
+ ▲                                   ▲            ▲
+ │ script Lua (atalhos, ponte)  UDP 8788     HTTP 8787 (API)
+ └───────────────────────────────────┘            ▲
+                                       painel dock no OBS · Stream Deck · relógio
+```
+
+- **Relay (Rust, `src/`):** recebe o RTMP do OBS, guarda os pacotes já codificados e os reenvia com o atraso atual.
+  - **Ao aumentar o delay:** espera o próximo quadro-chave e repete esse quadro (mais áudio AAC mudo) até o buffer encher.
+  - **Ao diminuir:** corta no quadro-chave mais recente possível.
+  - Os timestamps são reescritos para a plataforma receber uma linha do tempo contínua, inclusive com B-frames (PTS e DTS).
+- **Script do OBS (Lua, `obs/`):** registra os atalhos, abre e fecha o relay junto com o OBS e aplica dentro do OBS o que o painel pede (trocar a configuração de transmissão). Usa o LuaJIT embutido no OBS, então não precisa instalar Python.
+- **Painel (`src/panel.html`):** página servida pelo relay e instalada como dock no OBS.
+- **Instalador (`src/installer.rs`):** o mesmo exe; aberto com dois cliques, configura o OBS.
+
+**Por que Rust:** o trabalho pesado é um servidor e um cliente RTMP que seguram minutos de vídeo em memória e reenviam tudo no tempo certo por horas. Rust entrega isso num único `.exe` sem dependências, sem pausas de coletor de lixo e com CPU quase zero. Um script Python dentro do OBS não tem acesso ao vídeo codificado, e exigiria que cada streamer configurasse um interpretador compatível.
+
+**Memória:** mais ou menos o bitrate vezes o delay (6 Mbps × 30 s ≈ 23 MB).
+
+## API e integrações
+
+A API HTTP em `http://127.0.0.1:8787` aceita GET e POST, então funciona direto no Stream Deck (ação "Website"), Touch Portal, bots de chat etc.
 
 | Rota | Ação |
 |---|---|
@@ -67,34 +162,47 @@ Aceita GET e POST, então funciona direto no Stream Deck (ação "Website"), no 
 | `/api/delay/{s}` | define o delay em segundos |
 | `/api/add/{s}` | soma (aceita negativo: `/api/add/-5`) |
 | `/api/status` | estado em JSON |
+| `/api/config` | lê (GET) ou grava (POST JSON) destino, chave e opções |
+| `/api/obs/configure` · `/api/obs/restore` | pede ao script do OBS para configurar ou restaurar a transmissão |
+| `/clock` | relógio para fonte de navegador |
 
-Também há `GET/POST /api/config` (destino, chave, delay) e `POST /api/obs/configure` / `POST /api/obs/restore`.
+A porta UDP `8788` aceita comandos em texto: `toggle`, `on`, `off`, `set 30`, `add -5` e `status`, além dos comandos usados pelo script (`poll`, `import`, `result`, `quit`, `stay`).
 
-A porta UDP (`8788`) aceita os mesmos comandos em texto: `toggle`, `on`, `off`, `set 30`, `add -5`, e também `status` (responde um resumo), `quit` (fecha depois que não houver live), `stay` (cancela o `quit`) e os comandos da ponte com o script (`poll`, `import`, `result`).
-
-## Por que Rust e não Python
-
-O trabalho pesado é um servidor + cliente RTMP que precisa segurar minutos de vídeo em memória e reenviar tudo no tempo certo, por horas, sem engasgar. Rust entrega isso num único `.exe` sem dependências, com uso de CPU desprezível e sem pausas de GC. Um script Python dentro do OBS não consegue interceptar o stream codificado, e exigiria que cada streamer configurasse um interpretador Python compatível com a versão do OBS. A parte que precisa rodar dentro do OBS (atalhos e ajustes nas configurações do OBS) ficou em Lua, que já vem embutido no OBS.
-
-## Limitações
-
-- Só RTMP/RTMPS (o padrão das plataformas). WHIP/SRT não passam pelo relay.
-- Ligar o delay espera o próximo keyframe (até 2 s com o intervalo padrão), e desligar corta num keyframe.
-- A imagem congelada repete um keyframe; com `filler_fps = 2` isso usa pouca banda. Se a plataforma reclamar de fps baixo, suba o valor.
-- Testado de ponta a ponta localmente (ffmpeg como OBS e como plataforma, H.264 com B-frames + AAC). Antes de usar numa live importante, faça um teste numa live não listada na sua plataforma.
+A configuração fica em `%APPDATA%\obs-dynamic-delay\config.toml`, normalmente editada pelo painel.
 
 ## Desenvolvimento
 
+Requer [Rust](https://rustup.rs) estável. Para o teste de ponta a ponta, também `ffmpeg` e `curl` no PATH.
+
 ```sh
-cargo test                  # testes do motor de delay, parser FLV, config
-bash scripts/e2e-test.sh    # ponta a ponta com ffmpeg (precisa de ffmpeg e curl no PATH)
+cargo build --release        # target/release/obs-dynamic-delay.exe
+cargo test                   # motor de delay, parser FLV, config, INI, comandos
+bash scripts/e2e-test.sh     # ffmpeg faz o papel do OBS e da plataforma; liga/desliga o delay no meio
 ```
 
-Estrutura:
+Rodar só o relay, sem instalar: `obs-dynamic-delay.exe caminho\config.toml` (o arquivo é criado com comentários se não existir). Variáveis úteis para testar o instalador sem tocar no OBS real: `DD_OBS_CONFIG_DIR`, `DD_INSTALL_DIR` e `DD_SKIP_OBS_CHECK=1`.
 
-- `src/engine.rs`: motor de delay (buffer, congelamento, corte, reescrita de timestamps)
-- `src/ingest.rs`: servidor RTMP que recebe do OBS
-- `src/upstream.rs`: cliente RTMP/RTMPS que publica na plataforma (reconecta sozinho)
-- `src/control.rs` + `src/panel.html`: API HTTP, painel e porta UDP
-- `src/installer.rs`: instalador (script, dock, configuração de transmissão do OBS)
-- `obs/obs-dynamic-delay.lua`: script do OBS (configuração, auto-configuração do OBS, atalhos, gerenciamento do relay)
+| Arquivo | Conteúdo |
+|---|---|
+| `src/engine.rs` | motor de delay: buffer, congelamento, corte, timestamps |
+| `src/flv.rs` | inspeção de pacotes FLV (AVC/HEVC/AV1, AAC), AAC mudo |
+| `src/ingest.rs` | servidor RTMP que recebe do OBS |
+| `src/upstream.rs` | cliente RTMP/RTMPS para a plataforma, com reconexão |
+| `src/control.rs` | API HTTP e comandos UDP |
+| `src/installer.rs` | instalador e desinstalador |
+| `src/panel.html` · `src/clock.html` | painel e relógio |
+| `obs/obs-dynamic-delay.lua` | script do OBS |
+
+**Publicar uma versão:** atualize `version` no `Cargo.toml` e o `CHANGELOG.md`, rode `cargo build --release` e crie a release com o exe:
+
+```sh
+cp target/release/obs-dynamic-delay.exe Instalar-Delay-Dinamico.exe
+gh release create vX.Y.Z Instalar-Delay-Dinamico.exe --notes-file notas.md
+```
+
+## Limitações conhecidas
+
+- Só RTMP/RTMPS. WHIP, SRT e a "Transmissão aprimorada" (multitrack) da Twitch não passam pelo relay.
+- Ligar o delay espera o próximo quadro-chave (até 2 s com o intervalo padrão do OBS), e desligar corta num quadro-chave.
+- A imagem congelada repete um quadro-chave a 2 fps, para gastar pouca banda (`filler_fps` no `config.toml`).
+- O instalador é para Windows. O relay e o script funcionam em Linux e macOS, mas lá a instalação é manual.

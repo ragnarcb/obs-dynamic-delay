@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Relógio</title>
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  #t {
+    display: inline-block; padding: 6px 14px; border-radius: 10px;
+    background: rgba(0, 0, 0, .55); color: #fff;
+    font: 700 64px/1.1 Consolas, "Cascadia Mono", monospace; font-variant-numeric: tabular-nums;
+    text-shadow: 0 2px 4px #000;
+  }
+</style>
+</head>
+<body>
+<span id="t"></span>
+<script>
+  // ?size=40 changes the font size, ?bg=0 removes the dark box
+  const q = new URLSearchParams(location.search);
+  const t = document.getElementById("t");
+  if (q.get("size")) t.style.fontSize = q.get("size") + "px";
+  if (q.get("bg") === "0") t.style.background = "transparent";
+  const pad = (n, w = 2) => String(n).padStart(w, "0");
+  function tick() {
+    const d = new Date();
+    t.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${Math.floor(d.getMilliseconds() / 100)}`;
+    requestAnimationFrame(tick);
+  }
+  tick();
+</script>
+</body>
+</html>

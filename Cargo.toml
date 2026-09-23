@@ -2,6 +2,9 @@
 name = "obs-dynamic-delay"
 version = "0.1.0"
 edition = "2024"
+description = "Delay dinâmico para lives no OBS: liga e desliga o delay com a transmissão no ar"
+readme = "README.md"
+publish = false
 
 [dependencies]
 anyhow = "1.0.104"
