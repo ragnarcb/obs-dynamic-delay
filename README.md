@@ -14,7 +14,6 @@ OBS' built-in "Stream Delay" can only be changed while the stream is stopped. Wi
 - [Installation (step by step)](#installation-step-by-step)
 - [Using it while live](#using-it-while-live)
 - [What viewers see](#what-viewers-see)
-- [Measuring the delay with a clock](#measuring-the-delay-with-a-clock)
 - [Troubleshooting](#troubleshooting)
 - [Updating and uninstalling](#updating-and-uninstalling)
 - [How it works](#how-it-works)
@@ -74,7 +73,7 @@ At the end it offers to open OBS.
 | Dynamic Delay: turn off (back to live) | goes back to live |
 | Dynamic Delay: increase / decrease | adds or removes 5 s (the step is set in the script options) |
 
-**8. Do a test stream.** Use an unlisted or test stream before using it on an important one. See [Measuring the delay with a clock](#measuring-the-delay-with-a-clock).
+**8. Do a test stream.** Use an unlisted or test stream before using it on an important one.
 
 ## Using it while live
 
@@ -125,13 +124,6 @@ Real output tests (the numbers are seconds of the source video):
 
 ![Freeze mode test](docs/img/test-freeze.png)
 
-## Measuring the delay with a clock
-
-1. In **Sources**, click **+ > Browser** and use the URL `http://127.0.0.1:8787/clock`, width 500 and height 120. It shows the time with tenths of a second on a transparent background.
-   Options: `?size=40` changes the size and `?bg=0` removes the dark box.
-2. Open the stream on your phone, next to a reference clock (the PC clock or <https://time.is>).
-3. The difference between the two times is the total delay. It includes the platform's normal latency (about 2 to 5 s on Twitch) plus the delay you turned on.
-
 ## Troubleshooting
 
 | Symptom | What to do |
@@ -162,7 +154,7 @@ OBS ──RTMP──▶ 127.0.0.1:1935 ──▶ buffer + delay engine ──▶
  ▲                                   ▲            ▲
  │ Lua script (hotkeys, bridge)  UDP 8788     HTTP 8787 (API)
  └───────────────────────────────────┘            ▲
-                                       OBS dock panel · Stream Deck · clock
+                                       OBS dock panel · Stream Deck
 ```
 
 - **Relay (Rust, `src/`):** receives RTMP from OBS, keeps the already encoded packets and forwards them with the current delay.
@@ -190,7 +182,6 @@ The HTTP API at `http://127.0.0.1:8787` accepts GET and POST, so it works direct
 | `/api/status` | state as JSON |
 | `/api/config` | reads (GET) or writes (POST JSON) destination, key and options |
 | `/api/obs/configure` · `/api/obs/restore` | asks the OBS script to configure or restore the stream settings |
-| `/clock` | clock for a browser source |
 
 UDP port `8788` takes text commands: `toggle`, `on`, `off`, `set 30`, `add -5` and `status`, plus the ones used by the script (`poll`, `import`, `result`, `quit`, `stay`, `scenes`, `scene_shown`, `scene_failed`).
 
@@ -218,7 +209,7 @@ Run only the relay, without installing: `obs-dynamic-delay.exe path\config.toml`
 | `src/control.rs` | HTTP API and UDP commands |
 | `src/installer.rs` | installer and uninstaller |
 | `src/i18n.rs` | English and Portuguese texts (`t!` macro) |
-| `src/panel.html` · `src/clock.html` | panel (texts in its `TEXT` dictionary) and clock |
+| `src/panel.html` | panel (texts in its `TEXT` dictionary) |
 | `obs/obs-dynamic-delay.lua` | OBS script (texts through `L()`) |
 
 **Releasing:** bump `version` in `Cargo.toml`, update `CHANGELOG.md`, build both installers and create the release:

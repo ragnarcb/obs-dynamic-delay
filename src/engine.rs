@@ -648,7 +648,7 @@ mod tests {
         assert!((9_900..=10_100).contains(&st.current_ms), "{st:?}");
         // output timeline keeps running in real time during the freeze
         let last_video = s.out.iter().rev().find(|p| p.kind == Kind::Video).unwrap().ts as i64;
-        assert!((last_video - s.now_ms as i64).abs() < 300, "video ts {last_video} vs clock {}", s.now_ms);
+        assert!((last_video - s.now_ms as i64).abs() < 300, "video ts {last_video} vs wall time {}", s.now_ms);
 
         s.engine.set_target(Duration::ZERO);
         s.run(2500);

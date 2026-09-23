@@ -14,7 +14,6 @@ O "Stream Delay" que já vem no OBS só pode ser mudado com a live parada. Com o
 - [Instalação (passo a passo)](#instalação-passo-a-passo)
 - [Usando durante a live](#usando-durante-a-live)
 - [O que o público vê](#o-que-o-público-vê)
-- [Medindo o delay com um relógio](#medindo-o-delay-com-um-relógio)
 - [Solução de problemas](#solução-de-problemas)
 - [Atualizar e desinstalar](#atualizar-e-desinstalar)
 - [Como funciona](#como-funciona)
@@ -74,7 +73,7 @@ No final ele oferece abrir o OBS.
 | Delay dinâmico: desligar (voltar ao vivo) | volta para o ao vivo |
 | Delay dinâmico: aumentar / diminuir | soma ou tira 5 s (o passo muda nas opções do script) |
 
-**8. Faça uma live de teste.** Use uma live não listada ou de teste antes de usar numa live importante. Veja [Medindo o delay com um relógio](#medindo-o-delay-com-um-relógio).
+**8. Faça uma live de teste.** Use uma live não listada ou de teste antes de usar numa live importante.
 
 ## Usando durante a live
 
@@ -125,13 +124,6 @@ Testes reais da saída (os números são os segundos do vídeo original):
 
 ![Teste do modo congelar](docs/img/test-freeze.png)
 
-## Medindo o delay com um relógio
-
-1. Em **Fontes**, clique em **+ > Navegador** e use a URL `http://127.0.0.1:8787/clock`, com largura 500 e altura 120. Ela mostra a hora com décimos de segundo e fundo transparente.
-   Opções: `?size=40` muda o tamanho e `?bg=0` tira a caixa escura.
-2. Abra a live no celular, ao lado de um relógio de referência (o do PC ou <https://time.is>).
-3. A diferença entre as duas horas é o atraso total. Ele inclui a latência normal da plataforma (uns 2 a 5 s na Twitch) somada ao delay ligado.
-
 ## Solução de problemas
 
 | Sintoma | O que fazer |
@@ -162,7 +154,7 @@ OBS ──RTMP──▶ 127.0.0.1:1935 ──▶ buffer + motor de delay ──�
  ▲                                   ▲            ▲
  │ script Lua (atalhos, ponte)  UDP 8788     HTTP 8787 (API)
  └───────────────────────────────────┘            ▲
-                                       painel dock no OBS · Stream Deck · relógio
+                                       painel dock no OBS · Stream Deck
 ```
 
 - **Relay (Rust, `src/`):** recebe o RTMP do OBS, guarda os pacotes já codificados e os reenvia com o atraso atual.
@@ -190,7 +182,6 @@ A API HTTP em `http://127.0.0.1:8787` aceita GET e POST, então funciona direto 
 | `/api/status` | estado em JSON |
 | `/api/config` | lê (GET) ou grava (POST JSON) destino, chave e opções |
 | `/api/obs/configure` · `/api/obs/restore` | pede ao script do OBS para configurar ou restaurar a transmissão |
-| `/clock` | relógio para fonte de navegador |
 
 A porta UDP `8788` aceita comandos em texto: `toggle`, `on`, `off`, `set 30`, `add -5` e `status`, além dos comandos usados pelo script (`poll`, `import`, `result`, `quit`, `stay`).
 
@@ -217,7 +208,7 @@ Rodar só o relay, sem instalar: `obs-dynamic-delay.exe caminho\config.toml` (o 
 | `src/control.rs` | API HTTP e comandos UDP |
 | `src/installer.rs` | instalador e desinstalador |
 | `src/i18n.rs` | textos em inglês e português |
-| `src/panel.html` · `src/clock.html` | painel e relógio |
+| `src/panel.html` | painel |
 | `obs/obs-dynamic-delay.lua` | script do OBS |
 
 O idioma padrão vem do build: `cargo build --release` gera a versão em inglês, e `cargo build --release --features pt` gera a versão em português. Os textos ficam em `src/i18n.rs` (macro `t!`), no dicionário `TEXT` de `src/panel.html` e na função `L()` do script Lua.

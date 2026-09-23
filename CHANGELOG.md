@@ -40,4 +40,3 @@ First release.
 - Lua script for OBS: hotkeys, starts and closes the relay with OBS, configures and restores the stream settings.
 - Two-click installer: imports destination and key, configures OBS, turns off the built-in delay, adds script and dock, with backups; uninstall option.
 - HTTP API (Stream Deck, bots) and UDP commands.
-- Clock page (`/clock`) to measure the delay on stream.
