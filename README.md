@@ -20,6 +20,7 @@ OBS' built-in "Stream Delay" can only be changed while the stream is stopped. Wi
 - [API and integrations](#api-and-integrations)
 - [Development](#development)
 - [Known limitations](#known-limitations)
+- [License](#license)
 
 ## Features
 
@@ -226,6 +227,12 @@ gh release create vX.Y.Z Dynamic-Delay-Installer.exe Instalar-Delay-Dinamico.exe
 - The delay changes at keyframes: turning it off (or growing in scene/freeze mode) waits for or cuts at a keyframe (up to 2 s with OBS' default interval).
 - In scene and freeze modes the still picture repeats a keyframe at 2 fps to save bandwidth (`filler_fps` in `config.toml`).
 - The installer is for Windows. The relay and the script run on Linux and macOS, but installing there is manual.
+
+## License
+
+Dynamic Delay is **fully open source** under the [MIT License](LICENSE). You can use, copy, modify, share and even sell it, in personal or commercial projects, as long as you **give proper credit**: keep the copyright notice (`Copyright (c) 2026 ragnarcb`) and the license text in copies and derived works, and mention [ragnarcb](https://github.com/ragnarcb) as the original author.
+
+Contributions are welcome: open an issue or a pull request.
 
 ---
 

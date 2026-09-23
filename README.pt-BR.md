@@ -20,6 +20,7 @@ O "Stream Delay" que já vem no OBS só pode ser mudado com a live parada. Com o
 - [API e integrações](#api-e-integrações)
 - [Desenvolvimento](#desenvolvimento)
 - [Limitações conhecidas](#limitações-conhecidas)
+- [Licença](#licença)
 
 ## Funcionalidades
 
@@ -227,6 +228,12 @@ gh release create vX.Y.Z Dynamic-Delay-Installer.exe Instalar-Delay-Dinamico.exe
 - Ligar o delay espera o próximo quadro-chave (até 2 s com o intervalo padrão do OBS), e desligar corta num quadro-chave.
 - Nos modos cena e congelar, a imagem parada repete um quadro-chave a 2 fps, para gastar pouca banda (`filler_fps` no `config.toml`).
 - O instalador é para Windows. O relay e o script funcionam em Linux e macOS, mas lá a instalação é manual.
+
+## Licença
+
+O Delay Dinâmico é **totalmente open source**, sob a [licença MIT](LICENSE). Você pode usar, copiar, modificar, compartilhar e até vender, em projetos pessoais ou comerciais, desde que **dê os devidos créditos**: mantenha o aviso de copyright (`Copyright (c) 2026 ragnarcb`) e o texto da licença nas cópias e nos trabalhos derivados, e cite [ragnarcb](https://github.com/ragnarcb) como autor original.
+
+Contribuições são bem-vindas: abra uma issue ou um pull request.
 
 ---
 

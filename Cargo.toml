@@ -5,6 +5,9 @@ edition = "2024"
 description = "Dynamic stream delay for OBS: switch the delay on and off while live"
 readme = "README.md"
 publish = false
+license = "MIT"
+authors = ["ragnarcb"]
+repository = "https://github.com/ragnarcb/obs-dynamic-delay"
 
 [features]
 # Portuguese (Brazil) as the default language (used for the Portuguese installer).
