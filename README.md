@@ -23,6 +23,7 @@ O "Stream Delay" que já vem no OBS só pode ser mudado com a live parada. Com o
 ## Funcionalidades
 
 - **Delay ligável em tempo real:** ligar, desligar, presets (10, 30, 60, 120 s) e ajuste fino de ±5 s, sem reiniciar a live.
+- **Três jeitos de aplicar o delay:** rebobinar (sem congelar), mostrar uma cena sua do OBS, ou congelar a imagem.
 - **Painel dentro do OBS:** um dock com o estado da live, o atraso real para o público e toda a configuração.
 - **Atalhos de teclado** nas configurações de atalhos do próprio OBS.
 - **Instalação com dois cliques:** o instalador configura o OBS sozinho e guarda backup de tudo o que alterar.
@@ -84,20 +85,42 @@ Inicie a transmissão normalmente pelo botão do OBS. O painel mostra:
 | OBS transmitindo / OBS pronto | o OBS está conectado ao relay |
 | Plataforma conectada | o relay está enviando para a Twitch/YouTube/... |
 
-Na seção **Configuração** do painel você troca plataforma, URL, chave e a opção "Começar toda live já com delay". Trocas de destino ou chave feitas durante a live valem a partir da próxima live. Já o tempo do delay muda na hora.
+Na seção **Configuração** do painel você troca plataforma, URL, chave, [o que aparece ao ligar o delay](#o-que-o-público-vê) e a opção "Começar toda live já com delay". Trocas de destino ou chave feitas durante a live valem a partir da próxima live. Já o tempo do delay muda na hora.
 
 ## O que o público vê
 
+Para a live ficar 30 s atrasada, o público precisa "perder" 30 s em algum momento. Você escolhe como, no painel, em **Configuração > Ao ligar ou aumentar o delay**:
+
+![Configuração do painel](docs/img/painel-configuracao.png)
+
+| Modo | O que o público vê ao ligar o delay |
+|---|---|
+| **Rebobinar** (padrão) | A live volta 30 s no tempo **na hora** e segue normalmente, sem congelar e sem cortar o som. O público revê os últimos 30 s. |
+| **Mostrar uma cena do OBS** | O OBS troca por um instante para a cena escolhida (por exemplo, uma imagem "Aplicando delay..."), e essa imagem fica na tela, parada e sem som, enquanto o delay enche. Depois volta para a sua cena sozinho. |
+| **Congelar a imagem** | A imagem da live congela no próximo quadro-chave, com o áudio mudo, enquanto o delay enche. |
+
+Nos outros casos, os três modos se comportam igual:
+
 | Ação | Efeito para quem assiste |
 |---|---|
-| **Ligar o delay** (ex.: 30 s) | A imagem congela no próximo quadro-chave, com o áudio mudo, por 30 s enquanto o buffer enche. Depois a live segue normalmente, 30 s atrasada. A conexão com a plataforma não cai. |
 | **Desligar o delay** | Corte seco para o presente: o trecho guardado é descartado e a live volta a ficar ao vivo (com precisão de cerca de 2 s). |
-| **Aumentar / diminuir** | Mesma lógica: aumentar congela pela diferença, diminuir corta pela diferença. |
+| **Aumentar / diminuir** | Aumentar aplica o modo escolhido só pela diferença; diminuir corta pela diferença. |
 | **Encerrar a live com delay ligado** | O relay termina de enviar o trecho atrasado e só então encerra a live na plataforma. Para encerrar na hora, desligue o delay depois de parar. |
 
-Teste real da saída (os números são os segundos do vídeo original): ao vivo, congelado no 6 enquanto o delay é aplicado, segue atrasado, e corta para o 24 quando o delay é desligado.
+Detalhes de cada modo:
 
-![Linha do tempo da saída em um teste](docs/img/teste-linha-do-tempo.png)
+- **Rebobinar:** o relay guarda sempre os últimos segundos já enviados (uns 23 MB para 30 s a 6 Mbps). Se a live começou há menos tempo que o delay, ele volta o que tiver e congela só o restante. O salto acontece num quadro-chave, então pode voltar até cerca de 1 s a mais que o pedido.
+- **Mostrar cena:** a cena aparece ao vivo por até 2 s (até o próximo quadro-chave) antes de ficar parada. Vídeos e animações da cena não andam. Se a cena não existir ou o script do OBS não responder, o relay congela a imagem da live.
+
+Testes reais da saída (os números são os segundos do vídeo original):
+
+**Rebobinar:** no segundo 6 a live volta para o 0 e segue atrasada, depois corta para o 24 quando o delay é desligado.
+
+![Teste do modo rebobinar](docs/img/teste-rebobinar.png)
+
+**Congelar:** fica parada no 6 enquanto o delay enche, segue atrasada e corta para o 24.
+
+![Teste do modo congelar](docs/img/teste-congelar.png)
 
 ## Medindo o delay com um relógio
 
@@ -140,10 +163,10 @@ OBS ──RTMP──▶ 127.0.0.1:1935 ──▶ buffer + motor de delay ──�
 ```
 
 - **Relay (Rust, `src/`):** recebe o RTMP do OBS, guarda os pacotes já codificados e os reenvia com o atraso atual.
-  - **Ao aumentar o delay:** espera o próximo quadro-chave e repete esse quadro (mais áudio AAC mudo) até o buffer encher.
+  - **Ao aumentar o delay:** no modo rebobinar, devolve à fila os pacotes recentes já enviados e os envia de novo; nos modos cena e congelar, repete um quadro-chave (mais áudio AAC mudo) até o buffer encher. No modo cena, o quadro repetido é o primeiro gerado depois de o script trocar a cena no OBS.
   - **Ao diminuir:** corta no quadro-chave mais recente possível.
   - Os timestamps são reescritos para a plataforma receber uma linha do tempo contínua, inclusive com B-frames (PTS e DTS).
-- **Script do OBS (Lua, `obs/`):** registra os atalhos, abre e fecha o relay junto com o OBS e aplica dentro do OBS o que o painel pede (trocar a configuração de transmissão). Usa o LuaJIT embutido no OBS, então não precisa instalar Python.
+- **Script do OBS (Lua, `obs/`):** registra os atalhos, abre e fecha o relay junto com o OBS e aplica dentro do OBS o que o painel pede (trocar a configuração de transmissão e a cena de delay). Usa o LuaJIT embutido no OBS, então não precisa instalar Python.
 - **Painel (`src/panel.html`):** página servida pelo relay e instalada como dock no OBS.
 - **Instalador (`src/installer.rs`):** o mesmo exe; aberto com dois cliques, configura o OBS.
 
@@ -204,5 +227,5 @@ gh release create vX.Y.Z Instalar-Delay-Dinamico.exe --notes-file notas.md
 
 - Só RTMP/RTMPS. WHIP, SRT e a "Transmissão aprimorada" (multitrack) da Twitch não passam pelo relay.
 - Ligar o delay espera o próximo quadro-chave (até 2 s com o intervalo padrão do OBS), e desligar corta num quadro-chave.
-- A imagem congelada repete um quadro-chave a 2 fps, para gastar pouca banda (`filler_fps` no `config.toml`).
+- Nos modos cena e congelar, a imagem parada repete um quadro-chave a 2 fps, para gastar pouca banda (`filler_fps` no `config.toml`).
 - O instalador é para Windows. O relay e o script funcionam em Linux e macOS, mas lá a instalação é manual.

@@ -14,6 +14,10 @@ pub struct Config {
     pub stream_key: String,
     pub delay_seconds: u32,
     pub start_enabled: bool,
+    /// How extra delay is built: "rewind", "scene" or "freeze".
+    pub grow_mode: String,
+    /// OBS scene shown while the delay builds up (grow_mode = "scene").
+    pub delay_scene: String,
     pub max_delay_seconds: u32,
     pub filler_fps: u32,
     pub http_listen: String,
@@ -28,6 +32,8 @@ impl Default for Config {
             stream_key: String::new(),
             delay_seconds: 30,
             start_enabled: false,
+            grow_mode: "rewind".into(),
+            delay_scene: String::new(),
             max_delay_seconds: 600,
             filler_fps: 2,
             http_listen: "127.0.0.1:8787".into(),
@@ -81,6 +87,13 @@ delay_seconds = {delay}
 # Start every stream with the delay already on.
 start_enabled = {start}
 
+# What viewers see when the delay is switched on or increased:
+#   "rewind" = replay the last seconds (instant, no freeze)
+#   "scene"  = show the OBS scene below, frozen, while the delay builds up
+#   "freeze" = freeze the live picture while the delay builds up
+grow_mode = {grow}
+delay_scene = {scene}
+
 # Upper limit for the delay. Memory use is roughly bitrate x delay.
 max_delay_seconds = {max}
 
@@ -98,6 +111,8 @@ udp_listen = {udp}
             key = q(&self.stream_key),
             delay = self.delay_seconds,
             start = self.start_enabled,
+            grow = q(&self.grow_mode),
+            scene = q(&self.delay_scene),
             max = self.max_delay_seconds,
             fps = self.filler_fps,
             http = q(&self.http_listen),

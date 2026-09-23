@@ -95,6 +95,10 @@ struct ConfigView {
     start_enabled: bool,
     delay_seconds: u32,
     #[serde(default)]
+    grow_mode: Option<String>,
+    #[serde(default)]
+    delay_scene: Option<String>,
+    #[serde(default)]
     max_delay_seconds: u32,
 }
 
@@ -106,6 +110,8 @@ async fn get_config(State(s): State<AppState>) -> impl IntoResponse {
         stream_key: None,
         start_enabled: c.start_enabled,
         delay_seconds: c.delay_seconds,
+        grow_mode: Some(c.grow_mode),
+        delay_scene: Some(c.delay_scene),
         max_delay_seconds: c.max_delay_seconds,
     })
 }
@@ -122,6 +128,12 @@ async fn set_config(State(s): State<AppState>, Json(v): Json<ConfigView>) -> imp
             c.stream_key = k.trim().to_string();
         }
         c.start_enabled = v.start_enabled;
+        if let Some(m) = v.grow_mode.filter(|m| ["rewind", "scene", "freeze"].contains(&m.as_str())) {
+            c.grow_mode = m;
+        }
+        if let Some(sc) = v.delay_scene {
+            c.delay_scene = sc.trim().to_string();
+        }
     }
     s.shared.save_config();
     let _ = s.tx.send(EngineMsg::Cmd(Cmd::Set(v.delay_seconds)));
@@ -152,7 +164,10 @@ async fn obs_restore(State(s): State<AppState>) -> impl IntoResponse {
 /// Text commands over UDP, used by the OBS script:
 /// * delay commands (`toggle`, `set 30`, ...), see [`Cmd::parse`]
 /// * `status`: answered with a human readable summary
-/// * `poll <configured 0|1>`: answered with a pending action (`configure`, `restore`) or `none`
+/// * `poll <configured 0|1>`: answered with a pending action (`configure`, `restore`,
+///   `scene_show\t<name>`, `scene_back`) or `none`
+/// * `scene_shown` / `scene_failed`: outcome of `scene_show`
+/// * `scenes\t<name>\t<name>...`: scene list for the panel
 /// * `import\t<server>\t<key>\t<service>`: destination found in OBS' stream settings
 /// * `result <text>`: outcome of an action, shown in the panel
 pub async fn serve_udp(sock: UdpSocket, tx: UnboundedSender<EngineMsg>, shared: Arc<Shared>) -> Result<()> {
@@ -173,14 +188,27 @@ pub async fn serve_udp(sock: UdpSocket, tx: UnboundedSender<EngineMsg>, shared: 
                     b.last_poll = Some(Instant::now());
                     b.obs_configured = rest.trim() == "1";
                     match b.pending.pop_front() {
-                        Some(ObsAction::Configure) => "configure",
-                        Some(ObsAction::Restore) => "restore",
-                        None => "none",
+                        Some(ObsAction::Configure) => "configure".to_string(),
+                        Some(ObsAction::Restore) => "restore".to_string(),
+                        Some(ObsAction::ShowScene(name)) => format!("scene_show\t{name}"),
+                        Some(ObsAction::SceneBack) => "scene_back".to_string(),
+                        None => "none".to_string(),
                     }
                 };
                 let _ = sock.send_to(reply.as_bytes(), from).await;
             }
             "import" => import_from_obs(&shared, rest),
+            "scene_shown" => {
+                let _ = tx.send(EngineMsg::SceneShown(Instant::now()));
+            }
+            "scene_failed" => {
+                log::warn!("OBS could not show the delay scene: {}", rest.trim());
+                let _ = tx.send(EngineMsg::SceneFailed);
+            }
+            "scenes" => {
+                shared.bridge.lock().unwrap().scenes =
+                    rest.split('\t').map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect();
+            }
             "result" => {
                 log::info!("OBS: {}", rest.trim());
                 shared.bridge.lock().unwrap().message = Some((Instant::now(), rest.trim().to_string()));

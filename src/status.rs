@@ -26,10 +26,12 @@ impl Shared {
 }
 
 /// Actions the panel asks the OBS script to perform inside OBS.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ObsAction {
     Configure,
     Restore,
+    ShowScene(String),
+    SceneBack,
 }
 
 /// Link with the OBS script, which polls the relay over UDP.
@@ -39,6 +41,7 @@ pub struct Bridge {
     pub last_poll: Option<Instant>,
     pub obs_configured: bool,
     pub message: Option<(Instant, String)>,
+    pub scenes: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -48,6 +51,8 @@ pub struct ObsInfo {
     /// OBS streams to this relay.
     pub configured: bool,
     pub message: Option<String>,
+    /// Scene names reported by the OBS script.
+    pub scenes: Vec<String>,
 }
 
 impl Bridge {
@@ -61,6 +66,7 @@ impl Bridge {
                 .as_ref()
                 .filter(|(t, _)| t.elapsed() < Duration::from_secs(60))
                 .map(|(_, m)| m.clone()),
+            scenes: self.scenes.clone(),
         }
     }
 }

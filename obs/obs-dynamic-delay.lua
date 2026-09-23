@@ -4,6 +4,7 @@
 -- * abre o relay escondido junto com o OBS e fecha junto
 -- * atalhos (Configurações > Atalhos > "Delay dinâmico")
 -- * executa no OBS o que o painel pede (configurar/restaurar a transmissão)
+-- * troca para a cena de delay enquanto o delay é aplicado (modo "mostrar cena")
 
 obs = obslua
 local ffi = require("ffi")
@@ -318,16 +319,82 @@ local function restore_obs()
 end
 
 ---------------------------------------------------------------------------
+-- Delay scene: shown while the delay builds up (grow mode "scene")
+---------------------------------------------------------------------------
+local shown_scene, previous_scene = nil, nil
+
+local function program_scene_name()
+  local cur = obs.obs_frontend_get_current_scene()
+  if cur == nil then return nil end
+  local name = obs.obs_source_get_name(cur)
+  obs.obs_source_release(cur)
+  return name
+end
+
+-- Puts a scene on program, also in studio mode.
+local function set_program(src)
+  if obs.obs_frontend_preview_program_mode_active() then
+    obs.obs_frontend_set_current_preview_scene(src)
+    obs.obs_frontend_preview_program_trigger_transition()
+  else
+    obs.obs_frontend_set_current_scene(src)
+  end
+end
+
+local function show_scene(name)
+  local src = obs.obs_get_source_by_name(name)
+  if src == nil then
+    send("scene_failed " .. name)
+    report("A cena de delay \"" .. name .. "\" nao existe; congelei a imagem da live.")
+    return
+  end
+  previous_scene = program_scene_name()
+  if previous_scene == name then previous_scene = nil end
+  shown_scene = name
+  set_program(src)
+  obs.obs_source_release(src)
+  send("scene_shown")
+end
+
+local function scene_back()
+  -- only switch back if the streamer did not change scenes in the meantime
+  if previous_scene and program_scene_name() == shown_scene then
+    local src = obs.obs_get_source_by_name(previous_scene)
+    if src ~= nil then
+      set_program(src)
+      obs.obs_source_release(src)
+    end
+  end
+  shown_scene, previous_scene = nil, nil
+end
+
+local function send_scene_list()
+  local scenes = obs.obs_frontend_get_scenes()
+  if scenes == nil then return end
+  local names = {}
+  for _, src in ipairs(scenes) do
+    table.insert(names, obs.obs_source_get_name(src))
+  end
+  obs.source_list_release(scenes)
+  send("scenes\t" .. table.concat(names, "\t"))
+end
+
+---------------------------------------------------------------------------
 -- Link with the panel: poll the relay for actions to run inside OBS
 ---------------------------------------------------------------------------
+local polls = 0
 local function poll_tick()
   local reply = recv_on(poll_sock, 1)
   while reply do
     if reply == "configure" then configure_obs()
-    elseif reply == "restore" then restore_obs() end
+    elseif reply == "restore" then restore_obs()
+    elseif reply:sub(1, 11) == "scene_show\t" then show_scene(reply:sub(12))
+    elseif reply == "scene_back" then scene_back() end
     reply = recv_on(poll_sock, 1)
   end
   send_on(poll_sock, "poll " .. (obs_configured() and "1" or "0"))
+  if polls % 10 == 0 then send_scene_list() end
+  polls = polls + 1
 end
 
 ---------------------------------------------------------------------------
@@ -428,7 +495,7 @@ function script_load(s)
       ensure_relay(false)
     end
   end
-  obs.timer_add(poll_tick, 1000)
+  obs.timer_add(poll_tick, 300)
 end
 
 function script_save(s)

@@ -21,9 +21,9 @@ use rml_rtmp::sessions::StreamMetadata;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 use crate::config::Config;
-use crate::engine::{Engine, TsUnwrapper};
+use crate::engine::{Engine, GrowMode, SceneEvent, TsUnwrapper};
 use crate::flv::Kind;
-use crate::status::{Bridge, Cmd, Shared, Status, UpstreamState};
+use crate::status::{Bridge, Cmd, ObsAction, Shared, Status, UpstreamState};
 use crate::upstream::UpMsg;
 
 pub enum EngineMsg {
@@ -32,6 +32,9 @@ pub enum EngineMsg {
     PublishStart { session: u64, key: String },
     PublishEnd { session: u64 },
     Cmd(Cmd),
+    /// The OBS script switched to the delay scene.
+    SceneShown(Instant),
+    SceneFailed,
 }
 
 fn config_path() -> PathBuf {
@@ -156,6 +159,8 @@ async fn run_engine(
                             engine.push(kind, unwrapper.unwrap(session, ts), data, arrival);
                         }
                     }
+                    EngineMsg::SceneShown(at) => engine.scene_shown(at),
+                    EngineMsg::SceneFailed => engine.scene_unavailable(),
                     EngineMsg::Metadata(m) => {
                         let _ = up_tx.send(UpMsg::Metadata(m));
                     }
@@ -210,7 +215,26 @@ async fn run_engine(
             }
             _ = tick.tick() => {
                 let now = Instant::now();
+                let (mode, scene) = {
+                    let c = shared.config.lock().unwrap();
+                    (GrowMode::parse(&c.grow_mode), c.delay_scene.clone())
+                };
+                // keep enough history to rewind the configured delay
+                engine.set_grow_mode(mode, Duration::from_secs(delay as u64 + 3));
                 engine.poll(now, &mut out);
+                for ev in engine.take_scene_events() {
+                    let mut b = shared.bridge.lock().unwrap();
+                    match ev {
+                        SceneEvent::Show if b.info().script && !scene.is_empty() => {
+                            b.pending.push_back(ObsAction::ShowScene(scene.clone()))
+                        }
+                        SceneEvent::Show => {
+                            drop(b);
+                            engine.scene_unavailable();
+                        }
+                        SceneEvent::Back => b.pending.push_back(ObsAction::SceneBack),
+                    }
+                }
                 for p in out.drain(..) {
                     let _ = up_tx.send(UpMsg::Packet(p));
                 }

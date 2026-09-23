@@ -2,6 +2,16 @@
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.2.0] - 2026-09-23
+
+### Adicionado
+
+- Escolha do que o público vê ao ligar ou aumentar o delay (painel > Configuração):
+  - **Rebobinar** (novo padrão): a live volta no tempo na hora e reapresenta os últimos segundos, sem congelar.
+  - **Mostrar uma cena do OBS**: o script troca para a cena escolhida, e o quadro dela fica na tela enquanto o delay enche; depois volta para a cena anterior (também no modo estúdio).
+  - **Congelar a imagem**: comportamento da 0.1.0.
+- O painel lista as cenas do OBS.
+
 ## [0.1.0] - 2026-09-23
 
 Primeira versão.

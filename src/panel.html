@@ -95,6 +95,17 @@
     <label>Chave de transmissão
       <input type="password" id="key" autocomplete="off">
     </label>
+    <label>Ao ligar ou aumentar o delay
+      <select id="growMode">
+        <option value="rewind">Rebobinar (repete os últimos segundos, sem congelar)</option>
+        <option value="scene">Mostrar uma cena do OBS enquanto o delay enche</option>
+        <option value="freeze">Congelar a imagem da live enquanto o delay enche</option>
+      </select>
+    </label>
+    <label id="sceneRow">Cena mostrada enquanto o delay enche
+      <select id="scene"></select>
+      <span class="muted">Dica: crie uma cena só com uma imagem ou texto, tipo "Aplicando delay...". Ela aparece parada e sem som.</span>
+    </label>
     <label class="check"><input type="checkbox" id="startEnabled"> Começar toda live já com delay</label>
     <div class="actions">
       <button class="primary" id="save">Salvar</button>
@@ -148,6 +159,24 @@
   }
   $("platform").onchange = showUrlRow;
 
+  let scenes = [];
+  function fillScenes(selected) {
+    const sel = $("scene");
+    const names = [...new Set([...(selected ? [selected] : []), ...scenes])];
+    const cur = sel.value || selected || "";
+    sel.innerHTML = names.length ? "" : '<option value="">(abra o OBS para listar as cenas)</option>';
+    for (const n of names) {
+      const o = document.createElement("option");
+      o.value = o.textContent = n;
+      sel.appendChild(o);
+    }
+    if (cur) sel.value = cur;
+  }
+  function showSceneRow() {
+    $("sceneRow").classList.toggle("hidden", $("growMode").value !== "scene");
+  }
+  $("growMode").onchange = showSceneRow;
+
   function loadConfig() {
     return fetch(API + "/api/config").then((r) => r.json()).then((c) => {
       cfg = c;
@@ -156,6 +185,10 @@
       $("key").value = "";
       $("key").placeholder = c.stream_key_set ? "salva (digite para trocar)" : "cole a chave aqui";
       $("startEnabled").checked = c.start_enabled;
+      $("growMode").value = c.grow_mode || "rewind";
+      $("scene").value = "";
+      fillScenes(c.delay_scene);
+      showSceneRow();
       showUrlRow();
       if (!c.stream_key_set) $("cfgBox").open = true;
     });
@@ -164,7 +197,14 @@
   $("save").onclick = () => {
     const p = $("platform").value;
     const url = URLS[p] || $("url").value.trim();
-    const body = { upstream_url: url, start_enabled: $("startEnabled").checked, delay_seconds: delaySeconds };
+    const body = {
+      upstream_url: url, start_enabled: $("startEnabled").checked, delay_seconds: delaySeconds,
+      grow_mode: $("growMode").value, delay_scene: $("scene").value,
+    };
+    if (body.grow_mode === "scene" && !body.delay_scene) {
+      $("saveMsg").textContent = "Escolha a cena que aparece enquanto o delay enche.";
+      return;
+    }
     if ($("key").value.trim()) body.stream_key = $("key").value.trim();
     post("/api/config", body).then((r) => {
       $("saveMsg").textContent = !r.ok ? r.error : r.next_stream ? "Salvo. Destino novo vale na próxima live." : "Salvo.";
@@ -192,6 +232,10 @@
     t.textContent = s.enabled ? "Desligar delay (voltar ao vivo)" : "Ligar delay de " + s.delay_seconds + "s";
 
     const o = s.obs || {};
+    if (o.scenes && o.scenes.join("\n") !== scenes.join("\n")) {
+      scenes = o.scenes;
+      fillScenes(cfg && cfg.delay_scene);
+    }
     $("obsBox").classList.toggle("hidden", !(o.script && !o.configured));
     $("obsText").innerHTML = "O OBS ainda não está transmitindo pelo delay dinâmico.";
     $("keyBox").classList.toggle("hidden", !cfg || cfg.stream_key_set);

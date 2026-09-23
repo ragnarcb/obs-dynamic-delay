@@ -1,9 +1,14 @@
 //! The delay engine: buffers incoming media and releases it after the current
 //! delay, changing the delay on the fly without restarting the stream.
 //!
-//! * Increasing the delay ("grow"): output continues until the next keyframe,
-//!   then that keyframe is shown frozen (plus silent audio) until the buffer
-//!   holds the new delay. Viewers see a short freeze, the stream never drops.
+//! * Increasing the delay ("grow"), depending on [`GrowMode`]:
+//!   - `Rewind`: jump back in the recently sent history and play it again.
+//!     Instant, no freeze; viewers see the last seconds a second time.
+//!   - `Freeze`: at the next keyframe, show that frame frozen (plus silent
+//!     audio) until the buffer holds the new delay.
+//!   - `Scene`: like `Freeze`, but the frozen frame is the first keyframe
+//!     encoded after OBS switched to a chosen scene (orchestrated through
+//!     [`SceneEvent`]s, handled by the OBS script).
 //! * Decreasing the delay ("shrink"): the buffer is cut at the newest keyframe
 //!   that is already due under the new delay. Viewers see a jump cut forward.
 //!
@@ -27,6 +32,7 @@ pub struct OutPacket {
     pub data: Bytes,
 }
 
+#[derive(Clone)]
 struct Queued {
     kind: Kind,
     ts: u64,
@@ -43,6 +49,48 @@ struct Fill {
     video_n: u64,
     audio_n: u64,
 }
+
+/// How the engine builds up extra delay.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GrowMode {
+    Rewind,
+    Freeze,
+    Scene,
+}
+
+impl GrowMode {
+    pub fn parse(s: &str) -> GrowMode {
+        match s {
+            "freeze" => GrowMode::Freeze,
+            "scene" => GrowMode::Scene,
+            _ => GrowMode::Rewind,
+        }
+    }
+}
+
+/// Requests for OBS while growing in [`GrowMode::Scene`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SceneEvent {
+    /// Switch OBS to the delay scene, then call [`Engine::scene_shown`].
+    Show,
+    /// The frame to freeze on was captured (or the grow was cancelled): switch back.
+    Back,
+}
+
+enum SceneState {
+    Idle,
+    Requested { since: Instant },
+    Capturing { since: Instant, after: Instant },
+    Captured(Bytes),
+    /// OBS could not show the scene: fall back to a plain freeze.
+    Failed,
+}
+
+/// Time between OBS reporting the scene switch and the first frame we accept
+/// from it (covers the scene transition and the encoder pipeline).
+const SCENE_SETTLE: Duration = Duration::from_millis(700);
+/// Give up on the scene and freeze normally after this long.
+const SCENE_TIMEOUT: Duration = Duration::from_secs(6);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -83,6 +131,13 @@ pub struct Engine {
     has_video: bool,
     filler_interval_ms: u64,
     last_sent_arrival: Option<Instant>,
+    grow_mode: GrowMode,
+    /// Recently sent packets, kept for [`GrowMode::Rewind`].
+    history: VecDeque<Queued>,
+    history_window: Duration,
+    rewound_for: Option<Duration>,
+    scene: SceneState,
+    scene_events: Vec<SceneEvent>,
 }
 
 impl Engine {
@@ -104,6 +159,37 @@ impl Engine {
             has_video: false,
             filler_interval_ms: 1000 / filler_fps.clamp(1, 60) as u64,
             last_sent_arrival: None,
+            grow_mode: GrowMode::Freeze,
+            history: VecDeque::new(),
+            history_window: Duration::ZERO,
+            rewound_for: None,
+            scene: SceneState::Idle,
+            scene_events: Vec::new(),
+        }
+    }
+
+    /// Sets how extra delay is built. `history` is how far back a rewind may go.
+    pub fn set_grow_mode(&mut self, mode: GrowMode, history: Duration) {
+        self.grow_mode = mode;
+        self.history_window = if mode == GrowMode::Rewind { history } else { Duration::ZERO };
+    }
+
+    pub fn take_scene_events(&mut self) -> Vec<SceneEvent> {
+        std::mem::take(&mut self.scene_events)
+    }
+
+    /// OBS switched to the delay scene at `at`.
+    pub fn scene_shown(&mut self, at: Instant) {
+        if let SceneState::Requested { since } = self.scene {
+            self.scene = SceneState::Capturing { since, after: at + SCENE_SETTLE };
+        }
+    }
+
+    /// OBS could not switch scenes: freeze on the live picture instead.
+    pub fn scene_unavailable(&mut self) {
+        if matches!(self.scene, SceneState::Requested { .. } | SceneState::Capturing { .. }) {
+            log::warn!("delay scene unavailable, freezing the live picture instead");
+            self.scene = SceneState::Failed;
         }
     }
 
@@ -133,6 +219,13 @@ impl Engine {
             self.bypass.push(OutPacket { kind, ts: self.last_any as u32, data });
             return;
         }
+        if key
+            && let SceneState::Capturing { after, .. } = self.scene
+            && arrival >= after
+        {
+            self.scene = SceneState::Captured(data.clone());
+            self.scene_events.push(SceneEvent::Back);
+        }
         self.queued_bytes += data.len();
         self.queue.push_back(Queued { kind, ts, data, arrival, key, header });
     }
@@ -146,15 +239,17 @@ impl Engine {
                 }
                 continue;
             }
+            self.trim_history(now);
             if self.target < self.eff {
                 self.try_shrink(now);
             }
+            self.prepare_grow(now);
             while let Some(head) = self.queue.front() {
                 if head.arrival + self.eff > now {
                     return;
                 }
                 let can_freeze = (head.kind == Kind::Video && head.key) || !self.has_video;
-                if self.target > self.eff && can_freeze {
+                if self.target > self.eff && can_freeze && self.freeze_allowed() {
                     self.start_fill(now);
                     break;
                 }
@@ -215,6 +310,9 @@ impl Engine {
             (q.ts as i64 + self.offset).max(0) as u64
         };
         self.last_sent_arrival = Some(q.arrival);
+        if !q.header && !self.history_window.is_zero() {
+            self.history.push_back(q.clone());
+        }
         if let Some(ts) = self.stamp(q.kind, ts, q.header, cts) {
             out.push(OutPacket { kind: q.kind, ts: ts as u32, data: q.data });
         }
@@ -249,9 +347,92 @@ impl Engine {
         base
     }
 
+    fn trim_history(&mut self, now: Instant) {
+        while let Some(h) = self.history.front() {
+            if h.arrival + self.history_window >= now {
+                break;
+            }
+            self.history.pop_front();
+        }
+    }
+
+    /// Mode specific work before the delay can grow.
+    fn prepare_grow(&mut self, now: Instant) {
+        if self.target <= self.eff {
+            self.rewound_for = None;
+            if matches!(
+                self.scene,
+                SceneState::Requested { .. } | SceneState::Capturing { .. } | SceneState::Captured(_)
+            ) {
+                self.scene_events.push(SceneEvent::Back);
+            }
+            self.scene = SceneState::Idle;
+            return;
+        }
+        match self.grow_mode {
+            GrowMode::Rewind if self.rewound_for != Some(self.target) => {
+                self.rewound_for = Some(self.target);
+                self.try_rewind(now);
+            }
+            GrowMode::Scene => match self.scene {
+                SceneState::Idle => {
+                    self.scene = SceneState::Requested { since: now };
+                    self.scene_events.push(SceneEvent::Show);
+                }
+                SceneState::Requested { since } | SceneState::Capturing { since, .. }
+                    if now.saturating_duration_since(since) > SCENE_TIMEOUT =>
+                {
+                    log::warn!("delay scene did not show up in time, freezing instead");
+                    self.scene = SceneState::Failed;
+                    self.scene_events.push(SceneEvent::Back);
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+    }
+
+    fn freeze_allowed(&self) -> bool {
+        match self.grow_mode {
+            GrowMode::Scene => matches!(self.scene, SceneState::Captured(_) | SceneState::Failed),
+            _ => true,
+        }
+    }
+
+    /// Moves recently sent packets back into the queue so they are played again.
+    /// Whatever history cannot cover is built up with a freeze afterwards.
+    fn try_rewind(&mut self, now: Instant) {
+        let want = now.checked_sub(self.target);
+        let mut pick = None;
+        for (i, h) in self.history.iter().enumerate() {
+            if !h.key {
+                continue;
+            }
+            if pick.is_none() || want.is_some_and(|w| h.arrival <= w) {
+                pick = Some(i);
+            }
+        }
+        let Some(i) = pick else { return };
+        let k_arrival = self.history[i].arrival;
+        if self.last_sent_arrival.is_some_and(|last| k_arrival >= last) {
+            return;
+        }
+        let replay: Vec<Queued> = self.history.drain(i..).collect();
+        for q in replay.into_iter().rev() {
+            self.queued_bytes += q.data.len();
+            self.queue.push_front(q);
+        }
+        self.rebase_next = true;
+        self.eff = now.saturating_duration_since(k_arrival).min(self.target);
+        log::info!("rewound {:.1}s", self.eff.as_secs_f64());
+    }
+
     fn start_fill(&mut self, now: Instant) {
         let head = self.queue.front().unwrap();
-        let key = (head.kind == Kind::Video).then(|| head.data.clone());
+        let mut key = (head.kind == Kind::Video).then(|| head.data.clone());
+        if let SceneState::Captured(k) = std::mem::replace(&mut self.scene, SceneState::Idle) {
+            key = Some(k);
+        }
         let key_cts = key.as_deref().map_or(0, flv::video_cts);
         let base = if self.last_out.iter().any(Option::is_some) {
             self.cut_base(key_cts)
@@ -417,7 +598,8 @@ mod tests {
                 let now = self.t0 + Duration::from_millis(self.now_ms);
                 while self.frame * 1000 / 30 <= self.now_ms {
                     let key = self.frame % 60 == 0;
-                    let data = if key { vec![0x17, 1, 0, 0, 0] } else { vec![0x27, 1, 0, 0, 0] };
+                    let mut data = if key { vec![0x17, 1, 0, 0, 0] } else { vec![0x27, 1, 0, 0, 0] };
+                    data.extend_from_slice(&(self.frame as u32).to_be_bytes());
                     self.engine.push(Kind::Video, self.frame * 1000 / 30, data.into(), now);
                     self.frame += 1;
                 }
@@ -475,6 +657,84 @@ mod tests {
         assert!(st.current_ms < 2100, "{st:?}");
         assert!(st.buffered_ms < 2100, "{st:?}");
         s.assert_monotonic();
+    }
+
+    fn frame_of(p: &OutPacket) -> u32 {
+        u32::from_be_bytes(p.data[5..9].try_into().unwrap())
+    }
+
+    #[test]
+    fn rewind_is_instant_and_replays_history() {
+        let mut s = Sim::new();
+        s.engine.set_grow_mode(GrowMode::Rewind, Duration::from_secs(13));
+        s.run(15_000);
+        let before = s.out.len();
+        s.engine.set_target(Duration::from_secs(10));
+        s.run(50);
+        let st = s.engine.status(s.now());
+        assert_eq!(st.phase, Phase::Delayed, "{st:?}");
+        assert!((9_900..=10_200).contains(&st.current_ms), "{st:?}");
+        // the next video frame sent is an old keyframe (about 10 s back), not a filler
+        let replay = s.out[before..].iter().find(|p| p.kind == Kind::Video).unwrap();
+        assert_eq!(replay.data[0], 0x17);
+        let f = frame_of(replay);
+        assert!((120..=180).contains(&f), "replayed frame {f}");
+        s.run(3000);
+        s.assert_monotonic();
+    }
+
+    #[test]
+    fn rewind_with_short_history_freezes_the_rest() {
+        let mut s = Sim::new();
+        s.engine.set_grow_mode(GrowMode::Rewind, Duration::from_secs(13));
+        s.run(4_000);
+        s.engine.set_target(Duration::from_secs(10));
+        s.run(50);
+        assert_eq!(s.engine.status(s.now()).phase, Phase::Filling);
+        s.run(8_000);
+        let st = s.engine.status(s.now());
+        assert_eq!(st.phase, Phase::Delayed, "{st:?}");
+        assert!((9_900..=10_200).contains(&st.current_ms), "{st:?}");
+        s.assert_monotonic();
+    }
+
+    #[test]
+    fn scene_mode_freezes_on_frame_after_scene_switch() {
+        let mut s = Sim::new();
+        s.engine.set_grow_mode(GrowMode::Scene, Duration::ZERO);
+        s.run(3_000);
+        s.engine.set_target(Duration::from_secs(5));
+        s.run(10);
+        assert_eq!(s.engine.take_scene_events(), vec![SceneEvent::Show]);
+        // OBS takes a moment to switch; output keeps flowing live meanwhile
+        s.run(300);
+        assert_eq!(s.engine.status(s.now()).phase, Phase::Growing);
+        s.engine.scene_shown(s.now());
+        let shown_ms = s.now_ms;
+        // the switch settles at +700 ms; the next keyframe (every 2 s) becomes the frozen picture
+        s.run(3_000);
+        assert_eq!(s.engine.take_scene_events(), vec![SceneEvent::Back]);
+        assert_eq!(s.engine.status(s.now()).phase, Phase::Filling);
+        // the filler repeats the first keyframe encoded after the switch settled
+        let filler = s.out.iter().rev().find(|p| p.kind == Kind::Video).unwrap();
+        let f = frame_of(filler) as u64;
+        assert!(f * 1000 / 30 >= shown_ms + 700, "froze on frame {f} before the scene switch");
+        assert_eq!(f % 60, 0);
+        s.run(6_000);
+        assert_eq!(s.engine.status(s.now()).phase, Phase::Delayed);
+        s.assert_monotonic();
+    }
+
+    #[test]
+    fn scene_mode_falls_back_to_freeze() {
+        let mut s = Sim::new();
+        s.engine.set_grow_mode(GrowMode::Scene, Duration::ZERO);
+        s.run(3_000);
+        s.engine.set_target(Duration::from_secs(5));
+        s.run(10);
+        s.engine.scene_unavailable();
+        s.run(2_100);
+        assert_eq!(s.engine.status(s.now()).phase, Phase::Filling);
     }
 
     #[test]
