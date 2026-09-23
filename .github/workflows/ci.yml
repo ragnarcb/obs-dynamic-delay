@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: obs-dynamic-delay-windows-x64.exe
+            bin: target/release/obs-dynamic-delay.exe
+          - os: ubuntu-latest
+            artifact: obs-dynamic-delay-linux-x64
+            bin: target/release/obs-dynamic-delay
+          - os: macos-latest
+            artifact: obs-dynamic-delay-macos-arm64
+            bin: target/release/obs-dynamic-delay
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test
+      - run: cargo build --release
+      - name: Package
+        shell: bash
+        run: |
+          mkdir dist
+          cp "${{ matrix.bin }}" "dist/${{ matrix.artifact }}"
+          cp obs/obs-dynamic-delay.lua dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/*
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*

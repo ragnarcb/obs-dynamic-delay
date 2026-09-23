@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Delay Dinâmico</title>
+<style>
+  :root {
+    --bg: #1e1f24; --panel: #2a2c33; --line: #3a3d46; --text: #e8e9ed; --muted: #9a9dab;
+    --live: #3ecf6e; --delay: #f0a93b; --busy: #5aa7ff; --bad: #ff5d5d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 420px; margin: 0 auto; padding: 12px; display: grid; gap: 10px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .state { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .pill { font-weight: 700; letter-spacing: .04em; padding: 6px 10px; border-radius: 999px; font-size: 13px; }
+  .pill.live { background: rgba(62,207,110,.18); color: var(--live); }
+  .pill.delayed { background: rgba(240,169,59,.18); color: var(--delay); }
+  .pill.busy { background: rgba(90,167,255,.18); color: var(--busy); }
+  .pill.off { background: #33353d; color: var(--muted); }
+  .big { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .muted { color: var(--muted); font-size: 12px; }
+  button { font: inherit; color: var(--text); background: #353842; border: 1px solid var(--line); border-radius: 8px; padding: 9px 0; cursor: pointer; }
+  button:hover { background: #3f434e; }
+  button.on { background: var(--delay); color: #1b1300; border-color: transparent; font-weight: 700; }
+  #toggle { width: 100%; padding: 14px; font-size: 16px; font-weight: 700; }
+  .row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px; }
+  .row.two { grid-template-columns: 1fr 1fr; }
+  .dots { display: grid; gap: 4px; }
+  .dot::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--muted); }
+  .dot.ok::before { background: var(--live); } .dot.warn::before { background: var(--delay); } .dot.bad::before { background: var(--bad); }
+  .err { color: var(--bad); font-size: 12px; word-break: break-word; }
+</style>
+</head>
+<body>
+<main>
+  <section class="card">
+    <div class="state">
+      <span id="pill" class="pill off">SEM LIVE</span>
+      <span class="muted" id="phase"></span>
+    </div>
+    <div class="big" id="current">0,0 s</div>
+    <div class="muted">atraso atual para o público &middot; alvo <span id="target">0</span> s</div>
+  </section>
+
+  <section class="card">
+    <button id="toggle">Ativar delay</button>
+    <div class="muted" style="margin-top:8px">Delay configurado: <b id="delay">30</b> s</div>
+    <div class="row">
+      <button data-set="10">10s</button><button data-set="30">30s</button>
+      <button data-set="60">60s</button><button data-set="120">120s</button>
+    </div>
+    <div class="row two">
+      <button data-add="-5">&minus; 5s</button><button data-add="5">+ 5s</button>
+    </div>
+  </section>
+
+  <section class="card dots">
+    <span class="dot" id="obs">OBS</span>
+    <span class="dot" id="up">Plataforma</span>
+    <span class="err" id="err"></span>
+  </section>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const PHASES = {
+    live: "ao vivo", delayed: "com delay", growing: "aguardando keyframe",
+    filling: "congelado, aplicando delay", shrinking: "cortando para o vivo",
+  };
+  const UP = { idle: "parada", connecting: "conectando...", connected: "conectada", reconnecting: "reconectando..." };
+  const api = (path) => fetch(path, { method: "POST" }).then(refresh).catch(() => {});
+
+  $("toggle").onclick = () => api("/api/toggle");
+  document.querySelectorAll("[data-set]").forEach((b) => (b.onclick = () => api("/api/delay/" + b.dataset.set)));
+  document.querySelectorAll("[data-add]").forEach((b) => (b.onclick = () => api("/api/add/" + b.dataset.add)));
+
+  function render(s) {
+    const e = s.engine;
+    const pill = $("pill");
+    if (!e) {
+      pill.className = "pill off"; pill.textContent = "SEM LIVE"; $("phase").textContent = "";
+      $("current").textContent = "0,0 s";
+    } else {
+      const busy = e.phase === "filling" || e.phase === "growing" || e.phase === "shrinking";
+      pill.className = "pill " + (busy ? "busy" : e.phase === "live" ? "live" : "delayed");
+      pill.textContent = e.phase === "live" ? "AO VIVO" : busy ? "AJUSTANDO" : "DELAY";
+      $("phase").textContent = PHASES[e.phase] || e.phase;
+      $("current").textContent = (e.current_ms / 1000).toFixed(1).replace(".", ",") + " s";
+    }
+    $("target").textContent = e ? Math.round(e.target_ms / 1000) : s.enabled ? s.delay_seconds : 0;
+    $("delay").textContent = s.delay_seconds;
+    const t = $("toggle");
+    t.className = s.enabled ? "on" : "";
+    t.textContent = s.enabled ? "Desativar delay (voltar ao vivo)" : "Ativar delay de " + s.delay_seconds + "s";
+    $("obs").className = "dot " + (s.obs_connected ? "ok" : "");
+    $("obs").textContent = "OBS " + (s.obs_connected ? "transmitindo" : "desconectado");
+    const upCls = { connected: "ok", connecting: "warn", reconnecting: "bad", idle: "" }[s.upstream];
+    $("up").className = "dot " + upCls;
+    $("up").textContent = "Plataforma " + UP[s.upstream];
+    $("err").textContent = s.upstream !== "connected" && s.upstream_error ? s.upstream_error : "";
+  }
+
+  function refresh() {
+    return fetch("/api/status").then((r) => r.json()).then(render).catch(() => {
+      $("pill").className = "pill off"; $("pill").textContent = "RELAY OFFLINE";
+    });
+  }
+  refresh();
+  setInterval(refresh, 500);
+</script>
+</body>
+</html>
