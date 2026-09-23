@@ -32,8 +32,11 @@ ffmpeg -hide_banner -loglevel error -re \
   -f flv rtmp://127.0.0.1:1936/live/testkey &
 SRC=$!
 
-api() { curl -fsS "http://127.0.0.1:8797/api/$1" > /dev/null; }
-phase() { curl -fsS http://127.0.0.1:8797/api/status | sed -n 's/.*"phase":"\([a-z_]*\)".*/\1/p'; }
+TOKEN="$(sed -n 's/^api_token = "\(.*\)"/\1/p' test.toml)"
+api() { curl -fsS -H "x-dd-token: $TOKEN" -X POST "http://127.0.0.1:8797/api/cmd/$1" > /dev/null; }
+phase() { curl -fsS -H "x-dd-token: $TOKEN" http://127.0.0.1:8797/api/status | sed -n 's/.*"phase":"\([a-z_]*\)".*/\1/p'; }
+# the API refuses calls without the token
+[ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8797/api/status)" = 401 ] || { echo "FAIL: API answered without a token"; exit 1; }
 
 sleep 5;  api on
 sleep 12; [ "$(phase)" = delayed ] || { echo "FAIL: expected delayed, got $(phase)"; exit 1; }

@@ -18,7 +18,10 @@ anyhow = "1.0.104"
 axum = "0.8.9"
 bytes = "1.12.1"
 env_logger = "0.11.11"
+jiff = "0.2.37"
 log = "0.4.34"
+mp4 = "0.14.0"
+qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
 rml_rtmp = "0.8.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.151", features = ["preserve_order"] }

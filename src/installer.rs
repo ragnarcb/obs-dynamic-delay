@@ -279,13 +279,8 @@ fn install(p: &Paths) -> Result<()> {
     ));
 
     // 5. dock with the control panel
-    let api = format!("http://{}", cfg.http_listen);
-    let html = crate::control::PANEL.replacen(
-        "</head>",
-        &format!("<script>window.DD_API = {};</script>\n</head>", json!(api)),
-        1,
-    );
-    std::fs::write(p.dock_html(), html)?;
+    // the relay rewrites this file at every start; write it now so the dock works right away
+    std::fs::write(p.dock_html(), crate::control::dock_html(&cfg))?;
     let dock_url = format!("file:///{}", slash(&p.dock_html()).trim_start_matches('/'));
     edit_ini(&p.user_ini(), |t| {
         let mut docks: Vec<Value> = ini_get(t, "BasicWindow", "ExtraBrowserDocks")

@@ -11,344 +11,634 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, "Segoe UI", sans-serif; }
-  main { padding: 8px; display: grid; gap: 8px; max-width: 480px; margin: 0 auto; }
+  main { padding: 8px; display: grid; gap: 8px; max-width: 520px; margin: 0 auto; }
+  #modules, #banners { display: grid; gap: 8px; }
+  #banners:empty { display: none; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .card > h3 { margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
   .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .pill { font-weight: 700; letter-spacing: .04em; padding: 4px 9px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
   .pill.live { background: rgba(62,207,110,.18); color: var(--live); }
   .pill.delayed { background: rgba(240,169,59,.18); color: var(--delay); }
   .pill.busy { background: rgba(90,167,255,.18); color: var(--busy); }
   .pill.off { background: #33353d; color: var(--muted); }
+  .pill.bad { background: rgba(255,93,93,.2); color: var(--bad); }
   .big { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; margin-top: 4px; }
   .muted { color: var(--muted); font-size: 12px; }
-  button { font: inherit; color: var(--text); background: #353842; border: 1px solid var(--line); border-radius: 6px; padding: 7px 0; cursor: pointer; }
-  button:hover { background: #3f434e; }
+  p.muted { margin: 8px 0 0; }
+  button { font: inherit; color: var(--text); background: #353842; border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; cursor: pointer; }
+  button:hover:not(:disabled) { background: #3f434e; }
+  button:disabled { opacity: .45; cursor: default; }
   button.primary { background: var(--busy); color: #06121f; border-color: transparent; font-weight: 700; }
-  button.on { background: var(--delay); color: #1b1300; border-color: transparent; }
-  #toggle { width: 100%; padding: 11px; font-size: 15px; font-weight: 700; margin-top: 8px; }
+  button.warn { background: var(--delay); color: #1b1300; border-color: transparent; font-weight: 700; }
+  button.danger { background: var(--bad); color: #210404; border-color: transparent; font-weight: 700; }
+  button.wide { width: 100%; padding: 11px; font-size: 15px; font-weight: 700; }
+  button.small { padding: 3px 7px; font-size: 12px; }
   .row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin-top: 6px; }
+  .row button { padding: 7px 0; }
+  .line { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+  .line > .grow { flex: 1; }
   .dot::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--muted); }
   .dot.ok::before { background: var(--live); } .dot.warn::before { background: var(--delay); } .dot.bad::before { background: var(--bad); }
   .dots { display: grid; gap: 3px; }
   .err { color: var(--bad); font-size: 12px; word-break: break-word; }
   .note { color: var(--busy); font-size: 12px; word-break: break-word; }
-  .warn-box { border-color: var(--delay); background: rgba(240,169,59,.08); }
+  .box { border: 1px solid var(--delay); background: rgba(240,169,59,.08); border-radius: 8px; padding: 10px; }
+  .box.bad { border-color: var(--bad); background: rgba(255,93,93,.12); }
   .hidden { display: none !important; }
   details > summary { cursor: pointer; font-weight: 600; list-style: none; }
   details > summary::before { content: "▸ "; color: var(--muted); }
   details[open] > summary::before { content: "▾ "; }
   label { display: grid; gap: 3px; margin-top: 8px; color: var(--muted); font-size: 12px; }
   label.check { display: flex; align-items: center; gap: 6px; color: var(--text); }
-  input[type=text], input[type=password], select {
-    font: inherit; color: var(--text); background: var(--input); border: 1px solid var(--line);
-    border-radius: 6px; padding: 6px 8px; width: 100%;
+  input[type=text], input[type=password], input[type=number], select {
+    font: inherit; color: var(--text); background: var(--input); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%;
   }
-  .actions { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 10px; }
+  input[type=number] { width: 72px; }
+  .actions { display: grid; gap: 6px; margin-top: 10px; }
   a { color: var(--muted); font-size: 12px; cursor: pointer; }
+  .list > div { display: grid; gap: 4px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .list > div:first-child { border-top: 0; padding-top: 0; }
+  .out { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 6px 0; border-top: 1px solid var(--line); align-items: center; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin-bottom: 4px; }
+  .mods > div { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-top: 1px solid var(--line); }
+  .mods > div:first-child { border-top: 0; }
+  .mods > div > span { flex: 1; }
+  .qr { background: #fff; padding: 8px; border-radius: 8px; width: fit-content; margin: 8px auto; }
+  .qr svg { display: block; width: 180px; height: 180px; }
+  code { background: var(--input); padding: 2px 5px; border-radius: 4px; font-size: 11px; word-break: break-all; display: block; }
   .credit { text-align: center; color: var(--muted); font-size: 11px; padding: 2px 0 6px; }
   .credit a { color: var(--busy); font-size: 11px; text-decoration: none; }
   .credit a:hover { text-decoration: underline; }
+  #toast { position: sticky; top: 4px; z-index: 5; }
 </style>
 </head>
 <body>
 <main>
-  <section class="card">
-    <div class="top">
-      <span id="pill" class="pill off"></span>
-      <span class="muted" id="phase"></span>
-    </div>
-    <div class="big" id="current">0.0 s</div>
-    <div class="muted"><span data-t="delayForViewers"></span> &middot; <span data-t="configured"></span> <b id="delay">30</b> s</div>
-    <button id="toggle"></button>
-    <div class="row">
-      <button data-set="10">10</button><button data-set="30">30</button><button data-set="60">60</button>
-      <button data-set="120">120</button><button data-add="-5">&minus;5</button><button data-add="5">+5</button>
-    </div>
-  </section>
-
-  <section class="card warn-box hidden" id="obsBox">
-    <div data-t="obsNotUsing"></div>
-    <div class="actions"><button class="primary" id="configureObs" data-t="configureObs"></button></div>
-  </section>
-
-  <section class="card warn-box hidden" id="keyBox" data-t="keyMissing"></section>
-
-  <section class="card dots">
-    <span class="dot" id="obs">OBS</span>
-    <span class="dot" id="up"></span>
-    <span class="err" id="err"></span>
-    <span class="note" id="msg"></span>
-  </section>
-
-  <details class="card" id="cfgBox">
-    <summary data-t="settings"></summary>
-    <label><span data-t="platform"></span>
-      <select id="platform">
-        <option value="twitch">Twitch</option>
-        <option value="youtube">YouTube</option>
-        <option value="kick">Kick</option>
-        <option value="custom" data-t="other"></option>
-      </select>
-    </label>
-    <label id="urlRow"><span data-t="serverUrl"></span>
-      <input type="text" id="url" placeholder="rtmps://...">
-    </label>
-    <label><span data-t="streamKey"></span>
-      <input type="password" id="key" autocomplete="off">
-    </label>
-    <label><span data-t="growLabel"></span>
-      <select id="growMode">
-        <option value="rewind" data-t="growRewind"></option>
-        <option value="scene" data-t="growScene"></option>
-        <option value="freeze" data-t="growFreeze"></option>
-      </select>
-    </label>
-    <label id="sceneRow"><span data-t="sceneLabel"></span>
-      <select id="scene"></select>
-      <span class="muted" data-t="sceneTip"></span>
-    </label>
-    <label class="check"><input type="checkbox" id="startEnabled"> <span data-t="startEnabled"></span></label>
-    <label><span data-t="language"></span>
-      <select id="language">
-        <option value="en">English</option>
-        <option value="pt">Português (Brasil)</option>
-      </select>
-    </label>
-    <div class="actions">
-      <button class="primary" id="save" data-t="save"></button>
-      <span class="note" id="saveMsg"></span>
-      <a id="restoreObs" data-t="restoreObs"></a>
-    </div>
-  </details>
-
+  <div id="toast" class="hidden"></div>
+  <div id="banners"></div>
+  <div id="modules"></div>
+  <details class="card" id="settingsCard"></details>
+  <details class="card" id="customizeCard"></details>
   <footer class="credit"><span data-t="developedBy"></span> <a id="author" href="https://github.com/ragnarcb" target="_blank" rel="noopener">ragnarcb</a></footer>
 </main>
 <script>
-  const API = window.DD_API || "";
-  const URLS = { twitch: "rtmp://live.twitch.tv/app", youtube: "rtmp://a.rtmp.youtube.com/live2" };
-  const TEXT = {
-    en: {
-      delayForViewers: "delay for viewers", configured: "set to", obsNotUsing: "OBS is not streaming through the dynamic delay yet.",
-      configureObs: "Configure OBS automatically", keyMissing: "The stream key is missing. Fill it in under Settings below.",
-      settings: "Settings", platform: "Platform", other: "Other", serverUrl: "Server URL (copy it from the platform dashboard)",
-      streamKey: "Stream key", growLabel: "When the delay is switched on or increased",
-      growRewind: "Rewind (replays the last seconds, no freeze)", growScene: "Show an OBS scene while the delay builds up",
-      growFreeze: "Freeze the live picture while the delay builds up", sceneLabel: "Scene shown while the delay builds up",
-      sceneTip: "Tip: make a scene with just an image or text, like \"Applying delay...\". It is shown still and muted.",
-      startEnabled: "Start every stream with the delay on", language: "Language", save: "Save",
-      restoreObs: "Restore OBS' original stream settings",
-      noLive: "NOT LIVE", live: "LIVE", adjusting: "ADJUSTING", delayed: "DELAY", relayOff: "RELAY CLOSED", relayOffHint: "opens together with OBS",
-      phases: { live: "live", delayed: "delayed", growing: "waiting for a keyframe", filling: "holding a frame, applying delay", shrinking: "cutting back to live" },
-      toggleOff: "Turn delay off (back to live)", toggleOn: (s) => `Turn on ${s}s delay`,
-      obsStreaming: "OBS streaming", scriptMissing: "OBS script is not running", obsReady: "OBS ready", obsNotConfigured: "OBS not configured",
-      platformState: { idle: "Platform idle", connecting: "Platform connecting...", connected: "Platform connected", reconnecting: "Platform reconnecting..." },
-      applying: "Applying in OBS...", confirmRestore: "Click again to confirm: OBS goes back to streaming directly, without the dynamic delay.",
-      keySaved: "saved (type to replace)", keyPaste: "paste the key here", noScenes: "(open OBS to list the scenes)",
-      developedBy: "Developed by",
-      pickScene: "Pick the scene shown while the delay builds up.", saved: "Saved.", savedNext: "Saved. The new destination applies to the next stream.",
+"use strict";
+const API = window.DD_API || "";
+const TOKEN = window.DD_TOKEN || new URLSearchParams(location.search).get("token") || "";
+const URLS = { twitch: "rtmp://live.twitch.tv/app", youtube: "rtmp://a.rtmp.youtube.com/live2" };
+
+// ---------------------------------------------------------------- texts
+const TEXT = {
+  en: {
+    developedBy: "Developed by", noToken: "Missing access token. Open the panel from OBS (Docks > Dynamic Delay) or the script's \"Open panel\" button.",
+    relayOff: "RELAY CLOSED", relayOffHint: "opens together with OBS", noLive: "NOT LIVE", live: "LIVE", adjusting: "ADJUSTING", delayed: "DELAY", replay: "REPLAY", panicPill: "PANIC",
+    phases: { live: "live", delayed: "delayed", growing: "waiting for a keyframe", filling: "holding a frame, applying delay", shrinking: "cutting back to live" },
+    delayForViewers: "delay for viewers", setTo: "set to", toggleOff: "Turn delay off (back to live)", toggleOn: (s) => `Turn on ${s}s delay`,
+    obsNotUsing: "OBS is not streaming through the dynamic delay yet.", configureObs: "Configure OBS automatically",
+    keyMissing: "The stream key is missing. Fill it in under Settings.", update: (v) => `Version ${v} is available.`, download: "Download",
+    alertDown: (n) => `${n}: connection lost, reconnecting...`,
+    m: {
+      delay: "Delay", censor: "Delete before it airs", replay: "Instant replay", clips: "Clips", panic: "Panic button", health: "Stream health",
+      multistream: "Multistream", rules: "Delay by scene", chat: "Twitch chat commands", phone: "Phone control", streamdeck: "Stream Deck / API",
     },
-    pt: {
-      delayForViewers: "atraso para o público", configured: "configurado", obsNotUsing: "O OBS ainda não está transmitindo pelo delay dinâmico.",
-      configureObs: "Configurar o OBS automaticamente", keyMissing: "Falta a chave de transmissão. Preencha em Configuração abaixo.",
-      settings: "Configuração", platform: "Plataforma", other: "Outra", serverUrl: "URL do servidor (copie do painel da plataforma)",
-      streamKey: "Chave de transmissão", growLabel: "Ao ligar ou aumentar o delay",
-      growRewind: "Rebobinar (repete os últimos segundos, sem congelar)", growScene: "Mostrar uma cena do OBS enquanto o delay enche",
-      growFreeze: "Congelar a imagem da live enquanto o delay enche", sceneLabel: "Cena mostrada enquanto o delay enche",
-      sceneTip: "Dica: crie uma cena só com uma imagem ou texto, tipo \"Aplicando delay...\". Ela aparece parada e sem som.",
-      startEnabled: "Começar toda live já com delay", language: "Idioma", save: "Salvar",
-      restoreObs: "Restaurar a configuração original de transmissão do OBS",
-      noLive: "SEM LIVE", live: "AO VIVO", adjusting: "AJUSTANDO", delayed: "DELAY", relayOff: "RELAY FECHADO", relayOffHint: "abre junto com o OBS",
-      phases: { live: "ao vivo", delayed: "com delay", growing: "aguardando keyframe", filling: "congelado, aplicando delay", shrinking: "cortando para o vivo" },
-      toggleOff: "Desligar delay (voltar ao vivo)", toggleOn: (s) => `Ligar delay de ${s}s`,
-      obsStreaming: "OBS transmitindo", scriptMissing: "script do OBS não está rodando", obsReady: "OBS pronto", obsNotConfigured: "OBS não configurado",
-      platformState: { idle: "Plataforma parada", connecting: "Plataforma conectando...", connected: "Plataforma conectada", reconnecting: "Plataforma reconectando..." },
-      applying: "Aplicando no OBS...", confirmRestore: "Clique de novo para confirmar: o OBS volta a transmitir direto, sem o delay dinâmico.",
-      keySaved: "salva (digite para trocar)", keyPaste: "cole a chave aqui", noScenes: "(abra o OBS para listar as cenas)",
-      developedBy: "Desenvolvido por",
-      pickScene: "Escolha a cena que aparece enquanto o delay enche.", saved: "Salvo.", savedNext: "Salvo. Destino novo vale na próxima live.",
+    mDesc: {
+      delay: "turn the delay on/off, presets", censor: "remove the last seconds before viewers see them", replay: "replay the last seconds on air",
+      clips: "save the last seconds as MP4", panic: "cover the stream and mute everything", health: "bitrate, connections, alerts",
+      multistream: "stream to several platforms at once", rules: "delay switches with the OBS scene", chat: "!delay commands for mods",
+      phone: "control from your phone", streamdeck: "button links for Stream Deck and bots",
     },
-  };
-  let lang = window.DD_LANG || (/^pt/i.test(navigator.language) ? "pt" : "en");
-  const T = () => TEXT[lang] || TEXT.en;
-  const num = (x) => (lang === "pt" ? x.toFixed(1).replace(".", ",") : x.toFixed(1));
+    seconds: "Seconds", censorBtn: (s) => `Delete the last ${s}s`, censorHint: "Only works with the delay on: the part viewers have not seen yet is removed and the stream holds its last frame over the gap.",
+    replayBtn: (s) => `Replay the last ${s}s`, replayHint: "Viewers see the last seconds again, then the stream returns to the normal delay.",
+    clipBtn: (s) => `Save the last ${s}s`, lastClip: "Last clip:", folder: "Folder:", openFolder: "Open clips folder", clipHint: "Includes what has not aired yet. MP4 (H.264 + AAC), ready for TikTok and Shorts.",
+    panicBtn: "PANIC", panicOff: "End panic mode", panicScene: "Scene to show", panicMute: "Mute all audio", panicCensor: "Also delete the unaired seconds (needs the delay on)",
+    none: "(none)", uptime: "Live for", fromObs: "From OBS", reconnects: "reconnects", behind: (s) => `${s}s behind after an outage`, catchUp: "Catch up",
+    outage: "Keep what was missed during a connection drop (seconds, 0 = off)", alertSound: "Beep when a connection drops",
+    states: { idle: "idle", connecting: "connecting...", connected: "connected", reconnecting: "reconnecting..." },
+    mainDest: "The main destination is set under Settings. Add more here:", addDest: "+ Add destination", name: "Name", url: "Server URL", key: "Stream key", enabled: "On",
+    remove: "Remove", save: "Save", saved: "Saved.", savedNext: "Saved. Destination changes apply to the next stream.",
+    addRule: "+ Add rule", actOn: "turn on", actOff: "turn off", actSet: "turn on with", rulesHint: "When one of these scenes goes on air, the delay changes by itself.",
+    chatOn: "Listen to chat commands", channel: "Channel", allow: "Who can use them", allowB: "only me", allowM: "me and mods", allowV: "me, mods and VIPs", prefix: "Command",
+    chatHint: (p) => `In chat: ${p} on · ${p} off · ${p} 60 · ${p} censor · ${p} replay · ${p} clip · ${p} panic`,
+    lanOn: "Allow access from phones on this network", lanHint: "Scan with the phone camera (same Wi-Fi). Windows may ask to allow the connection. Anyone with this link can control the delay: do not share it.",
+    sdHint: "Stream Deck: use the \"Website\" action with \"Access in background\". Each link already contains your token.", copy: "Copy", copied: "Copied!",
+    toggle: "Toggle delay", on: "Delay on", off: "Delay off",
+    settings: "Settings", platform: "Platform", other: "Other", serverUrl: "Server URL (copy it from the platform dashboard)", streamKey: "Stream key",
+    keySaved: "saved (type to replace)", keyPaste: "paste the key here", growLabel: "When the delay is switched on or increased",
+    growRewind: "Rewind (replays the last seconds, no freeze)", growScene: "Show an OBS scene while the delay builds up", growFreeze: "Freeze the live picture while the delay builds up",
+    sceneLabel: "Scene shown while the delay builds up", sceneTip: "Tip: make a scene with just an image or text. It is shown still and muted.", noScenes: "(open OBS to list the scenes)",
+    startEnabled: "Start every stream with the delay on", language: "Language", restoreObs: "Restore OBS' original stream settings",
+    confirmRestore: "Click again to confirm: OBS goes back to streaming directly, without the dynamic delay.", applying: "Applying in OBS...", pickScene: "Pick the scene.",
+    customize: "Customize panel", customizeHint: "Choose which blocks show up in this panel and their order. Hidden features keep working through hotkeys.",
+    up: "Move up", down: "Move down", obsStreaming: "OBS streaming", scriptMissing: "OBS script is not running", obsReady: "OBS ready", obsNotConfigured: "OBS not configured",
+  },
+  pt: {
+    developedBy: "Desenvolvido por", noToken: "Falta o token de acesso. Abra o painel pelo OBS (Docks > Delay dinâmico) ou pelo botão \"Abrir painel\" do script.",
+    relayOff: "RELAY FECHADO", relayOffHint: "abre junto com o OBS", noLive: "SEM LIVE", live: "AO VIVO", adjusting: "AJUSTANDO", delayed: "DELAY", replay: "REPLAY", panicPill: "PÂNICO",
+    phases: { live: "ao vivo", delayed: "com delay", growing: "aguardando keyframe", filling: "congelado, aplicando delay", shrinking: "cortando para o vivo" },
+    delayForViewers: "atraso para o público", setTo: "configurado", toggleOff: "Desligar delay (voltar ao vivo)", toggleOn: (s) => `Ligar delay de ${s}s`,
+    obsNotUsing: "O OBS ainda não está transmitindo pelo delay dinâmico.", configureObs: "Configurar o OBS automaticamente",
+    keyMissing: "Falta a chave de transmissão. Preencha em Configuração.", update: (v) => `A versão ${v} está disponível.`, download: "Baixar",
+    alertDown: (n) => `${n}: conexão caiu, reconectando...`,
+    m: {
+      delay: "Delay", censor: "Apagar antes de ir ao ar", replay: "Replay instantâneo", clips: "Clipes", panic: "Botão de pânico", health: "Saúde da live",
+      multistream: "Multistream", rules: "Delay por cena", chat: "Comandos no chat da Twitch", phone: "Controle pelo celular", streamdeck: "Stream Deck / API",
+    },
+    mDesc: {
+      delay: "ligar/desligar o delay, presets", censor: "tirar os últimos segundos antes do público ver", replay: "repetir os últimos segundos no ar",
+      clips: "salvar os últimos segundos em MP4", panic: "cobrir a live e mutar tudo", health: "bitrate, conexões, alertas",
+      multistream: "transmitir para várias plataformas ao mesmo tempo", rules: "o delay muda sozinho com a cena do OBS", chat: "comandos !delay para os mods",
+      phone: "controlar pelo celular", streamdeck: "links de botão para Stream Deck e bots",
+    },
+    seconds: "Segundos", censorBtn: (s) => `Apagar os últimos ${s}s`, censorHint: "Só funciona com o delay ligado: o trecho que o público ainda não viu é removido e a live segura o último quadro no lugar.",
+    replayBtn: (s) => `Replay dos últimos ${s}s`, replayHint: "O público vê os últimos segundos de novo e depois a live volta ao delay normal.",
+    clipBtn: (s) => `Salvar os últimos ${s}s`, lastClip: "Último clipe:", folder: "Pasta:", openFolder: "Abrir pasta dos clipes", clipHint: "Inclui o que ainda não foi ao ar. MP4 (H.264 + AAC), pronto para TikTok e Shorts.",
+    panicBtn: "PÂNICO", panicOff: "Sair do modo pânico", panicScene: "Cena para mostrar", panicMute: "Mutar todo o áudio", panicCensor: "Também apagar o que ainda não foi ao ar (precisa do delay ligado)",
+    none: "(nenhuma)", uptime: "No ar há", fromObs: "Vindo do OBS", reconnects: "reconexões", behind: (s) => `${s}s atrás depois de uma queda`, catchUp: "Alcançar",
+    outage: "Guardar o que foi perdido numa queda de conexão (segundos, 0 = desligado)", alertSound: "Apitar quando uma conexão cair",
+    states: { idle: "parada", connecting: "conectando...", connected: "conectada", reconnecting: "reconectando..." },
+    mainDest: "O destino principal fica em Configuração. Adicione outros aqui:", addDest: "+ Adicionar destino", name: "Nome", url: "URL do servidor", key: "Chave de transmissão", enabled: "Ligado",
+    remove: "Remover", save: "Salvar", saved: "Salvo.", savedNext: "Salvo. Mudanças de destino valem na próxima live.",
+    addRule: "+ Adicionar regra", actOn: "ligar", actOff: "desligar", actSet: "ligar com", rulesHint: "Quando uma dessas cenas entra no ar, o delay muda sozinho.",
+    chatOn: "Ouvir comandos no chat", channel: "Canal", allow: "Quem pode usar", allowB: "só eu", allowM: "eu e os mods", allowV: "eu, mods e VIPs", prefix: "Comando",
+    chatHint: (p) => `No chat: ${p} on · ${p} off · ${p} 60 · ${p} apagar · ${p} replay · ${p} clipe · ${p} panico`,
+    lanOn: "Permitir acesso pelo celular nesta rede", lanHint: "Aponte a câmera do celular (mesmo Wi-Fi). O Windows pode pedir para liberar a conexão. Quem tiver este link controla o delay: não compartilhe.",
+    sdHint: "Stream Deck: use a ação \"Website\" com \"Acessar em segundo plano\". Cada link já tem o seu token.", copy: "Copiar", copied: "Copiado!",
+    toggle: "Ligar/desligar delay", on: "Ligar delay", off: "Desligar delay",
+    settings: "Configuração", platform: "Plataforma", other: "Outra", serverUrl: "URL do servidor (copie do painel da plataforma)", streamKey: "Chave de transmissão",
+    keySaved: "salva (digite para trocar)", keyPaste: "cole a chave aqui", growLabel: "Ao ligar ou aumentar o delay",
+    growRewind: "Rebobinar (repete os últimos segundos, sem congelar)", growScene: "Mostrar uma cena do OBS enquanto o delay enche", growFreeze: "Congelar a imagem da live enquanto o delay enche",
+    sceneLabel: "Cena mostrada enquanto o delay enche", sceneTip: "Dica: crie uma cena só com uma imagem ou texto. Ela aparece parada e sem som.", noScenes: "(abra o OBS para listar as cenas)",
+    startEnabled: "Começar toda live já com delay", language: "Idioma", restoreObs: "Restaurar a configuração original de transmissão do OBS",
+    confirmRestore: "Clique de novo para confirmar: o OBS volta a transmitir direto, sem o delay dinâmico.", applying: "Aplicando no OBS...", pickScene: "Escolha a cena.",
+    customize: "Personalizar painel", customizeHint: "Escolha quais blocos aparecem neste painel e em que ordem. Os recursos escondidos continuam funcionando pelos atalhos.",
+    up: "Subir", down: "Descer", obsStreaming: "OBS transmitindo", scriptMissing: "script do OBS não está rodando", obsReady: "OBS pronto", obsNotConfigured: "OBS não configurado",
+  },
+};
+const ALL_MODULES = ["delay", "censor", "replay", "clips", "panic", "health", "multistream", "rules", "chat", "phone", "streamdeck"];
+let lang = /^pt/i.test(navigator.language) ? "pt" : "en";
+const T = () => TEXT[lang] || TEXT.en;
+const num = (x) => (lang === "pt" ? x.toFixed(1).replace(".", ",") : x.toFixed(1));
+const $ = (id) => document.getElementById(id);
 
-  const $ = (id) => document.getElementById(id);
-  const post = (path, body) =>
-    fetch(API + path, {
-      method: "POST",
-      headers: body ? { "Content-Type": "application/json" } : {},
-      body: body ? JSON.stringify(body) : undefined,
-    }).then((r) => r.json());
-
-  function applyLanguage(l) {
-    lang = TEXT[l] ? l : "en";
-    document.documentElement.lang = lang === "pt" ? "pt-BR" : "en";
-    document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T()[el.dataset.t]));
-    $("language").value = lang;
-    if (cfg) $("key").placeholder = cfg.stream_key_set ? T().keySaved : T().keyPaste;
-    fillScenes(cfg && cfg.delay_scene);
-    if (lastStatus) render(lastStatus);
+// ---------------------------------------------------------------- DOM helpers
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "text") el.textContent = v;
+    else if (k === "value") el.value = v;
+    else if (k === "checked" || k === "disabled") el[k] = !!v;
+    else if (v !== false && v != null) el.setAttribute(k, v === true ? "" : v);
   }
+  for (const kid of kids.flat()) if (kid != null && kid !== "") el.append(kid instanceof Node ? kid : document.createTextNode(kid));
+  return el;
+}
+const field = (label, input) => h("label", {}, label, input);
+function numberInput(value, min, max, onchange) {
+  return h("input", { type: "number", min, max, value, onchange: (e) => onchange(Math.max(min, Math.min(max, parseInt(e.target.value) || min))) });
+}
+// Scene pickers refresh their options when OBS reports its scenes.
+let sceneSelects = [];
+function fillSceneSelect(sel) {
+  const value = sel.dataset.value || "";
+  const names = [...new Set([...(value ? [value] : []), ...(status?.obs?.scenes || [])])];
+  sel.replaceChildren();
+  if (sel.dataset.none === "1" || !names.length) sel.append(h("option", { value: "", text: names.length ? T().none : T().noScenes }));
+  for (const n of names) sel.append(h("option", { value: n, text: n }));
+  sel.value = value;
+}
+function sceneSelect(value, onchange, allowNone) {
+  const sel = h("select", { onchange: (e) => { sel.dataset.value = e.target.value; onchange(e.target.value); } });
+  sel.dataset.value = value || "";
+  sel.dataset.none = allowNone ? "1" : "0";
+  fillSceneSelect(sel);
+  sceneSelects.push(sel);
+  return sel;
+}
 
-  let cfg = null;
-  let lastStatus = null;
-  let lastMessage = null;
-  let delaySeconds = 30;
+// ---------------------------------------------------------------- API
+async function api(path, opts = {}) {
+  const r = await fetch(API + path, {
+    method: opts.method || (opts.body ? "POST" : "GET"),
+    headers: Object.assign({ "x-dd-token": TOKEN }, opts.body ? { "Content-Type": "application/json" } : {}),
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  return r.json();
+}
+const cmd = (c) => api("/api/cmd/" + c, { method: "POST" }).then(refresh);
+async function saveConfig(patch, msgEl) {
+  const r = await api("/api/config", { body: patch });
+  if (msgEl) msgEl.textContent = !r.ok ? r.error : r.next_stream ? T().savedNext : T().saved;
+  else if (!r.ok) toast(r.error, "error");
+  if (r.ok) await loadConfig();
+  return r;
+}
 
-  $("toggle").onclick = () => post("/api/toggle").then(refresh);
-  document.querySelectorAll("[data-set]").forEach((b) => (b.onclick = () => post("/api/delay/" + b.dataset.set).then(refresh)));
-  document.querySelectorAll("[data-add]").forEach((b) => (b.onclick = () => post("/api/add/" + b.dataset.add).then(refresh)));
+let cfg = null;
+let status = null;
 
-  function obsAction(path) {
-    post(path).then((r) => ($("msg").textContent = r.ok ? T().applying : r.error));
+// ---------------------------------------------------------------- modules
+// Each module: build() returns the card content; update(s) refreshes it with the live status.
+const MODULES = {
+  delay: {
+    build() {
+      this.pill = h("span", { class: "pill off" });
+      this.phase = h("span", { class: "muted" });
+      this.big = h("div", { class: "big", text: num(0) + " s" });
+      this.sub = h("div", { class: "muted" });
+      this.toggle = h("button", { class: "wide", onclick: () => cmd("toggle") });
+      const row = h("div", { class: "row" },
+        ...[10, 30, 60, 120].map((s) => h("button", { text: s, onclick: () => cmd("set/" + s) })),
+        h("button", { text: "−5", onclick: () => cmd("add/-5") }), h("button", { text: "+5", onclick: () => cmd("add/5") }));
+      return [h("div", { class: "top" }, this.pill, this.phase), this.big, this.sub, h("div", { style: "margin-top:8px" }, this.toggle), row];
+    },
+    update(s) {
+      const e = s.engine;
+      if (s.panic) { this.pill.className = "pill bad"; this.pill.textContent = T().panicPill; }
+      else if (!e) { this.pill.className = "pill off"; this.pill.textContent = T().noLive; }
+      else if (e.replaying) { this.pill.className = "pill busy"; this.pill.textContent = T().replay; }
+      else {
+        const busy = ["filling", "growing", "shrinking"].includes(e.phase);
+        this.pill.className = "pill " + (busy ? "busy" : e.phase === "live" ? "live" : "delayed");
+        this.pill.textContent = e.phase === "live" ? T().live : busy ? T().adjusting : T().delayed;
+      }
+      this.phase.textContent = e ? T().phases[e.phase] || e.phase : "";
+      this.big.textContent = num(e ? e.current_ms / 1000 : 0) + " s";
+      this.sub.textContent = `${T().delayForViewers} · ${T().setTo} ${s.delay_seconds} s`;
+      this.toggle.className = "wide" + (s.enabled ? " warn" : "");
+      this.toggle.textContent = s.enabled ? T().toggleOff : T().toggleOn(s.delay_seconds);
+    },
+  },
+  censor: {
+    build() {
+      this.btn = h("button", { class: "wide danger", onclick: () => cmd("censor/" + cfg.censor_seconds) });
+      return [this.btn, h("div", { class: "line" }, h("span", { class: "grow muted", text: T().seconds }),
+        numberInput(cfg.censor_seconds, 1, 120, (v) => saveConfig({ censor_seconds: v }))), h("p", { class: "muted", text: T().censorHint })];
+    },
+    update(s) { this.btn.textContent = T().censorBtn(cfg.censor_seconds); this.btn.disabled = !s.engine || !s.enabled; },
+  },
+  replay: {
+    build() {
+      this.btn = h("button", { class: "wide primary", onclick: () => cmd("replay/" + cfg.replay_seconds) });
+      return [this.btn, h("div", { class: "line" }, h("span", { class: "grow muted", text: T().seconds }),
+        numberInput(cfg.replay_seconds, 3, 60, (v) => saveConfig({ replay_seconds: v }))), h("p", { class: "muted", text: T().replayHint })];
+    },
+    update(s) { this.btn.textContent = T().replayBtn(cfg.replay_seconds); this.btn.disabled = !s.engine || s.engine.replaying; },
+  },
+  clips: {
+    build() {
+      this.btn = h("button", { class: "wide primary", onclick: () => cmd("clip/" + cfg.clip_seconds) });
+      this.last = h("div", { class: "muted", style: "margin-top:6px; word-break: break-all" });
+      return [this.btn, h("div", { class: "line" }, h("span", { class: "grow muted", text: T().seconds }),
+        numberInput(cfg.clip_seconds, 5, 120, (v) => saveConfig({ clip_seconds: v }))), this.last,
+        h("div", { class: "line" }, h("a", { text: T().openFolder, onclick: () => api("/api/open/clips", { method: "POST" }) })),
+        h("p", { class: "muted", text: T().clipHint })];
+    },
+    update(s) {
+      this.btn.textContent = T().clipBtn(cfg.clip_seconds); this.btn.disabled = !s.engine;
+      this.last.textContent = s.last_clip ? `${T().lastClip} ${s.last_clip}` : `${T().folder} ${cfg.clips_path}`;
+    },
+  },
+  panic: {
+    build() {
+      this.btn = h("button", { class: "wide danger", onclick: () => cmd("panic") });
+      return [this.btn,
+        field(T().panicScene, sceneSelect(cfg.panic_scene, (v) => saveConfig({ panic_scene: v }), true)),
+        h("label", { class: "check" }, h("input", { type: "checkbox", checked: cfg.panic_mute, onchange: (e) => saveConfig({ panic_mute: e.target.checked }) }), T().panicMute),
+        h("label", { class: "check" }, h("input", { type: "checkbox", checked: cfg.panic_censor, onchange: (e) => saveConfig({ panic_censor: e.target.checked }) }), T().panicCensor)];
+    },
+    update(s) { this.btn.textContent = s.panic ? T().panicOff : T().panicBtn; this.btn.className = "wide " + (s.panic ? "warn" : "danger"); },
+  },
+  health: {
+    build() {
+      this.kv = h("div", { class: "kv" });
+      this.obs = h("div", { class: "dots" });
+      this.outs = h("div");
+      return [this.kv, this.obs, this.outs,
+        field(T().outage, numberInput(cfg.outage_buffer_seconds, 0, 300, (v) => saveConfig({ outage_buffer_seconds: v }))),
+        h("label", { class: "check" }, h("input", { type: "checkbox", checked: cfg.alert_sound, onchange: (e) => saveConfig({ alert_sound: e.target.checked }) }), T().alertSound)];
+    },
+    update(s) {
+      const up = s.health.uptime_s;
+      const hms = `${Math.floor(up / 3600)}:${String(Math.floor(up / 60) % 60).padStart(2, "0")}:${String(up % 60).padStart(2, "0")}`;
+      this.kv.replaceChildren(h("span", { class: "muted", text: T().uptime }), h("span", { text: s.engine ? hms : "-" }),
+        h("span", { class: "muted", text: T().fromObs }), h("span", { text: s.engine ? `${s.health.in_kbps} kbps` : "-" }));
+      this.obs.replaceChildren(obsLine(s));
+      const cls = { connected: "ok", connecting: "warn", reconnecting: "bad", idle: "" };
+      this.outs.replaceChildren(...(s.outputs || []).map((o) => h("div", { class: "out" },
+        h("span", { class: "dot " + cls[o.state], text: `${o.name} · ${T().states[o.state]}` }),
+        h("span", { class: "muted", text: o.state === "connected" ? `${o.kbps} kbps` : "" }),
+        o.behind_ms > 2000 ? h("span", { class: "note", text: T().behind(Math.round(o.behind_ms / 1000)) }) : null,
+        o.behind_ms > 2000 ? h("button", { class: "small", text: T().catchUp, onclick: () => cmd("catchup") }) : null,
+        o.state !== "connected" && o.error ? h("span", { class: "err", style: "grid-column: 1 / -1", text: o.error }) : null,
+        o.reconnects ? h("span", { class: "muted", style: "grid-column: 1 / -1", text: `${o.reconnects} ${T().reconnects}` }) : null)));
+    },
+  },
+  multistream: {
+    build() {
+      this.list = h("div", { class: "list" });
+      this.msg = h("span", { class: "note" });
+      this.draft = (cfg.destinations || []).map((d) => Object.assign({}, d));
+      this.render();
+      return [h("p", { class: "muted", style: "margin-top:0", text: T().mainDest }), this.list,
+        h("div", { class: "line" }, h("button", { text: T().addDest, onclick: () => { this.draft.push({ name: "", url: "", key: "", enabled: true }); this.render(); } }),
+          h("button", { class: "primary", text: T().save, onclick: () => saveConfig({ destinations: this.draft }, this.msg) })), this.msg];
+    },
+    render() {
+      this.list.replaceChildren(...this.draft.map((d, i) => h("div", {},
+        h("div", { class: "line" },
+          h("input", { type: "text", class: "grow", placeholder: T().name, value: d.name, oninput: (e) => (d.name = e.target.value) }),
+          h("label", { class: "check", style: "margin:0" }, h("input", { type: "checkbox", checked: d.enabled, onchange: (e) => (d.enabled = e.target.checked) }), T().enabled),
+          h("button", { class: "small", text: T().remove, onclick: () => { this.draft.splice(i, 1); this.render(); } })),
+        h("input", { type: "text", placeholder: "rtmp(s)://...  " + T().url, value: d.url, oninput: (e) => (d.url = e.target.value) }),
+        h("input", { type: "password", autocomplete: "off", placeholder: d.key_set ? T().keySaved : T().key, value: d.key_set ? "" : d.key || "", oninput: (e) => (d.key = e.target.value) }))));
+    },
+    update() {},
+  },
+  rules: {
+    build() {
+      this.list = h("div", { class: "list" });
+      this.msg = h("span", { class: "note" });
+      this.draft = (cfg.scene_rules || []).map((r) => Object.assign({}, r));
+      this.render();
+      return [h("p", { class: "muted", style: "margin-top:0", text: T().rulesHint }), this.list,
+        h("div", { class: "line" }, h("button", { text: T().addRule, onclick: () => { this.draft.push({ scene: "", action: "on" }); this.render(); } }),
+          h("button", { class: "primary", text: T().save, onclick: () => saveConfig({ scene_rules: this.draft.filter((r) => r.scene) }, this.msg) })), this.msg];
+    },
+    render() {
+      this.list.replaceChildren(...this.draft.map((r, i) => {
+        const kind = r.action.startsWith("set:") ? "set" : r.action;
+        const secs = kind === "set" ? parseInt(r.action.slice(4)) || 30 : 30;
+        const act = h("select", { onchange: (e) => { r.action = e.target.value === "set" ? `set:${secs}` : e.target.value; this.render(); } },
+          h("option", { value: "on", text: T().actOn }), h("option", { value: "off", text: T().actOff }), h("option", { value: "set", text: T().actSet }));
+        act.value = kind;
+        return h("div", {}, h("div", { class: "line" }, h("div", { class: "grow" }, sceneSelect(r.scene, (v) => (r.scene = v))),
+          h("button", { class: "small", text: T().remove, onclick: () => { this.draft.splice(i, 1); this.render(); } })),
+          h("div", { class: "line" }, act, kind === "set" ? numberInput(secs, 1, 600, (v) => (r.action = `set:${v}`)) : null, kind === "set" ? h("span", { class: "muted", text: "s" }) : null));
+      }));
+    },
+    update() {},
+  },
+  chat: {
+    build() {
+      const c = Object.assign({}, cfg.twitch_chat);
+      this.msg = h("span", { class: "note" });
+      const allow = h("select", { onchange: (e) => (c.allow = e.target.value) },
+        h("option", { value: "broadcaster", text: T().allowB }), h("option", { value: "mods", text: T().allowM }), h("option", { value: "vips", text: T().allowV }));
+      allow.value = c.allow;
+      const hint = h("p", { class: "muted", text: T().chatHint(c.prefix) });
+      return [h("label", { class: "check", style: "margin-top:0" }, h("input", { type: "checkbox", checked: c.enabled, onchange: (e) => (c.enabled = e.target.checked) }), T().chatOn),
+        field(T().channel, h("input", { type: "text", placeholder: "twitch.tv/...", value: c.channel, oninput: (e) => (c.channel = e.target.value) })),
+        field(T().allow, allow),
+        field(T().prefix, h("input", { type: "text", value: c.prefix, oninput: (e) => { c.prefix = e.target.value; hint.textContent = T().chatHint(c.prefix); } })),
+        hint, h("div", { class: "actions" }, h("button", { class: "primary", text: T().save, onclick: () => saveConfig({ twitch_chat: c }, this.msg) }), this.msg)];
+    },
+    update() {},
+  },
+  phone: {
+    build() {
+      this.qr = h("div");
+      this.link = h("div");
+      return [h("label", { class: "check", style: "margin-top:0" }, h("input", { type: "checkbox", checked: cfg.lan_access, onchange: (e) => saveConfig({ lan_access: e.target.checked }).then(() => setTimeout(() => this.load(), 1500)) }), T().lanOn),
+        this.qr, this.link, h("p", { class: "muted", text: T().lanHint })];
+    },
+    async load() {
+      const r = await api("/api/lan");
+      this.qr.replaceChildren();
+      this.link.replaceChildren();
+      if (r.enabled && r.url) {
+        const box = h("div", { class: "qr" });
+        box.innerHTML = r.qr; // SVG generated by the relay
+        this.qr.append(box);
+        this.link.append(h("code", { text: r.url }));
+      }
+    },
+    update() { if (!this.loaded) { this.loaded = true; this.load(); } },
+  },
+  streamdeck: {
+    build() {
+      const base = (API || location.origin) + "/api/cmd/";
+      const rows = [[T().toggle, "toggle"], [T().on, "on"], [T().off, "off"], [T().m.censor, "censor"], [T().m.replay, "replay"], [T().m.clips, "clip"], [T().m.panic, "panic"]];
+      return [h("p", { class: "muted", style: "margin-top:0", text: T().sdHint }), ...rows.map(([label, c]) => {
+        const url = `${base}${c}?token=${TOKEN}`;
+        const btn = h("button", { class: "small", text: T().copy, onclick: () => copyText(url).then(() => { btn.textContent = T().copied; setTimeout(() => (btn.textContent = T().copy), 1500); }) });
+        return h("div", { class: "line" }, h("span", { class: "grow", text: label }), btn);
+      })];
+    },
+    update() {},
+  },
+};
+
+function copyText(text) {
+  if (navigator.clipboard) return navigator.clipboard.writeText(text).catch(() => fallback());
+  return Promise.resolve(fallback());
+  function fallback() {
+    const t = h("textarea", { style: "position:fixed;opacity:0" }, text);
+    document.body.append(t); t.select(); document.execCommand("copy"); t.remove();
   }
-  $("configureObs").onclick = () => obsAction("/api/obs/configure");
-  // inside an OBS dock a plain link would navigate the dock itself: ask the relay to open the system browser
-  $("author").onclick = (ev) => {
-    ev.preventDefault();
-    post("/api/open/author").catch(() => window.open($("author").href, "_blank"));
-  };
-  // two clicks instead of confirm(): dialogs may be blocked inside OBS docks
-  let restoreArmed = 0;
-  $("restoreObs").onclick = () => {
-    if (Date.now() - restoreArmed < 5000) { restoreArmed = 0; obsAction("/api/obs/restore"); return; }
-    restoreArmed = Date.now();
-    $("saveMsg").textContent = T().confirmRestore;
-  };
+}
 
-  function platformOf(url) {
-    for (const [k, v] of Object.entries(URLS)) if (url === v) return k;
-    return /kick|live-video\.net/.test(url) ? "kick" : "custom";
-  }
-  function showUrlRow() {
-    const p = $("platform").value;
-    $("urlRow").classList.toggle("hidden", p === "twitch" || p === "youtube");
-  }
-  $("platform").onchange = showUrlRow;
+function obsLine(s) {
+  const o = s.obs || {};
+  return h("span", { class: "dot " + (o.script ? (o.configured ? "ok" : "warn") : "bad"),
+    text: s.obs_connected ? T().obsStreaming : !o.script ? T().scriptMissing : o.configured ? T().obsReady : T().obsNotConfigured });
+}
 
-  let scenes = [];
-  function fillScenes(selected) {
-    const sel = $("scene");
-    const names = [...new Set([...(selected ? [selected] : []), ...scenes])];
-    const cur = sel.value || selected || "";
-    sel.innerHTML = "";
-    if (!names.length) {
-      const o = document.createElement("option");
-      o.value = ""; o.textContent = T().noScenes;
-      sel.appendChild(o);
+// ---------------------------------------------------------------- settings (always available)
+function buildSettings() {
+  const card = $("settingsCard");
+  const open = card.open;
+  const msg = h("span", { class: "note" });
+  const platformOf = (u) => Object.keys(URLS).find((k) => URLS[k] === u) || (/kick|live-video\.net/.test(u) ? "kick" : "custom");
+  const platform = h("select", {}, h("option", { value: "twitch", text: "Twitch" }), h("option", { value: "youtube", text: "YouTube" }),
+    h("option", { value: "kick", text: "Kick" }), h("option", { value: "custom", text: T().other }));
+  platform.value = platformOf(cfg.upstream_url);
+  const url = h("input", { type: "text", placeholder: "rtmps://...", value: URLS[platform.value] ? "" : cfg.upstream_url });
+  const urlRow = field(T().serverUrl, url);
+  const key = h("input", { type: "password", autocomplete: "off", placeholder: cfg.stream_key_set ? T().keySaved : T().keyPaste });
+  const grow = h("select", {}, h("option", { value: "rewind", text: T().growRewind }), h("option", { value: "scene", text: T().growScene }),
+    h("option", { value: "freeze", text: T().growFreeze }));
+  grow.value = cfg.grow_mode;
+  const scene = sceneSelect(cfg.delay_scene, () => {});
+  const sceneRow = h("label", {}, T().sceneLabel, scene, h("span", { class: "muted", text: T().sceneTip }));
+  const showRows = () => { urlRow.classList.toggle("hidden", !!URLS[platform.value]); sceneRow.classList.toggle("hidden", grow.value !== "scene"); };
+  platform.onchange = showRows;
+  grow.onchange = showRows;
+  showRows();
+  const start = h("input", { type: "checkbox", checked: cfg.start_enabled });
+  const language = h("select", { onchange: (e) => saveConfig({ language: e.target.value }) },
+    h("option", { value: "en", text: "English" }), h("option", { value: "pt", text: "Português (Brasil)" }));
+  language.value = cfg.language;
+  let armed = 0;
+  const restore = h("a", { text: T().restoreObs, onclick: () => {
+    if (Date.now() - armed < 5000) { armed = 0; obsAction("/api/obs/restore"); return; }
+    armed = Date.now(); msg.textContent = T().confirmRestore;
+  } });
+  const save = h("button", { class: "primary", text: T().save, onclick: () => {
+    const body = { upstream_url: URLS[platform.value] || url.value.trim(), grow_mode: grow.value, delay_scene: scene.value, start_enabled: start.checked };
+    if (key.value.trim()) body.stream_key = key.value.trim();
+    if (body.grow_mode === "scene" && !body.delay_scene) { msg.textContent = T().pickScene; return; }
+    saveConfig(body, msg);
+  } });
+  card.replaceChildren(h("summary", { text: T().settings }), field(T().platform, platform), urlRow, field(T().streamKey, key),
+    field(T().growLabel, grow), sceneRow, h("label", { class: "check" }, start, T().startEnabled), field(T().language, language),
+    h("div", { class: "actions" }, save, msg, restore));
+  card.open = open || !cfg.stream_key_set;
+}
+
+function buildCustomize() {
+  const card = $("customizeCard");
+  const open = card.open;
+  const shown = [...cfg.panel_modules];
+  const order = [...shown, ...ALL_MODULES.filter((m) => !shown.includes(m))];
+  const commit = () => saveConfig({ panel_modules: order.filter((m) => shown.includes(m)) });
+  const list = h("div", { class: "mods" }, ...order.map((m, i) => h("div", {},
+    h("input", { type: "checkbox", checked: shown.includes(m), onchange: (e) => {
+      if (e.target.checked) shown.push(m); else shown.splice(shown.indexOf(m), 1);
+      commit();
+    } }),
+    h("span", {}, h("b", { text: T().m[m] }), h("br"), h("span", { class: "muted", text: T().mDesc[m] })),
+    h("button", { class: "small", title: T().up, text: "↑", disabled: i === 0, onclick: () => { [order[i - 1], order[i]] = [order[i], order[i - 1]]; commit(); } }),
+    h("button", { class: "small", title: T().down, text: "↓", disabled: i === order.length - 1, onclick: () => { [order[i + 1], order[i]] = [order[i], order[i + 1]]; commit(); } }))));
+  card.replaceChildren(h("summary", { text: T().customize }), h("p", { class: "muted", text: T().customizeHint }), list);
+  card.open = open;
+}
+
+function obsAction(path) {
+  api(path, { method: "POST" }).then((r) => toast(r.ok ? T().applying : r.error, r.ok ? "ok" : "error"));
+}
+
+// ---------------------------------------------------------------- page assembly
+function buildAll() {
+  sceneSelects = [];
+  document.documentElement.lang = lang === "pt" ? "pt-BR" : "en";
+  document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T()[el.dataset.t]));
+  const root = $("modules");
+  root.replaceChildren();
+  for (const id of cfg.panel_modules) {
+    const m = MODULES[id];
+    if (!m) continue;
+    m.loaded = false;
+    const title = id === "delay" ? null : h("h3", { text: T().m[id] });
+    root.append(h("section", { class: "card", "data-module": id }, title, m.build()));
+  }
+  buildSettings();
+  buildCustomize();
+  if (status) render(status);
+}
+
+function toast(text, kind) {
+  const el = $("toast");
+  el.className = "box" + (kind === "error" || kind === "warn" ? " bad" : "");
+  el.textContent = text;
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => el.classList.add("hidden"), 6000);
+}
+
+let lastEvent = null;
+let lastMessage = null;
+const downSince = {};
+let scenesKey = null;
+function render(s) {
+  status = s;
+  const key = (s.obs?.scenes || []).join("\n");
+  if (key !== scenesKey) {
+    scenesKey = key;
+    sceneSelects = sceneSelects.filter((sel) => sel.isConnected);
+    sceneSelects.forEach(fillSceneSelect);
+  }
+  for (const id of cfg.panel_modules) MODULES[id]?.update(s);
+  const banners = [];
+  const o = s.obs || {};
+  if (o.script && !o.configured) banners.push(h("div", { class: "box" }, T().obsNotUsing, h("div", { class: "actions" }, h("button", { class: "primary", text: T().configureObs, onclick: () => obsAction("/api/obs/configure") }))));
+  if (!cfg.stream_key_set) banners.push(h("div", { class: "box", text: T().keyMissing }));
+  if (updateVersion) banners.push(h("div", { class: "box" }, T().update(updateVersion) + " ", h("a", { text: T().download, onclick: () => api("/api/open/releases", { method: "POST" }) })));
+  for (const out of s.outputs || []) {
+    if (s.engine && out.state === "reconnecting") {
+      banners.push(h("div", { class: "box bad", text: T().alertDown(out.name) }));
+      if (!downSince[out.name]) { downSince[out.name] = Date.now(); if (cfg.alert_sound) beep(); }
+    } else delete downSince[out.name];
+  }
+  // without the health block, still show whether OBS is connected
+  if (!cfg.panel_modules.includes("health")) banners.push(h("div", { class: "card dots" }, obsLine(s)));
+  $("banners").replaceChildren(...banners);
+  const ev = s.event ? s.event.id : 0;
+  if (lastEvent !== null && ev !== lastEvent && s.event) toast(s.event.text, s.event.kind);
+  lastEvent = ev;
+  if (o.message && o.message !== lastMessage) {
+    if (lastMessage !== null) { toast(o.message, "ok"); loadConfig(); }
+    lastMessage = o.message;
+  }
+}
+
+function beep() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    osc.frequency.value = 880;
+    osc.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.35);
+  } catch (e) { /* audio blocked */ }
+}
+
+async function loadConfig() {
+  const c = await api("/api/config");
+  if (c.ok === false) return;
+  const rebuild = !cfg || JSON.stringify(c) !== JSON.stringify(cfg);
+  cfg = c;
+  if (TEXT[c.language]) lang = c.language;
+  if (rebuild) buildAll();
+}
+
+// update check: once an hour, straight from GitHub
+let updateVersion = null;
+async function checkUpdate(current) {
+  try {
+    let cached = null;
+    try { cached = JSON.parse(localStorage.getItem("dd-update") || "null"); } catch (e) {}
+    if (!cached || Date.now() - cached.at > 3600e3) {
+      const r = await fetch("https://api.github.com/repos/ragnarcb/obs-dynamic-delay/releases/latest");
+      const j = await r.json();
+      cached = { at: Date.now(), tag: (j.tag_name || "").replace(/^v/, "") };
+      try { localStorage.setItem("dd-update", JSON.stringify(cached)); } catch (e) {}
     }
-    for (const n of names) {
-      const o = document.createElement("option");
-      o.value = o.textContent = n;
-      sel.appendChild(o);
-    }
-    if (cur) sel.value = cur;
-  }
-  function showSceneRow() {
-    $("sceneRow").classList.toggle("hidden", $("growMode").value !== "scene");
-  }
-  $("growMode").onchange = showSceneRow;
-  $("language").onchange = () => {
-    applyLanguage($("language").value);
-    post("/api/config", Object.assign(currentForm(true), { language: lang }));
-  };
+    const newer = (a, b) => { const x = a.split(".").map(Number), y = b.split(".").map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
+    updateVersion = cached.tag && newer(cached.tag, current) ? cached.tag : null;
+  } catch (e) { /* offline */ }
+}
 
-  function loadConfig() {
-    return fetch(API + "/api/config").then((r) => r.json()).then((c) => {
-      cfg = c;
-      $("platform").value = platformOf(c.upstream_url);
-      $("url").value = URLS[$("platform").value] ? "" : c.upstream_url;
-      $("key").value = "";
-      $("startEnabled").checked = c.start_enabled;
-      $("growMode").value = c.grow_mode || "rewind";
-      $("scene").value = "";
-      applyLanguage(c.language || lang);
-      showSceneRow();
-      showUrlRow();
-      if (!c.stream_key_set) $("cfgBox").open = true;
-    });
+let offline = false;
+let checkedUpdate = false;
+async function refresh() {
+  try {
+    const s = await api("/api/status");
+    if (s.ok === false) throw new Error(s.error);
+    if (offline || !cfg) { offline = false; await loadConfig(); }
+    if (!checkedUpdate) { checkedUpdate = true; checkUpdate(s.version); }
+    render(s);
+  } catch (e) {
+    offline = true;
+    const pill = document.querySelector("[data-module=delay] .pill");
+    if (pill) { pill.className = "pill off"; pill.textContent = T().relayOff; }
+    if (!cfg) $("modules").replaceChildren(h("div", { class: "card" }, h("span", { class: "pill off", text: T().relayOff }), " ", h("span", { class: "muted", text: T().relayOffHint })));
   }
+}
 
-  // saved=true: send what is stored now (used when only the language changes)
-  function currentForm(saved) {
-    if (saved && cfg) {
-      return { upstream_url: cfg.upstream_url, start_enabled: cfg.start_enabled, delay_seconds: delaySeconds,
-               grow_mode: cfg.grow_mode, delay_scene: cfg.delay_scene };
-    }
-    const p = $("platform").value;
-    return {
-      upstream_url: URLS[p] || $("url").value.trim(), start_enabled: $("startEnabled").checked, delay_seconds: delaySeconds,
-      grow_mode: $("growMode").value, delay_scene: $("scene").value, language: lang,
-    };
-  }
-
-  $("save").onclick = () => {
-    const body = currentForm(false);
-    if (body.grow_mode === "scene" && !body.delay_scene) {
-      $("saveMsg").textContent = T().pickScene;
-      return;
-    }
-    if ($("key").value.trim()) body.stream_key = $("key").value.trim();
-    post("/api/config", body).then((r) => {
-      $("saveMsg").textContent = !r.ok ? r.error : r.next_stream ? T().savedNext : T().saved;
-      if (r.ok) loadConfig().then(refresh);
-    });
-  };
-
-  function render(s) {
-    lastStatus = s;
-    const e = s.engine;
-    delaySeconds = s.delay_seconds;
-    const pill = $("pill");
-    if (!e) {
-      pill.className = "pill off"; pill.textContent = T().noLive; $("phase").textContent = "";
-      $("current").textContent = num(0) + " s";
-    } else {
-      const busy = e.phase === "filling" || e.phase === "growing" || e.phase === "shrinking";
-      pill.className = "pill " + (busy ? "busy" : e.phase === "live" ? "live" : "delayed");
-      pill.textContent = e.phase === "live" ? T().live : busy ? T().adjusting : T().delayed;
-      $("phase").textContent = T().phases[e.phase] || e.phase;
-      $("current").textContent = num(e.current_ms / 1000) + " s";
-    }
-    $("delay").textContent = s.delay_seconds;
-    const t = $("toggle");
-    t.className = s.enabled ? "on" : "";
-    t.textContent = s.enabled ? T().toggleOff : T().toggleOn(s.delay_seconds);
-
-    const o = s.obs || {};
-    if (o.scenes && o.scenes.join("\n") !== scenes.join("\n")) {
-      scenes = o.scenes;
-      fillScenes(cfg && cfg.delay_scene);
-    }
-    $("obsBox").classList.toggle("hidden", !(o.script && !o.configured));
-    $("keyBox").classList.toggle("hidden", !cfg || cfg.stream_key_set);
-    $("obs").className = "dot " + (o.script ? (o.configured ? "ok" : "warn") : "bad");
-    $("obs").textContent = s.obs_connected ? T().obsStreaming : !o.script ? T().scriptMissing : o.configured ? T().obsReady : T().obsNotConfigured;
-    const upCls = { connected: "ok", connecting: "warn", reconnecting: "bad", idle: "" }[s.upstream];
-    $("up").className = "dot " + upCls;
-    $("up").textContent = T().platformState[s.upstream];
-    $("err").textContent = s.upstream !== "connected" && s.upstream_error ? s.upstream_error : "";
-    if (o.message && o.message !== lastMessage) {
-      lastMessage = o.message;
-      $("msg").textContent = o.message;
-      loadConfig(); // OBS may have imported a destination
-    }
-  }
-
-  let offline = false;
-  function refresh() {
-    return fetch(API + "/api/status").then((r) => r.json()).then((s) => {
-      if (offline || !cfg) { offline = false; loadConfig(); }
-      render(s);
-    }).catch(() => {
-      offline = true;
-      $("pill").className = "pill off"; $("pill").textContent = T().relayOff;
-      $("phase").textContent = T().relayOffHint;
-    });
-  }
-  applyLanguage(lang);
+$("author").onclick = (ev) => {
+  // inside an OBS dock a plain link would navigate the dock itself: ask the relay to open the browser
+  ev.preventDefault();
+  api("/api/open/author", { method: "POST" }).catch(() => window.open($("author").href, "_blank"));
+};
+document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T()[el.dataset.t]));
+if (!TOKEN) {
+  $("modules").replaceChildren(h("div", { class: "box bad", text: T().noToken }));
+} else {
   refresh();
   setInterval(refresh, 700);
+}
 </script>
 </body>
 </html>

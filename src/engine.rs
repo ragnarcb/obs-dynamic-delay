@@ -9,6 +9,11 @@
 //!   - `Scene`: like `Freeze`, but the frozen frame is the first keyframe
 //!     encoded after OBS switched to a chosen scene (orchestrated through
 //!     [`SceneEvent`]s, handled by the OBS script).
+//!
+//! It also offers, on top of the delay buffer:
+//! * [`Engine::censor`]: drop the newest, not yet aired seconds ("delete before it airs");
+//! * [`Engine::replay`]: replay the last seconds on air, then return to the normal delay;
+//! * [`Engine::snapshot`]: the most recent seconds of input, for saving a clip.
 //! * Decreasing the delay ("shrink"): the buffer is cut at the newest keyframe
 //!   that is already due under the new delay. Viewers see a jump cut forward.
 //!
@@ -40,6 +45,8 @@ struct Queued {
     arrival: Instant,
     key: bool,
     header: bool,
+    /// First packet after a censored gap: rebase the timeline here.
+    cut_before: bool,
 }
 
 struct Fill {
@@ -112,11 +119,24 @@ pub struct EngineStatus {
     pub current_ms: u64,
     pub buffered_ms: u64,
     pub buffered_bytes: usize,
+    pub replaying: bool,
+}
+
+/// Recent input, used to write a clip file.
+pub struct Clip {
+    pub video_header: Option<Bytes>,
+    pub audio_header: Option<Bytes>,
+    /// (kind, input timestamp in ms, FLV tag body), starting at a keyframe.
+    pub packets: Vec<(Kind, u64, Bytes)>,
 }
 
 pub struct Engine {
     queue: VecDeque<Queued>,
     queued_bytes: usize,
+    /// Delay set by the streamer; `target` adds a running replay on top.
+    base_target: Duration,
+    replay_extra: Duration,
+    replay_until: Option<Instant>,
     target: Duration,
     eff: Duration,
     fill: Option<Fill>,
@@ -138,6 +158,15 @@ pub struct Engine {
     rewound_for: Option<Duration>,
     scene: SceneState,
     scene_events: Vec<SceneEvent>,
+    /// After a censor: drop input until the next keyframe.
+    await_key: bool,
+    /// After a censor: fill the gap with the last sent keyframe.
+    gap_fill_pending: bool,
+    last_key_sent: Option<Bytes>,
+    video_header: Option<Bytes>,
+    audio_header: Option<Bytes>,
+    /// OBS stopped publishing: a pending fill must not wait for more input.
+    input_ended: bool,
 }
 
 impl Engine {
@@ -145,6 +174,9 @@ impl Engine {
         Engine {
             queue: VecDeque::new(),
             queued_bytes: 0,
+            base_target: Duration::ZERO,
+            replay_extra: Duration::ZERO,
+            replay_until: None,
             target: Duration::ZERO,
             eff: Duration::ZERO,
             fill: None,
@@ -165,13 +197,91 @@ impl Engine {
             rewound_for: None,
             scene: SceneState::Idle,
             scene_events: Vec::new(),
+            await_key: false,
+            gap_fill_pending: false,
+            last_key_sent: None,
+            video_header: None,
+            audio_header: None,
+            input_ended: false,
         }
     }
 
-    /// Sets how extra delay is built. `history` is how far back a rewind may go.
+    /// Tells the engine whether OBS is still publishing.
+    pub fn set_input_ended(&mut self, ended: bool) {
+        self.input_ended = ended;
+    }
+
+    /// Sets how extra delay is built. `history` is how much already sent media is
+    /// kept (for rewinds, replays and clips).
     pub fn set_grow_mode(&mut self, mode: GrowMode, history: Duration) {
         self.grow_mode = mode;
-        self.history_window = if mode == GrowMode::Rewind { history } else { Duration::ZERO };
+        self.history_window = history;
+    }
+
+    /// Drops the newest `secs` of media that viewers have not seen yet. The aired
+    /// stream holds its last frame (muted) over the gap and continues at the next
+    /// keyframe, so the delay stays the same. Returns how much was removed.
+    pub fn censor(&mut self, now: Instant, secs: Duration) -> Duration {
+        let Some(from) = now.checked_sub(secs) else { return Duration::ZERO };
+        let Some(i) = self.queue.iter().position(|q| !q.header && q.arrival >= from) else {
+            return Duration::ZERO;
+        };
+        let removed = now.saturating_duration_since(self.queue[i].arrival);
+        let tail: Vec<Queued> = self.queue.drain(i..).collect();
+        for q in tail {
+            self.queued_bytes -= q.data.len();
+            if q.header {
+                self.queued_bytes += q.data.len();
+                self.queue.push_back(q);
+            }
+        }
+        self.await_key = true;
+        self.gap_fill_pending = self.last_key_sent.is_some();
+        log::info!("censored {:.1}s before airing", removed.as_secs_f64());
+        removed
+    }
+
+    /// Replays the last `secs` on air (from the sent history), then cuts back to
+    /// the normal delay. Returns the length actually replayed.
+    pub fn replay(&mut self, now: Instant, secs: Duration) -> Duration {
+        if self.replay_until.is_some() || self.fill.is_some() {
+            return Duration::ZERO;
+        }
+        let before = self.eff;
+        self.replay_extra = secs;
+        self.target = self.base_target + secs;
+        self.try_rewind(now);
+        let gained = self.eff.saturating_sub(before);
+        if gained < Duration::from_secs(1) {
+            self.replay_extra = Duration::ZERO;
+            self.target = self.base_target;
+            return Duration::ZERO;
+        }
+        self.replay_extra = gained;
+        self.target = self.eff;
+        self.rewound_for = Some(self.target);
+        self.replay_until = Some(now + gained);
+        log::info!("instant replay of {:.1}s", gained.as_secs_f64());
+        gained
+    }
+
+    /// The most recent `secs` of input (aired or not), starting at a keyframe.
+    pub fn snapshot(&self, now: Instant, secs: Duration) -> Option<Clip> {
+        let from = now.checked_sub(secs);
+        let all: Vec<&Queued> = self.history.iter().chain(self.queue.iter()).filter(|q| !q.header).collect();
+        let mut start = None;
+        for (i, q) in all.iter().enumerate() {
+            let starts = if self.has_video { q.kind == Kind::Video && q.key } else { true };
+            if starts && (start.is_none() || from.is_some_and(|f| q.arrival <= f)) {
+                start = Some(i);
+            }
+        }
+        let start = start?;
+        Some(Clip {
+            video_header: self.video_header.clone(),
+            audio_header: self.audio_header.clone(),
+            packets: all[start..].iter().map(|q| (q.kind, q.ts, q.data.clone())).collect(),
+        })
     }
 
     pub fn take_scene_events(&mut self) -> Vec<SceneEvent> {
@@ -194,7 +304,13 @@ impl Engine {
     }
 
     pub fn set_target(&mut self, target: Duration) {
-        self.target = target;
+        self.base_target = target;
+        self.target = target + self.replay_extra;
+    }
+
+    /// A freeze, a scene hold or a replay is running.
+    pub fn is_adjusting(&self) -> bool {
+        self.fill.is_some() || self.replay_until.is_some()
     }
 
     pub fn is_idle(&self) -> bool {
@@ -212,6 +328,21 @@ impl Engine {
         if header && kind == Kind::Audio {
             self.aac = flv::parse_aac_config(&data);
         }
+        if header {
+            match kind {
+                Kind::Video => self.video_header = Some(data.clone()),
+                Kind::Audio => self.audio_header = Some(data.clone()),
+            }
+        }
+        let mut cut_before = false;
+        if self.await_key && !header {
+            if kind == Kind::Video && key {
+                self.await_key = false;
+                cut_before = true;
+            } else {
+                return; // still inside the censored part
+            }
+        }
         // The very first decoder config of each track is sent right away so the
         // upstream can always decode filler frames, even at stream start.
         if header && !self.header_seen[kind.idx()] {
@@ -227,7 +358,7 @@ impl Engine {
             self.scene_events.push(SceneEvent::Back);
         }
         self.queued_bytes += data.len();
-        self.queue.push_back(Queued { kind, ts, data, arrival, key, header });
+        self.queue.push_back(Queued { kind, ts, data, arrival, key, header, cut_before });
     }
 
     pub fn poll(&mut self, now: Instant, out: &mut Vec<OutPacket>) {
@@ -240,13 +371,29 @@ impl Engine {
                 continue;
             }
             self.trim_history(now);
+            if self.replay_until.is_some_and(|t| t <= now) {
+                // replay over: drop the extra delay, the shrink cuts back to the normal delay
+                self.replay_until = None;
+                self.replay_extra = Duration::ZERO;
+                self.target = self.base_target;
+            }
             if self.target < self.eff {
                 self.try_shrink(now);
             }
             self.prepare_grow(now);
+            if self.gap_fill_pending && self.queue.front().is_none_or(|h| h.cut_before && h.arrival + self.eff > now) {
+                // everything before a censored gap is out: hold the last frame over the gap
+                self.gap_fill_pending = false;
+                let key = self.last_key_sent.clone();
+                self.start_fill_with(now, key);
+                continue;
+            }
             while let Some(head) = self.queue.front() {
                 if head.arrival + self.eff > now {
                     return;
+                }
+                if head.cut_before && self.gap_fill_pending {
+                    break;
                 }
                 let can_freeze = (head.kind == Kind::Video && head.key) || !self.has_video;
                 if self.target > self.eff && can_freeze && self.freeze_allowed() {
@@ -285,10 +432,11 @@ impl Engine {
         };
         EngineStatus {
             phase,
-            target_ms: self.target.as_millis() as u64,
+            target_ms: self.base_target.as_millis() as u64,
             current_ms: current.unwrap_or(self.eff).as_millis() as u64,
             buffered_ms: buffered.as_millis() as u64,
             buffered_bytes: self.queued_bytes,
+            replaying: self.replay_until.is_some(),
         }
     }
 
@@ -303,13 +451,16 @@ impl Engine {
         let ts = if q.header {
             self.last_any
         } else {
-            if self.rebase_next {
+            if self.rebase_next || q.cut_before {
                 self.offset = self.cut_base(cts) as i64 - q.ts as i64;
                 self.rebase_next = false;
             }
             (q.ts as i64 + self.offset).max(0) as u64
         };
         self.last_sent_arrival = Some(q.arrival);
+        if q.key {
+            self.last_key_sent = Some(q.data.clone());
+        }
         if !q.header && !self.history_window.is_zero() {
             self.history.push_back(q.clone());
         }
@@ -433,6 +584,10 @@ impl Engine {
         if let SceneState::Captured(k) = std::mem::replace(&mut self.scene, SceneState::Idle) {
             key = Some(k);
         }
+        self.start_fill_with(now, key);
+    }
+
+    fn start_fill_with(&mut self, now: Instant, key: Option<Bytes>) {
         let key_cts = key.as_deref().map_or(0, flv::video_cts);
         let base = if self.last_out.iter().any(Option::is_some) {
             self.cut_base(key_cts)
@@ -472,7 +627,9 @@ impl Engine {
         }
 
         let Some(head) = self.queue.front() else {
-            self.fill = Some(f);
+            if !self.input_ended {
+                self.fill = Some(f);
+            }
             return false;
         };
         if head.arrival + self.target > now {
@@ -481,6 +638,10 @@ impl Engine {
         }
         // The buffer now holds the target delay: resume from the frozen keyframe.
         self.eff = now.saturating_duration_since(head.arrival).max(self.target);
+        if let Some(h) = self.queue.front_mut() {
+            h.cut_before = false; // the fill already rebased the timeline
+        }
+        let head = self.queue.front().unwrap();
         let head_cts = if head.kind == Kind::Video { flv::video_cts(&head.data) } else { 0 };
         let resume_ts = (f.base + elapsed).max(self.cut_base(head_cts));
         self.offset = resume_ts as i64 - head.ts as i64;
@@ -735,6 +896,97 @@ mod tests {
         s.engine.scene_unavailable();
         s.run(2_100);
         assert_eq!(s.engine.status(s.now()).phase, Phase::Filling);
+    }
+
+    fn out_frames(p: &[OutPacket]) -> Vec<u32> {
+        p.iter().filter(|p| p.kind == Kind::Video).map(frame_of).collect()
+    }
+
+    #[test]
+    fn censor_removes_unaired_seconds() {
+        let mut s = Sim::new();
+        s.engine.set_grow_mode(GrowMode::Rewind, Duration::from_secs(20));
+        s.run(12_000);
+        s.engine.set_target(Duration::from_secs(10));
+        s.run(100);
+        assert_eq!(s.engine.status(s.now()).phase, Phase::Delayed);
+        // at 12.1 s viewers see ~2.1 s; remove the last 4 s of input (8.1 s .. 12.1 s)
+        let removed = s.engine.censor(s.now(), Duration::from_secs(4));
+        assert!((3_900..=4_100).contains(&(removed.as_millis() as u64)), "{removed:?}");
+        let before = s.out.len();
+        s.run(15_000);
+        let frames = out_frames(&s.out[before..]);
+        // nothing from the censored range (frames 243..363) ever airs
+        let aired_censored: Vec<_> = frames.iter().filter(|f| (245..=360).contains(*f)).collect();
+        assert!(aired_censored.is_empty(), "censored frames aired: {aired_censored:?}");
+        // the delay is kept
+        let st = s.engine.status(s.now());
+        assert_eq!(st.phase, Phase::Delayed, "{st:?}");
+        assert!((9_800..=10_300).contains(&st.current_ms), "{st:?}");
+        s.assert_monotonic();
+    }
+
+    #[test]
+    fn censor_needs_a_delay() {
+        let mut s = Sim::new();
+        s.run(5_000);
+        assert_eq!(s.engine.censor(s.now(), Duration::from_secs(4)), Duration::ZERO);
+    }
+
+    #[test]
+    fn replay_then_back_to_normal_delay() {
+        let mut s = Sim::new();
+        s.engine.set_grow_mode(GrowMode::Freeze, Duration::from_secs(20));
+        s.run(15_000);
+        let before = s.out.len();
+        let got = s.engine.replay(s.now(), Duration::from_secs(8));
+        assert!(got >= Duration::from_secs(7), "{got:?}");
+        s.run(100);
+        assert!(s.engine.status(s.now()).replaying);
+        // the next frames are from ~8 s ago
+        let first = out_frames(&s.out[before..])[0];
+        assert!((180..=240).contains(&first), "replay started at frame {first}");
+        s.run(got.as_millis() as u64 + 2_500);
+        let st = s.engine.status(s.now());
+        assert!(!st.replaying);
+        assert_eq!(st.phase, Phase::Live, "{st:?}");
+        assert!(st.current_ms < 2_100, "{st:?}");
+        s.assert_monotonic();
+    }
+
+    #[test]
+    fn replay_after_censor_stays_active() {
+        let mut s = Sim::new();
+        s.engine.set_grow_mode(GrowMode::Rewind, Duration::from_secs(48));
+        s.run(4_000);
+        s.engine.set_target(Duration::from_secs(8));
+        s.run(11_000);
+        s.engine.censor(s.now(), Duration::from_secs(4));
+        s.run(11_000);
+        assert!(!s.engine.is_adjusting(), "{:?}", s.engine.status(s.now()));
+        let got = s.engine.replay(s.now(), Duration::from_secs(5));
+        assert!(got >= Duration::from_secs(4), "{got:?}");
+        for step in 0..8 {
+            s.run(200);
+            assert!(s.engine.status(s.now()).replaying, "replay ended early at step {step}: {:?}", s.engine.status(s.now()));
+        }
+    }
+
+    #[test]
+    fn snapshot_has_recent_input_from_a_keyframe() {
+        let mut s = Sim::new();
+        s.engine.set_grow_mode(GrowMode::Rewind, Duration::from_secs(40));
+        s.run(20_000);
+        s.engine.set_target(Duration::from_secs(10));
+        s.run(5_000);
+        let clip = s.engine.snapshot(s.now(), Duration::from_secs(15)).unwrap();
+        assert!(clip.video_header.is_some() && clip.audio_header.is_some());
+        let (k, ts, data) = &clip.packets[0];
+        assert_eq!(*k, Kind::Video);
+        assert_eq!(data[0], 0x17, "clip must start at a keyframe");
+        assert!((8_000..=10_000).contains(ts), "starts at {ts}");
+        let last = clip.packets.iter().filter(|p| p.0 == Kind::Video).map(|p| p.1).max().unwrap();
+        assert!(last >= 24_900, "clip ends at {last}, should include unaired input");
     }
 
     #[test]

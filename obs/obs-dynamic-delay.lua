@@ -5,6 +5,7 @@
 -- * hotkeys (Settings > Hotkeys > "Dynamic Delay")
 -- * runs inside OBS what the panel asks for (configure/restore the stream settings)
 -- * switches to the delay scene while the delay builds up (grow mode "scene")
+-- * panic button: cover scene and mute; tells the relay which scene is on air (scene rules)
 --
 -- Texts are English or Portuguese, following `language` in config.toml.
 
@@ -20,6 +21,7 @@ local relay_path = ""
 local step = 5
 local ports = { rtmp = 1935, http = 8787, udp = 8788 }
 local lang = "en"
+local api_token = ""
 
 -- Picks the text for the configured language.
 local function L(en, pt)
@@ -150,7 +152,7 @@ end
 local function read_ports()
   local f = io.open(config_path(), "r")
   if not f then return end
-  local text = f:read("*a")
+  local text = "\n" .. f:read("*a") -- so a key on the first line matches too
   f:close()
   local function port(key)
     return tonumber(text:match("\n%s*" .. key .. "%s*=%s*\"[^\"]*:(%d+)\""))
@@ -159,6 +161,7 @@ local function read_ports()
   ports.http = port("http_listen") or ports.http
   ports.udp = port("udp_listen") or ports.udp
   lang = text:match("\n%s*language%s*=%s*\"(%a+)\"") or lang
+  api_token = text:match("\n%s*api_token%s*=%s*\"(%w+)\"") or api_token
 end
 
 local function relay_server()
@@ -379,6 +382,65 @@ local function scene_back()
   shown_scene, previous_scene = nil, nil
 end
 
+-- Panic: cover scene + mute every audio source, undone by unpanic.
+local panic_prev, panic_scene_name, panic_muted = nil, nil, {}
+
+local function panic_on(mute, scene)
+  if scene ~= "" then
+    local src = obs.obs_get_source_by_name(scene)
+    if src ~= nil then
+      panic_prev = program_scene_name()
+      panic_scene_name = scene
+      set_program(src)
+      obs.obs_source_release(src)
+    else
+      report(L("Panic scene \"", "Cena de pânico \"") .. scene .. L("\" not found.", "\" não encontrada."))
+    end
+  end
+  if mute then
+    panic_muted = {}
+    local sources = obs.obs_enum_sources()
+    if sources ~= nil then
+      for _, src in ipairs(sources) do
+        local flags = obs.obs_source_get_output_flags(src)
+        if bit.band(flags, obs.OBS_SOURCE_AUDIO) ~= 0 and not obs.obs_source_muted(src) then
+          obs.obs_source_set_muted(src, true)
+          table.insert(panic_muted, obs.obs_source_get_name(src))
+        end
+      end
+      obs.source_list_release(sources)
+    end
+  end
+end
+
+local function panic_off()
+  for _, name in ipairs(panic_muted) do
+    local src = obs.obs_get_source_by_name(name)
+    if src ~= nil then
+      obs.obs_source_set_muted(src, false)
+      obs.obs_source_release(src)
+    end
+  end
+  panic_muted = {}
+  if panic_prev and program_scene_name() == panic_scene_name then
+    local src = obs.obs_get_source_by_name(panic_prev)
+    if src ~= nil then
+      set_program(src)
+      obs.obs_source_release(src)
+    end
+  end
+  panic_prev, panic_scene_name = nil, nil
+end
+
+local last_program = nil
+local function send_program()
+  local name = program_scene_name()
+  if name and name ~= last_program then
+    last_program = name
+    send("program\t" .. name)
+  end
+end
+
 local function send_scene_list()
   local scenes = obs.obs_frontend_get_scenes()
   if scenes == nil then return end
@@ -400,11 +462,17 @@ local function poll_tick()
     if reply == "configure" then configure_obs()
     elseif reply == "restore" then restore_obs()
     elseif reply:sub(1, 11) == "scene_show\t" then show_scene(reply:sub(12))
-    elseif reply == "scene_back" then scene_back() end
+    elseif reply == "scene_back" then scene_back()
+    elseif reply:sub(1, 6) == "panic\t" then
+      local mute, scene = reply:match("^panic\t(%d)\t(.*)$")
+      panic_on(mute == "1", scene or "")
+    elseif reply == "unpanic" then panic_off() end
     reply = recv_on(poll_sock, 1)
   end
   send_on(poll_sock, "poll " .. (obs_configured() and "1" or "0"))
+  send_program()
   if polls % 10 == 0 then
+    last_program = nil -- resend now and then, in case the relay restarted
     send_scene_list()
     read_ports() -- picks up a language change made in the panel
   end
@@ -425,6 +493,14 @@ local actions = {
     cmd = function() return "add " .. step end },
   { id = "dyn_delay_minus", en = "Dynamic Delay: decrease", pt = "Delay dinâmico: diminuir",
     cmd = function() return "add -" .. step end },
+  { id = "dyn_delay_censor", en = "Dynamic Delay: delete before it airs", pt = "Delay dinâmico: apagar antes de ir ao ar",
+    cmd = function() return "censor" end },
+  { id = "dyn_delay_replay", en = "Dynamic Delay: instant replay", pt = "Delay dinâmico: replay instantâneo",
+    cmd = function() return "replay" end },
+  { id = "dyn_delay_clip", en = "Dynamic Delay: save clip", pt = "Delay dinâmico: salvar clipe",
+    cmd = function() return "clip" end },
+  { id = "dyn_delay_panic", en = "Dynamic Delay: panic button", pt = "Delay dinâmico: botão de pânico",
+    cmd = function() return "panic" end },
 }
 
 ---------------------------------------------------------------------------
@@ -471,7 +547,8 @@ function script_properties()
     restore_obs(); return true
   end)
   obs.obs_properties_add_button(p, "btn_panel", L("Open panel in the browser", "Abrir painel no navegador"), function()
-    open_target("http://127.0.0.1:" .. ports.http .. "/"); return false
+    read_ports()
+    open_target("http://127.0.0.1:" .. ports.http .. "/?token=" .. api_token); return false
   end)
   obs.obs_properties_add_int(p, "step", L("Increase/decrease step (s)", "Passo do aumentar/diminuir (s)"), 1, 120, 1)
   obs.obs_properties_add_bool(p, "manage_relay", L("Start and close the relay with OBS", "Abrir e fechar o relay junto com o OBS"))

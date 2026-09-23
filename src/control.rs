@@ -1,25 +1,41 @@
-//! HTTP control panel/API and UDP command port.
+//! HTTP control panel/API (token protected, optionally on the LAN) and the UDP
+//! command port used by the OBS script.
 
+use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use axum::extract::{Path, State};
-use axum::response::{Html, IntoResponse};
+use axum::extract::{Path, Request, State};
+use axum::http::StatusCode;
+use axum::middleware::{self, Next};
+use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc::UnboundedSender;
 use tower_http::cors::CorsLayer;
 
 use crate::EngineMsg;
-use crate::config::destination_from_obs;
+use crate::config::{Config, destination_from_obs};
 use crate::i18n::{self, Lang};
 use crate::status::{Cmd, ObsAction, ObsInfo, Shared, Status};
 use crate::t;
 
 pub const PANEL: &str = include_str!("panel.html");
+pub const AUTHOR_URL: &str = "https://github.com/ragnarcb";
+pub const RELEASES_URL: &str = "https://github.com/ragnarcb/obs-dynamic-delay/releases/latest";
+
+/// The panel with the API address and token baked in, for the OBS dock (a local file).
+pub fn dock_html(cfg: &Config) -> String {
+    let inject = format!(
+        "<script>window.DD_API = {}; window.DD_TOKEN = {};</script>\n</head>",
+        json!(format!("http://127.0.0.1:{}", cfg.http_port())),
+        json!(cfg.api_token)
+    );
+    PANEL.replacen("</head>", &inject, 1)
+}
 
 #[derive(Clone)]
 struct AppState {
@@ -27,35 +43,74 @@ struct AppState {
     shared: Arc<Shared>,
 }
 
-pub async fn serve_http(listen: String, tx: UnboundedSender<EngineMsg>, shared: Arc<Shared>) -> Result<()> {
-    let state = AppState { tx, shared };
-    let app = Router::new()
-        .route("/", get(|| async { Html(PANEL) }))
+/// Serves the panel and API; rebinds when "LAN access" is switched.
+pub async fn serve_http(tx: UnboundedSender<EngineMsg>, shared: Arc<Shared>) -> Result<()> {
+    let state = AppState { tx, shared: shared.clone() };
+    let api = Router::new()
         .route("/api/status", get(status_handler))
-        .route("/api/on", get(on).post(on))
-        .route("/api/off", get(off).post(off))
-        .route("/api/toggle", get(toggle).post(toggle))
+        .route("/api/cmd/{cmd}", get(cmd_handler).post(cmd_handler))
+        .route("/api/cmd/{cmd}/{arg}", get(cmd_arg_handler).post(cmd_arg_handler))
+        // short aliases kept for Stream Deck buttons made with older versions
+        .route("/api/on", get(|s: State<AppState>| run(s, Cmd::On)).post(|s: State<AppState>| run(s, Cmd::On)))
+        .route("/api/off", get(|s: State<AppState>| run(s, Cmd::Off)).post(|s: State<AppState>| run(s, Cmd::Off)))
+        .route("/api/toggle", get(|s: State<AppState>| run(s, Cmd::Toggle)).post(|s: State<AppState>| run(s, Cmd::Toggle)))
         .route("/api/delay/{secs}", get(set_delay).post(set_delay))
         .route("/api/add/{secs}", get(add_delay).post(add_delay))
         .route("/api/config", get(get_config).post(set_config))
         .route("/api/obs/configure", post(obs_configure))
         .route("/api/obs/restore", post(obs_restore))
-        .route("/api/open/author", post(open_author))
-        // the OBS dock loads the panel from a local file, so allow cross-origin calls
+        .route("/api/open/{target}", post(open_target))
+        .route("/api/lan", get(lan_info))
+        .layer(middleware::from_fn_with_state(state.clone(), require_token));
+    let app = Router::new()
+        .route("/", get(|| async { Html(PANEL) }))
+        .merge(api)
+        // the dock is a local file (origin "null"); every API call still needs the token
         .layer(CorsLayer::permissive())
         .with_state(state);
-    let listener = tokio::net::TcpListener::bind(&listen).await?;
-    log::info!("control panel at http://{listen}/");
-    axum::serve(listener, app).await?;
-    Ok(())
+
+    loop {
+        let (lan, port) = {
+            let c = shared.config.lock().unwrap();
+            (c.lan_access, c.http_port())
+        };
+        let ip = if lan { Ipv4Addr::UNSPECIFIED } else { Ipv4Addr::LOCALHOST };
+        let listener = tokio::net::TcpListener::bind(SocketAddr::from((ip, port))).await?;
+        log::info!("control panel on {ip}:{port}");
+        let watch = shared.clone();
+        axum::serve(listener, app.clone())
+            .with_graceful_shutdown(async move {
+                loop {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    if watch.config.lock().unwrap().lan_access != lan {
+                        break;
+                    }
+                }
+            })
+            .await?;
+    }
 }
 
-fn send(s: &AppState, cmd: Cmd) -> Json<serde_json::Value> {
+async fn require_token(State(s): State<AppState>, req: Request, next: Next) -> Response {
+    let token = s.shared.config.lock().unwrap().api_token.clone();
+    let header = req.headers().get("x-dd-token").and_then(|v| v.to_str().ok()).map(str::to_string);
+    let query = req
+        .uri()
+        .query()
+        .and_then(|q| q.split('&').find_map(|kv| kv.strip_prefix("token=")).map(str::to_string));
+    if header.or(query).as_deref() == Some(token.as_str()) {
+        next.run(req).await
+    } else {
+        (StatusCode::UNAUTHORIZED, Json(json!({ "ok": false, "error": "invalid token" }))).into_response()
+    }
+}
+
+fn run(State(s): State<AppState>, cmd: Cmd) -> impl std::future::Future<Output = Json<Value>> {
     let _ = s.tx.send(EngineMsg::Cmd(cmd));
-    Json(serde_json::json!({ "ok": true }))
+    async { Json(json!({ "ok": true })) }
 }
 
-#[derive(Serialize)]
+#[derive(serde::Serialize)]
 struct FullStatus {
     #[serde(flatten)]
     status: Status,
@@ -63,124 +118,133 @@ struct FullStatus {
 }
 
 async fn status_handler(State(s): State<AppState>) -> impl IntoResponse {
-    Json(FullStatus {
-        status: s.shared.status.lock().unwrap().clone(),
-        obs: s.shared.bridge.lock().unwrap().info(),
-    })
-}
-async fn on(State(s): State<AppState>) -> impl IntoResponse {
-    send(&s, Cmd::On)
-}
-async fn off(State(s): State<AppState>) -> impl IntoResponse {
-    send(&s, Cmd::Off)
-}
-async fn toggle(State(s): State<AppState>) -> impl IntoResponse {
-    send(&s, Cmd::Toggle)
-}
-async fn set_delay(State(s): State<AppState>, Path(secs): Path<u32>) -> impl IntoResponse {
-    send(&s, Cmd::Set(secs))
-}
-async fn add_delay(State(s): State<AppState>, Path(secs): Path<i64>) -> impl IntoResponse {
-    send(&s, Cmd::Add(secs))
+    Json(FullStatus { status: s.shared.status.lock().unwrap().clone(), obs: s.shared.bridge.lock().unwrap().info() })
 }
 
-#[derive(Serialize, Deserialize)]
-struct ConfigView {
-    upstream_url: String,
-    /// Only reported as set/unset; never sent back in full.
-    #[serde(default)]
-    stream_key_set: bool,
-    /// When present in a POST, replaces the key.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    stream_key: Option<String>,
-    start_enabled: bool,
-    delay_seconds: u32,
-    #[serde(default)]
-    grow_mode: Option<String>,
-    #[serde(default)]
-    delay_scene: Option<String>,
-    #[serde(default)]
-    language: Option<String>,
-    #[serde(default)]
-    max_delay_seconds: u32,
+async fn cmd_handler(s: State<AppState>, Path(cmd): Path<String>) -> Json<Value> {
+    match Cmd::parse(&cmd) {
+        Some(c) if !matches!(c, Cmd::Quit | Cmd::Stay) => run(s, c).await,
+        _ => Json(json!({ "ok": false, "error": "unknown command" })),
+    }
+}
+
+async fn cmd_arg_handler(s: State<AppState>, Path((cmd, arg)): Path<(String, String)>) -> Json<Value> {
+    match Cmd::parse(&format!("{cmd} {arg}")) {
+        Some(c) if !matches!(c, Cmd::Quit | Cmd::Stay) => run(s, c).await,
+        _ => Json(json!({ "ok": false, "error": "unknown command" })),
+    }
+}
+
+async fn set_delay(s: State<AppState>, Path(secs): Path<u32>) -> Json<Value> {
+    run(s, Cmd::Set(secs)).await
+}
+async fn add_delay(s: State<AppState>, Path(secs): Path<i64>) -> Json<Value> {
+    run(s, Cmd::Add(secs)).await
+}
+
+/// The config without secrets: keys are reported as set/unset only.
+fn public_config(c: &Config) -> Value {
+    let mut v = serde_json::to_value(c).unwrap_or_default();
+    let o = v.as_object_mut().unwrap();
+    o.remove("api_token");
+    o.insert("stream_key".into(), json!(""));
+    o.insert("stream_key_set".into(), json!(!c.stream_key.is_empty()));
+    if let Some(dests) = o.get_mut("destinations").and_then(Value::as_array_mut) {
+        for (d, src) in dests.iter_mut().zip(&c.destinations) {
+            d["key"] = json!("");
+            d["key_set"] = json!(!src.key.is_empty());
+        }
+    }
+    o.insert("clips_path".into(), json!(c.clips_path().display().to_string()));
+    v
 }
 
 async fn get_config(State(s): State<AppState>) -> impl IntoResponse {
-    let c = s.shared.config.lock().unwrap().clone();
-    Json(ConfigView {
-        upstream_url: c.upstream_url,
-        stream_key_set: !c.stream_key.is_empty(),
-        stream_key: None,
-        start_enabled: c.start_enabled,
-        delay_seconds: c.delay_seconds,
-        grow_mode: Some(c.grow_mode),
-        delay_scene: Some(c.delay_scene),
-        language: Some(c.language),
-        max_delay_seconds: c.max_delay_seconds,
-    })
+    Json(public_config(&s.shared.config.lock().unwrap()))
 }
 
-async fn set_config(State(s): State<AppState>, Json(v): Json<ConfigView>) -> impl IntoResponse {
-    let url = v.upstream_url.trim().to_string();
-    if !(url.starts_with("rtmp://") || url.starts_with("rtmps://")) {
-        return Json(serde_json::json!({
-            "ok": false,
-            "error": t!("the URL must start with rtmp:// or rtmps://", "a URL precisa começar com rtmp:// ou rtmps://")
-        }));
+/// Merges the posted fields into the config. Secrets are only replaced when sent;
+/// addresses, ports and the token cannot be changed from here.
+fn merge_config(cur: &Config, patch: &Value) -> Result<Config, String> {
+    let mut v = serde_json::to_value(cur).map_err(|e| e.to_string())?;
+    let Some(p) = patch.as_object() else { return Err("expected a JSON object".into()) };
+    for (k, val) in p {
+        if matches!(k.as_str(), "api_token" | "listen" | "http_listen" | "udp_listen" | "stream_key_set" | "clips_path") {
+            continue;
+        }
+        if k == "stream_key" && val.as_str().is_none_or(str::is_empty) {
+            continue; // keep the saved key unless a new one is typed
+        }
+        if k == "destinations" {
+            let mut dests = val.clone();
+            if let Some(arr) = dests.as_array_mut() {
+                for d in arr.iter_mut() {
+                    let typed = d.get("key").and_then(Value::as_str).is_some_and(|k| !k.is_empty());
+                    if !typed {
+                        // keep the key of the destination with the same name
+                        let name = d.get("name").and_then(Value::as_str).unwrap_or("");
+                        let old = cur.destinations.iter().find(|o| o.name == name).map(|o| o.key.clone()).unwrap_or_default();
+                        d["key"] = json!(old);
+                    }
+                    if let Some(o) = d.as_object_mut() {
+                        o.remove("key_set");
+                    }
+                }
+            }
+            v[k] = dests;
+            continue;
+        }
+        v[k] = val.clone();
     }
-    {
-        let mut c = s.shared.config.lock().unwrap();
-        c.upstream_url = url;
-        if let Some(k) = v.stream_key {
-            c.stream_key = k.trim().to_string();
-        }
-        c.start_enabled = v.start_enabled;
-        if let Some(m) = v.grow_mode.filter(|m| ["rewind", "scene", "freeze"].contains(&m.as_str())) {
-            c.grow_mode = m;
-        }
-        if let Some(sc) = v.delay_scene {
-            c.delay_scene = sc.trim().to_string();
-        }
-        if let Some(l) = v.language {
-            let lang = Lang::parse(&l);
-            i18n::set(lang);
-            c.language = lang.code().to_string();
+    let mut cfg: Config = serde_json::from_value(v).map_err(|e| e.to_string())?;
+    let valid = |u: &str| u.starts_with("rtmp://") || u.starts_with("rtmps://");
+    if !valid(cfg.upstream_url.trim()) || cfg.destinations.iter().any(|d| !valid(d.url.trim())) {
+        return Err(t!("the URL must start with rtmp:// or rtmps://", "a URL precisa começar com rtmp:// ou rtmps://"));
+    }
+    cfg.upstream_url = cfg.upstream_url.trim().to_string();
+    cfg.stream_key = cfg.stream_key.trim().to_string();
+    for d in &mut cfg.destinations {
+        d.url = d.url.trim().to_string();
+        d.key = d.key.trim().to_string();
+        if d.name.trim().is_empty() {
+            d.name = url::Url::parse(&d.url).ok().and_then(|u| u.host_str().map(String::from)).unwrap_or("?".into());
         }
     }
+    cfg.normalize();
+    Ok(cfg)
+}
+
+async fn set_config(State(s): State<AppState>, Json(patch): Json<Value>) -> impl IntoResponse {
+    let cur = s.shared.config.lock().unwrap().clone();
+    let cfg = match merge_config(&cur, &patch) {
+        Ok(c) => c,
+        Err(e) => return Json(json!({ "ok": false, "error": e })),
+    };
+    let delay_changed = cfg.delay_seconds != cur.delay_seconds;
+    let dest_changed = cfg.upstream_url != cur.upstream_url || cfg.stream_key != cur.stream_key || cfg.destinations != cur.destinations;
+    if cfg.language != cur.language {
+        i18n::set(Lang::parse(&cfg.language));
+    }
+    let delay = cfg.delay_seconds;
+    *s.shared.config.lock().unwrap() = cfg;
     s.shared.save_config();
-    let _ = s.tx.send(EngineMsg::Cmd(Cmd::Set(v.delay_seconds)));
+    if delay_changed {
+        let _ = s.tx.send(EngineMsg::Cmd(Cmd::Set(delay)));
+    }
     let live = s.shared.status.lock().unwrap().engine.is_some();
-    log::info!("config updated from panel");
-    Json(serde_json::json!({ "ok": true, "next_stream": live }))
+    Json(json!({ "ok": true, "next_stream": live && dest_changed }))
 }
 
-fn queue_obs_action(s: &AppState, action: ObsAction) -> Json<serde_json::Value> {
+fn queue_obs_action(s: &AppState, action: ObsAction) -> Json<Value> {
     let mut b = s.shared.bridge.lock().unwrap();
     if !b.info().script {
-        return Json(serde_json::json!({
+        return Json(json!({
             "ok": false,
-            "error": t!(
-                "the OBS script is not running (Tools > Scripts)",
-                "o script do OBS não está rodando (Ferramentas > Scripts)"
-            )
+            "error": t!("the OBS script is not running (Tools > Scripts)", "o script do OBS não está rodando (Ferramentas > Scripts)")
         }));
     }
     b.pending.push_back(action);
-    Json(serde_json::json!({ "ok": true }))
-}
-
-pub const AUTHOR_URL: &str = "https://github.com/ragnarcb";
-
-/// Opens the author's GitHub page in the system browser (the only URL this opens).
-async fn open_author() -> impl IntoResponse {
-    let r = if cfg!(windows) {
-        std::process::Command::new("cmd").args(["/C", "start", "", AUTHOR_URL]).spawn()
-    } else if cfg!(target_os = "macos") {
-        std::process::Command::new("open").arg(AUTHOR_URL).spawn()
-    } else {
-        std::process::Command::new("xdg-open").arg(AUTHOR_URL).spawn()
-    };
-    Json(serde_json::json!({ "ok": r.is_ok() }))
+    Json(json!({ "ok": true }))
 }
 
 async fn obs_configure(State(s): State<AppState>) -> impl IntoResponse {
@@ -190,13 +254,60 @@ async fn obs_restore(State(s): State<AppState>) -> impl IntoResponse {
     queue_obs_action(&s, ObsAction::Restore)
 }
 
+/// Opens one of a fixed set of places on the streamer's PC (never an arbitrary URL).
+async fn open_target(State(s): State<AppState>, Path(target): Path<String>) -> impl IntoResponse {
+    let what = match target.as_str() {
+        "author" => AUTHOR_URL.to_string(),
+        "releases" => RELEASES_URL.to_string(),
+        "clips" => {
+            let dir = s.shared.config.lock().unwrap().clips_path();
+            let _ = std::fs::create_dir_all(&dir);
+            dir.display().to_string()
+        }
+        _ => return Json(json!({ "ok": false })),
+    };
+    let r = if cfg!(windows) {
+        if target == "clips" {
+            std::process::Command::new("explorer").arg(&what).spawn()
+        } else {
+            std::process::Command::new("cmd").args(["/C", "start", "", &what]).spawn()
+        }
+    } else if cfg!(target_os = "macos") {
+        std::process::Command::new("open").arg(&what).spawn()
+    } else {
+        std::process::Command::new("xdg-open").arg(&what).spawn()
+    };
+    Json(json!({ "ok": r.is_ok() }))
+}
+
+/// Address of this PC on the local network.
+fn lan_ip() -> Option<std::net::IpAddr> {
+    let s = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    s.connect("8.8.8.8:80").ok()?; // no packet is sent, this only picks the route
+    s.local_addr().ok().map(|a| a.ip())
+}
+
+async fn lan_info(State(s): State<AppState>) -> impl IntoResponse {
+    let (enabled, port, token) = {
+        let c = s.shared.config.lock().unwrap();
+        (c.lan_access, c.http_port(), c.api_token.clone())
+    };
+    let Some(ip) = lan_ip() else {
+        return Json(json!({ "enabled": enabled, "url": null, "qr": null }));
+    };
+    let url = format!("http://{ip}:{port}/?token={token}");
+    let qr = qrcode::QrCode::new(url.as_bytes())
+        .map(|c| c.render::<qrcode::render::svg::Color>().min_dimensions(180, 180).quiet_zone(true).build())
+        .ok();
+    Json(json!({ "enabled": enabled, "url": url, "qr": qr }))
+}
+
 /// Text commands over UDP, used by the OBS script:
-/// * delay commands (`toggle`, `set 30`, ...), see [`Cmd::parse`]
+/// * delay commands (`toggle`, `set 30`, `censor`, ...), see [`Cmd::parse`]
 /// * `status`: answered with a human readable summary
-/// * `poll <configured 0|1>`: answered with a pending action (`configure`, `restore`,
-///   `scene_show\t<name>`, `scene_back`) or `none`
+/// * `poll <configured 0|1>`: answered with a pending [`ObsAction`] or `none`
 /// * `scene_shown` / `scene_failed`: outcome of `scene_show`
-/// * `scenes\t<name>\t<name>...`: scene list for the panel
+/// * `scenes\t<name>...`: scene list; `program\t<name>`: scene now on air
 /// * `import\t<server>\t<key>\t<service>`: destination found in OBS' stream settings
 /// * `result <text>`: outcome of an action, shown in the panel
 pub async fn serve_udp(sock: UdpSocket, tx: UnboundedSender<EngineMsg>, shared: Arc<Shared>) -> Result<()> {
@@ -216,13 +327,7 @@ pub async fn serve_udp(sock: UdpSocket, tx: UnboundedSender<EngineMsg>, shared: 
                     let mut b = shared.bridge.lock().unwrap();
                     b.last_poll = Some(Instant::now());
                     b.obs_configured = rest.trim() == "1";
-                    match b.pending.pop_front() {
-                        Some(ObsAction::Configure) => "configure".to_string(),
-                        Some(ObsAction::Restore) => "restore".to_string(),
-                        Some(ObsAction::ShowScene(name)) => format!("scene_show\t{name}"),
-                        Some(ObsAction::SceneBack) => "scene_back".to_string(),
-                        None => "none".to_string(),
-                    }
+                    b.pending.pop_front().map_or("none".to_string(), |a| a.encode())
                 };
                 let _ = sock.send_to(reply.as_bytes(), from).await;
             }
@@ -237,6 +342,11 @@ pub async fn serve_udp(sock: UdpSocket, tx: UnboundedSender<EngineMsg>, shared: 
             "scenes" => {
                 shared.bridge.lock().unwrap().scenes =
                     rest.split('\t').map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect();
+            }
+            "program" => {
+                let name = rest.trim().to_string();
+                shared.bridge.lock().unwrap().program_scene = name.clone();
+                let _ = tx.send(EngineMsg::ProgramScene(name));
             }
             "result" => {
                 log::info!("OBS: {}", rest.trim());
@@ -270,4 +380,36 @@ fn import_from_obs(shared: &Shared, rest: &str) {
     }
     shared.save_config();
     log::info!("imported destination {url} from OBS");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Destination;
+
+    #[test]
+    fn merge_keeps_secrets_unless_typed() {
+        let mut cur = Config::default();
+        cur.stream_key = "main-key".into();
+        cur.api_token = "tok".into();
+        cur.destinations.push(Destination { name: "YT".into(), url: "rtmp://yt/live2".into(), key: "yt-key".into(), enabled: true });
+        let public = public_config(&cur);
+        assert_eq!(public["stream_key"], "");
+        assert!(public.get("api_token").is_none());
+        assert_eq!(public["destinations"][0]["key"], "");
+
+        // the panel sends back what it got, with one change
+        let mut patch = public.clone();
+        patch["delay_seconds"] = json!(45);
+        patch["api_token"] = json!("hacked");
+        let out = merge_config(&cur, &patch).unwrap();
+        assert_eq!(out.stream_key, "main-key");
+        assert_eq!(out.destinations[0].key, "yt-key");
+        assert_eq!(out.api_token, "tok");
+        assert_eq!(out.delay_seconds, 45);
+
+        let out = merge_config(&cur, &json!({ "stream_key": "new" })).unwrap();
+        assert_eq!(out.stream_key, "new");
+        assert!(merge_config(&cur, &json!({ "upstream_url": "http://evil" })).is_err());
+    }
 }
