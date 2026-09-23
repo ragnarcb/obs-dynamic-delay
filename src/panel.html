@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Delay Dinâmico</title>
+<title>Dynamic Delay</title>
 <style>
   :root {
     --bg: #1e1f24; --panel: #272930; --line: #3a3d46; --text: #e8e9ed; --muted: #9a9dab;
@@ -51,12 +51,12 @@
 <main>
   <section class="card">
     <div class="top">
-      <span id="pill" class="pill off">SEM LIVE</span>
+      <span id="pill" class="pill off"></span>
       <span class="muted" id="phase"></span>
     </div>
-    <div class="big" id="current">0,0 s</div>
-    <div class="muted">atraso para o público &middot; configurado <b id="delay">30</b> s</div>
-    <button id="toggle">Ativar delay</button>
+    <div class="big" id="current">0.0 s</div>
+    <div class="muted"><span data-t="delayForViewers"></span> &middot; <span data-t="configured"></span> <b id="delay">30</b> s</div>
+    <button id="toggle"></button>
     <div class="row">
       <button data-set="10">10</button><button data-set="30">30</button><button data-set="60">60</button>
       <button data-set="120">120</button><button data-add="-5">&minus;5</button><button data-add="5">+5</button>
@@ -64,64 +64,107 @@
   </section>
 
   <section class="card warn-box hidden" id="obsBox">
-    <div id="obsText"></div>
-    <div class="actions"><button class="primary" id="configureObs">Configurar o OBS automaticamente</button></div>
+    <div data-t="obsNotUsing"></div>
+    <div class="actions"><button class="primary" id="configureObs" data-t="configureObs"></button></div>
   </section>
 
-  <section class="card warn-box hidden" id="keyBox">
-    Falta a <b>chave de transmissão</b>. Preencha em Configuração abaixo.
-  </section>
+  <section class="card warn-box hidden" id="keyBox" data-t="keyMissing"></section>
 
   <section class="card dots">
     <span class="dot" id="obs">OBS</span>
-    <span class="dot" id="up">Plataforma</span>
+    <span class="dot" id="up"></span>
     <span class="err" id="err"></span>
     <span class="note" id="msg"></span>
   </section>
 
   <details class="card" id="cfgBox">
-    <summary>Configuração</summary>
-    <label>Plataforma
+    <summary data-t="settings"></summary>
+    <label><span data-t="platform"></span>
       <select id="platform">
         <option value="twitch">Twitch</option>
         <option value="youtube">YouTube</option>
         <option value="kick">Kick</option>
-        <option value="custom">Outra</option>
+        <option value="custom" data-t="other"></option>
       </select>
     </label>
-    <label id="urlRow">URL do servidor (copie do painel da plataforma)
+    <label id="urlRow"><span data-t="serverUrl"></span>
       <input type="text" id="url" placeholder="rtmps://...">
     </label>
-    <label>Chave de transmissão
+    <label><span data-t="streamKey"></span>
       <input type="password" id="key" autocomplete="off">
     </label>
-    <label>Ao ligar ou aumentar o delay
+    <label><span data-t="growLabel"></span>
       <select id="growMode">
-        <option value="rewind">Rebobinar (repete os últimos segundos, sem congelar)</option>
-        <option value="scene">Mostrar uma cena do OBS enquanto o delay enche</option>
-        <option value="freeze">Congelar a imagem da live enquanto o delay enche</option>
+        <option value="rewind" data-t="growRewind"></option>
+        <option value="scene" data-t="growScene"></option>
+        <option value="freeze" data-t="growFreeze"></option>
       </select>
     </label>
-    <label id="sceneRow">Cena mostrada enquanto o delay enche
+    <label id="sceneRow"><span data-t="sceneLabel"></span>
       <select id="scene"></select>
-      <span class="muted">Dica: crie uma cena só com uma imagem ou texto, tipo "Aplicando delay...". Ela aparece parada e sem som.</span>
+      <span class="muted" data-t="sceneTip"></span>
     </label>
-    <label class="check"><input type="checkbox" id="startEnabled"> Começar toda live já com delay</label>
+    <label class="check"><input type="checkbox" id="startEnabled"> <span data-t="startEnabled"></span></label>
+    <label><span data-t="language"></span>
+      <select id="language">
+        <option value="en">English</option>
+        <option value="pt">Português (Brasil)</option>
+      </select>
+    </label>
     <div class="actions">
-      <button class="primary" id="save">Salvar</button>
+      <button class="primary" id="save" data-t="save"></button>
       <span class="note" id="saveMsg"></span>
-      <a id="restoreObs">Restaurar a configuração original de transmissão do OBS</a>
+      <a id="restoreObs" data-t="restoreObs"></a>
     </div>
   </details>
 </main>
 <script>
   const API = window.DD_API || "";
   const URLS = { twitch: "rtmp://live.twitch.tv/app", youtube: "rtmp://a.rtmp.youtube.com/live2" };
-  const PHASES = {
-    live: "ao vivo", delayed: "com delay", growing: "aguardando keyframe",
-    filling: "congelado, aplicando delay", shrinking: "cortando para o vivo",
+  const TEXT = {
+    en: {
+      delayForViewers: "delay for viewers", configured: "set to", obsNotUsing: "OBS is not streaming through the dynamic delay yet.",
+      configureObs: "Configure OBS automatically", keyMissing: "The stream key is missing. Fill it in under Settings below.",
+      settings: "Settings", platform: "Platform", other: "Other", serverUrl: "Server URL (copy it from the platform dashboard)",
+      streamKey: "Stream key", growLabel: "When the delay is switched on or increased",
+      growRewind: "Rewind (replays the last seconds, no freeze)", growScene: "Show an OBS scene while the delay builds up",
+      growFreeze: "Freeze the live picture while the delay builds up", sceneLabel: "Scene shown while the delay builds up",
+      sceneTip: "Tip: make a scene with just an image or text, like \"Applying delay...\". It is shown still and muted.",
+      startEnabled: "Start every stream with the delay on", language: "Language", save: "Save",
+      restoreObs: "Restore OBS' original stream settings",
+      noLive: "NOT LIVE", live: "LIVE", adjusting: "ADJUSTING", delayed: "DELAY", relayOff: "RELAY CLOSED", relayOffHint: "opens together with OBS",
+      phases: { live: "live", delayed: "delayed", growing: "waiting for a keyframe", filling: "holding a frame, applying delay", shrinking: "cutting back to live" },
+      toggleOff: "Turn delay off (back to live)", toggleOn: (s) => `Turn on ${s}s delay`,
+      obsStreaming: "OBS streaming", scriptMissing: "OBS script is not running", obsReady: "OBS ready", obsNotConfigured: "OBS not configured",
+      platformState: { idle: "Platform idle", connecting: "Platform connecting...", connected: "Platform connected", reconnecting: "Platform reconnecting..." },
+      applying: "Applying in OBS...", confirmRestore: "Click again to confirm: OBS goes back to streaming directly, without the dynamic delay.",
+      keySaved: "saved (type to replace)", keyPaste: "paste the key here", noScenes: "(open OBS to list the scenes)",
+      pickScene: "Pick the scene shown while the delay builds up.", saved: "Saved.", savedNext: "Saved. The new destination applies to the next stream.",
+    },
+    pt: {
+      delayForViewers: "atraso para o público", configured: "configurado", obsNotUsing: "O OBS ainda não está transmitindo pelo delay dinâmico.",
+      configureObs: "Configurar o OBS automaticamente", keyMissing: "Falta a chave de transmissão. Preencha em Configuração abaixo.",
+      settings: "Configuração", platform: "Plataforma", other: "Outra", serverUrl: "URL do servidor (copie do painel da plataforma)",
+      streamKey: "Chave de transmissão", growLabel: "Ao ligar ou aumentar o delay",
+      growRewind: "Rebobinar (repete os últimos segundos, sem congelar)", growScene: "Mostrar uma cena do OBS enquanto o delay enche",
+      growFreeze: "Congelar a imagem da live enquanto o delay enche", sceneLabel: "Cena mostrada enquanto o delay enche",
+      sceneTip: "Dica: crie uma cena só com uma imagem ou texto, tipo \"Aplicando delay...\". Ela aparece parada e sem som.",
+      startEnabled: "Começar toda live já com delay", language: "Idioma", save: "Salvar",
+      restoreObs: "Restaurar a configuração original de transmissão do OBS",
+      noLive: "SEM LIVE", live: "AO VIVO", adjusting: "AJUSTANDO", delayed: "DELAY", relayOff: "RELAY FECHADO", relayOffHint: "abre junto com o OBS",
+      phases: { live: "ao vivo", delayed: "com delay", growing: "aguardando keyframe", filling: "congelado, aplicando delay", shrinking: "cortando para o vivo" },
+      toggleOff: "Desligar delay (voltar ao vivo)", toggleOn: (s) => `Ligar delay de ${s}s`,
+      obsStreaming: "OBS transmitindo", scriptMissing: "script do OBS não está rodando", obsReady: "OBS pronto", obsNotConfigured: "OBS não configurado",
+      platformState: { idle: "Plataforma parada", connecting: "Plataforma conectando...", connected: "Plataforma conectada", reconnecting: "Plataforma reconectando..." },
+      applying: "Aplicando no OBS...", confirmRestore: "Clique de novo para confirmar: o OBS volta a transmitir direto, sem o delay dinâmico.",
+      keySaved: "salva (digite para trocar)", keyPaste: "cole a chave aqui", noScenes: "(abra o OBS para listar as cenas)",
+      pickScene: "Escolha a cena que aparece enquanto o delay enche.", saved: "Salvo.", savedNext: "Salvo. Destino novo vale na próxima live.",
+    },
   };
-  const UP = { idle: "parada", connecting: "conectando...", connected: "conectada", reconnecting: "reconectando..." };
+  let lang = window.DD_LANG || (/^pt/i.test(navigator.language) ? "pt" : "en");
+  const T = () => TEXT[lang] || TEXT.en;
+  const num = (x) => (lang === "pt" ? x.toFixed(1).replace(".", ",") : x.toFixed(1));
+
   const $ = (id) => document.getElementById(id);
   const post = (path, body) =>
     fetch(API + path, {
@@ -130,7 +173,19 @@
       body: body ? JSON.stringify(body) : undefined,
     }).then((r) => r.json());
 
+  function applyLanguage(l) {
+    lang = TEXT[l] ? l : "en";
+    document.documentElement.lang = lang === "pt" ? "pt-BR" : "en";
+    document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T()[el.dataset.t]));
+    $("language").value = lang;
+    if (cfg) $("key").placeholder = cfg.stream_key_set ? T().keySaved : T().keyPaste;
+    fillScenes(cfg && cfg.delay_scene);
+    if (lastStatus) render(lastStatus);
+  }
+
   let cfg = null;
+  let lastStatus = null;
+  let lastMessage = null;
   let delaySeconds = 30;
 
   $("toggle").onclick = () => post("/api/toggle").then(refresh);
@@ -138,7 +193,7 @@
   document.querySelectorAll("[data-add]").forEach((b) => (b.onclick = () => post("/api/add/" + b.dataset.add).then(refresh)));
 
   function obsAction(path) {
-    post(path).then((r) => { if (!r.ok) $("msg").textContent = r.error; else $("msg").textContent = "Aplicando no OBS..."; });
+    post(path).then((r) => ($("msg").textContent = r.ok ? T().applying : r.error));
   }
   $("configureObs").onclick = () => obsAction("/api/obs/configure");
   // two clicks instead of confirm(): dialogs may be blocked inside OBS docks
@@ -146,7 +201,7 @@
   $("restoreObs").onclick = () => {
     if (Date.now() - restoreArmed < 5000) { restoreArmed = 0; obsAction("/api/obs/restore"); return; }
     restoreArmed = Date.now();
-    $("saveMsg").textContent = "Clique de novo para confirmar: o OBS volta a transmitir direto, sem o delay dinâmico.";
+    $("saveMsg").textContent = T().confirmRestore;
   };
 
   function platformOf(url) {
@@ -164,7 +219,12 @@
     const sel = $("scene");
     const names = [...new Set([...(selected ? [selected] : []), ...scenes])];
     const cur = sel.value || selected || "";
-    sel.innerHTML = names.length ? "" : '<option value="">(abra o OBS para listar as cenas)</option>';
+    sel.innerHTML = "";
+    if (!names.length) {
+      const o = document.createElement("option");
+      o.value = ""; o.textContent = T().noScenes;
+      sel.appendChild(o);
+    }
     for (const n of names) {
       const o = document.createElement("option");
       o.value = o.textContent = n;
@@ -176,6 +236,10 @@
     $("sceneRow").classList.toggle("hidden", $("growMode").value !== "scene");
   }
   $("growMode").onchange = showSceneRow;
+  $("language").onchange = () => {
+    applyLanguage($("language").value);
+    post("/api/config", Object.assign(currentForm(true), { language: lang }));
+  };
 
   function loadConfig() {
     return fetch(API + "/api/config").then((r) => r.json()).then((c) => {
@@ -183,53 +247,61 @@
       $("platform").value = platformOf(c.upstream_url);
       $("url").value = URLS[$("platform").value] ? "" : c.upstream_url;
       $("key").value = "";
-      $("key").placeholder = c.stream_key_set ? "salva (digite para trocar)" : "cole a chave aqui";
       $("startEnabled").checked = c.start_enabled;
       $("growMode").value = c.grow_mode || "rewind";
       $("scene").value = "";
-      fillScenes(c.delay_scene);
+      applyLanguage(c.language || lang);
       showSceneRow();
       showUrlRow();
       if (!c.stream_key_set) $("cfgBox").open = true;
     });
   }
 
-  $("save").onclick = () => {
+  // saved=true: send what is stored now (used when only the language changes)
+  function currentForm(saved) {
+    if (saved && cfg) {
+      return { upstream_url: cfg.upstream_url, start_enabled: cfg.start_enabled, delay_seconds: delaySeconds,
+               grow_mode: cfg.grow_mode, delay_scene: cfg.delay_scene };
+    }
     const p = $("platform").value;
-    const url = URLS[p] || $("url").value.trim();
-    const body = {
-      upstream_url: url, start_enabled: $("startEnabled").checked, delay_seconds: delaySeconds,
-      grow_mode: $("growMode").value, delay_scene: $("scene").value,
+    return {
+      upstream_url: URLS[p] || $("url").value.trim(), start_enabled: $("startEnabled").checked, delay_seconds: delaySeconds,
+      grow_mode: $("growMode").value, delay_scene: $("scene").value, language: lang,
     };
+  }
+
+  $("save").onclick = () => {
+    const body = currentForm(false);
     if (body.grow_mode === "scene" && !body.delay_scene) {
-      $("saveMsg").textContent = "Escolha a cena que aparece enquanto o delay enche.";
+      $("saveMsg").textContent = T().pickScene;
       return;
     }
     if ($("key").value.trim()) body.stream_key = $("key").value.trim();
     post("/api/config", body).then((r) => {
-      $("saveMsg").textContent = !r.ok ? r.error : r.next_stream ? "Salvo. Destino novo vale na próxima live." : "Salvo.";
+      $("saveMsg").textContent = !r.ok ? r.error : r.next_stream ? T().savedNext : T().saved;
       if (r.ok) loadConfig().then(refresh);
     });
   };
 
   function render(s) {
+    lastStatus = s;
     const e = s.engine;
     delaySeconds = s.delay_seconds;
     const pill = $("pill");
     if (!e) {
-      pill.className = "pill off"; pill.textContent = "SEM LIVE"; $("phase").textContent = "";
-      $("current").textContent = "0,0 s";
+      pill.className = "pill off"; pill.textContent = T().noLive; $("phase").textContent = "";
+      $("current").textContent = num(0) + " s";
     } else {
       const busy = e.phase === "filling" || e.phase === "growing" || e.phase === "shrinking";
       pill.className = "pill " + (busy ? "busy" : e.phase === "live" ? "live" : "delayed");
-      pill.textContent = e.phase === "live" ? "AO VIVO" : busy ? "AJUSTANDO" : "DELAY";
-      $("phase").textContent = PHASES[e.phase] || e.phase;
-      $("current").textContent = (e.current_ms / 1000).toFixed(1).replace(".", ",") + " s";
+      pill.textContent = e.phase === "live" ? T().live : busy ? T().adjusting : T().delayed;
+      $("phase").textContent = T().phases[e.phase] || e.phase;
+      $("current").textContent = num(e.current_ms / 1000) + " s";
     }
     $("delay").textContent = s.delay_seconds;
     const t = $("toggle");
     t.className = s.enabled ? "on" : "";
-    t.textContent = s.enabled ? "Desligar delay (voltar ao vivo)" : "Ligar delay de " + s.delay_seconds + "s";
+    t.textContent = s.enabled ? T().toggleOff : T().toggleOn(s.delay_seconds);
 
     const o = s.obs || {};
     if (o.scenes && o.scenes.join("\n") !== scenes.join("\n")) {
@@ -237,15 +309,18 @@
       fillScenes(cfg && cfg.delay_scene);
     }
     $("obsBox").classList.toggle("hidden", !(o.script && !o.configured));
-    $("obsText").innerHTML = "O OBS ainda não está transmitindo pelo delay dinâmico.";
     $("keyBox").classList.toggle("hidden", !cfg || cfg.stream_key_set);
     $("obs").className = "dot " + (o.script ? (o.configured ? "ok" : "warn") : "bad");
-    $("obs").textContent = s.obs_connected ? "OBS transmitindo" : !o.script ? "script do OBS não está rodando" : o.configured ? "OBS pronto" : "OBS não configurado";
+    $("obs").textContent = s.obs_connected ? T().obsStreaming : !o.script ? T().scriptMissing : o.configured ? T().obsReady : T().obsNotConfigured;
     const upCls = { connected: "ok", connecting: "warn", reconnecting: "bad", idle: "" }[s.upstream];
     $("up").className = "dot " + upCls;
-    $("up").textContent = "Plataforma " + UP[s.upstream];
+    $("up").textContent = T().platformState[s.upstream];
     $("err").textContent = s.upstream !== "connected" && s.upstream_error ? s.upstream_error : "";
-    if (o.message) { $("msg").textContent = o.message; if (/Pronto|restaurad/.test(o.message)) loadConfig(); }
+    if (o.message && o.message !== lastMessage) {
+      lastMessage = o.message;
+      $("msg").textContent = o.message;
+      loadConfig(); // OBS may have imported a destination
+    }
   }
 
   let offline = false;
@@ -255,10 +330,11 @@
       render(s);
     }).catch(() => {
       offline = true;
-      $("pill").className = "pill off"; $("pill").textContent = "RELAY FECHADO";
-      $("phase").textContent = "abre junto com o OBS";
+      $("pill").className = "pill off"; $("pill").textContent = T().relayOff;
+      $("phase").textContent = T().relayOffHint;
     });
   }
+  applyLanguage(lang);
   refresh();
   setInterval(refresh, 700);
 </script>

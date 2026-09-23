@@ -1,23 +1,24 @@
 ---
-name: Problema
-about: Algo não funcionou como esperado
+name: Bug report
+about: Something did not work as expected
 labels: bug
 ---
 
-**O que aconteceu**
+**What happened**
 
 
-**O que era esperado**
+**What you expected**
 
 
-**Passos para reproduzir**
+**Steps to reproduce**
 1.
 2.
 
-**Ambiente**
-- Versão do Delay Dinâmico:
-- Versão do OBS:
-- Plataforma (Twitch, YouTube, Kick...):
+**Environment**
+- Dynamic Delay version:
+- OBS version:
+- Platform (Twitch, YouTube, Kick...):
+- Language (English / Portuguese):
 
 **Log**
-Anexe `%APPDATA%\obs-dynamic-delay\obs-dynamic-delay.log` (a chave de transmissão não aparece nele).
+Attach `%APPDATA%\obs-dynamic-delay\obs-dynamic-delay.log` (the stream key is not written to it).

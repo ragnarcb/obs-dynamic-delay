@@ -2,6 +2,7 @@ mod config;
 mod control;
 mod engine;
 mod flv;
+mod i18n;
 mod ingest;
 mod installer;
 mod rtmp_io;
@@ -85,11 +86,19 @@ fn main() -> Result<()> {
 async fn relay() -> Result<()> {
     let path = config_path();
     let cfg = Config::load_or_create(&path)?;
+    i18n::set(i18n::Lang::parse(&cfg.language));
     // The UDP port doubles as a single-instance lock: bind it before touching the log file.
     let udp = match std::net::UdpSocket::bind(&cfg.udp_listen) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("obs-dynamic-delay ja esta rodando (porta {} ocupada): {e}", cfg.udp_listen);
+            eprintln!(
+                "{}",
+                t!(
+                    "obs-dynamic-delay is already running (port {} in use): {e}",
+                    "obs-dynamic-delay ja esta rodando (porta {} ocupada): {e}",
+                    cfg.udp_listen
+                )
+            );
             std::process::exit(2);
         }
     };

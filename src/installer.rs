@@ -11,9 +11,19 @@ use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 
 use crate::config::{Config, TWITCH_URL, YOUTUBE_URL, destination_from_obs};
+use crate::i18n::{self, Lang};
+use crate::t;
 
 const LUA: &str = include_str!("../obs/obs-dynamic-delay.lua");
-const DOCK_TITLE: &str = "Delay dinâmico";
+
+fn dock_title() -> &'static str {
+    i18n::dock_title(i18n::get())
+}
+
+/// True for our dock in any language.
+fn is_our_dock(d: &Value) -> bool {
+    [Lang::En, Lang::Pt].iter().any(|l| d["title"] == i18n::dock_title(*l))
+}
 const EXE_NAME: &str = if cfg!(windows) { "obs-dynamic-delay.exe" } else { "obs-dynamic-delay" };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -25,14 +35,14 @@ pub enum Mode {
 
 pub fn wizard(mode: Mode) -> Result<()> {
     println!("==============================================");
-    println!("  Delay dinamico para OBS");
+    println!("{}", t!("  Dynamic Delay for OBS", "  Delay dinamico para OBS"));
     println!("==============================================\n");
     let r = run(mode);
     if let Err(e) = &r {
-        println!("\nERRO: {e:#}");
+        println!("\n{} {e:#}", t!("ERROR:", "ERRO:"));
     }
     if mode == Mode::Ask {
-        ask("\nPressione Enter para fechar.");
+        ask(&t!("\nPress Enter to close.", "\nPressione Enter para fechar."));
     }
     r
 }
@@ -42,19 +52,31 @@ fn run(mode: Mode) -> Result<()> {
     let installed = p.is_installed();
     let mode = match mode {
         Mode::Ask if installed => {
-            println!("Ja esta instalado em {}.", p.install_dir.display());
-            match ask("Digite 1 para atualizar/reinstalar, 2 para desinstalar, ou Enter para sair: ").as_str() {
+            println!("{}", t!("Already installed in {}.", "Ja esta instalado em {}.", p.install_dir.display()));
+            match ask(&t!(
+                "Type 1 to update/reinstall, 2 to uninstall, or Enter to quit: ",
+                "Digite 1 para atualizar/reinstalar, 2 para desinstalar, ou Enter para sair: "
+            ))
+            .as_str()
+            {
                 "1" => Mode::Install,
                 "2" => Mode::Uninstall,
                 _ => return Ok(()),
             }
         }
         Mode::Ask => {
-            println!("Isto vai instalar o delay dinamico no seu OBS:");
-            println!("  - adiciona o script e um painel \"{DOCK_TITLE}\" na tela do OBS");
-            println!("  - faz o OBS transmitir pelo relay (a configuracao atual fica salva)");
-            println!("  - desliga o Stream Delay nativo do OBS\n");
-            if ask("Instalar agora? [S/n] ").to_lowercase().starts_with('n') {
+            let dock = dock_title();
+            println!("{}", t!("This installs the dynamic delay into your OBS:", "Isto vai instalar o delay dinamico no seu OBS:"));
+            println!("{}", t!(
+                "  - adds the script and a \"{dock}\" panel to the OBS window",
+                "  - adiciona o script e um painel \"{dock}\" na tela do OBS"
+            ));
+            println!("{}", t!(
+                "  - makes OBS stream through the relay (your current settings are backed up)",
+                "  - faz o OBS transmitir pelo relay (a configuracao atual fica salva)"
+            ));
+            println!("{}", t!("  - turns off OBS' built-in Stream Delay\n", "  - desliga o Stream Delay nativo do OBS\n"));
+            if ask(&t!("Install now? [Y/n] ", "Instalar agora? [S/n] ")).to_lowercase().starts_with('n') {
                 return Ok(());
             }
             Mode::Install
@@ -80,7 +102,14 @@ impl Paths {
             None => default_obs_dir()?,
         };
         if !obs_dir.join("basic").exists() {
-            bail!("nao achei a configuracao do OBS em {} (abra o OBS pelo menos uma vez)", obs_dir.display());
+            bail!(
+                "{}",
+                t!(
+                    "OBS settings not found in {} (open OBS at least once)",
+                    "nao achei a configuracao do OBS em {} (abra o OBS pelo menos uma vez)",
+                    obs_dir.display()
+                )
+            );
         }
         let install_dir = match std::env::var_os("DD_INSTALL_DIR") {
             Some(d) => PathBuf::from(d),
@@ -118,7 +147,7 @@ impl Paths {
             .filter_map(|e| e.ok())
             .map(|e| e.path())
             .find(|p| p.is_dir())
-            .context("nenhum perfil do OBS encontrado")
+            .context(t!("no OBS profile found", "nenhum perfil do OBS encontrado"))
     }
     fn scene_collections(&self) -> Vec<PathBuf> {
         let dir = self.obs_dir.join("basic").join("scenes");
@@ -160,7 +189,9 @@ fn install(p: &Paths) -> Result<()> {
     }
     std::fs::write(p.lua(), LUA)?;
     let mut cfg = Config::load_or_create(&p.config())?;
-    step(&format!("arquivos copiados para {}", p.install_dir.display()));
+    // the installer's language (English or Portuguese build) becomes the app language
+    cfg.language = i18n::get().code().to_string();
+    step(&t!("files copied to {}", "arquivos copiados para {}", p.install_dir.display()));
 
     // 2. stream settings of the current profile
     let profile = p.profile_dir()?;
@@ -183,7 +214,7 @@ fn install(p: &Paths) -> Result<()> {
             cfg.stream_key = key.to_string();
         }
         if imported {
-            step(&format!("destino importado do OBS: {}", cfg.upstream_url));
+            step(&t!("destination imported from OBS: {}", "destino importado do OBS: {}", cfg.upstream_url));
         }
     }
     if !imported && cfg.stream_key.is_empty() {
@@ -197,13 +228,13 @@ fn install(p: &Paths) -> Result<()> {
             "settings": { "server": relay_server, "key": "delay", "use_auth": false, "bwtest": false }
         }),
     )?;
-    step(&format!("OBS agora transmite para {relay_server}"));
+    step(&t!("OBS now streams to {relay_server}", "OBS agora transmite para {relay_server}"));
 
     // 3. disable OBS' own stream delay
     let basic_ini = profile.join("basic.ini");
     if basic_ini.exists() {
         edit_ini(&basic_ini, |t| ini_set(t, "Output", "DelayEnable", "false"))?;
-        step("Stream Delay nativo do OBS desligado");
+        step(&t!("OBS' built-in Stream Delay turned off", "Stream Delay nativo do OBS desligado"));
     }
 
     // 4. script in every scene collection
@@ -223,7 +254,7 @@ fn install(p: &Paths) -> Result<()> {
         if removed > 0 {
             backup_once(&c)?;
             write_json(&c, &v)?;
-            step("copia antiga do script removida do OBS");
+            step(&t!("old copy of the script removed from OBS", "copia antiga do script removida do OBS"));
         }
         if script_index(&v, &lua).is_none() {
             backup_once(&c)?;
@@ -240,7 +271,10 @@ fn install(p: &Paths) -> Result<()> {
             write_json(&c, &v)?;
         }
     }
-    step("script adicionado ao OBS (atalhos em Configuracoes > Atalhos > Delay dinamico)");
+    step(&t!(
+        "script added to OBS (hotkeys in Settings > Hotkeys > Dynamic Delay)",
+        "script adicionado ao OBS (atalhos em Configuracoes > Atalhos > Delay dinamico)"
+    ));
 
     // 5. dock with the control panel
     let api = format!("http://{}", cfg.http_listen);
@@ -255,17 +289,21 @@ fn install(p: &Paths) -> Result<()> {
         let mut docks: Vec<Value> = ini_get(t, "BasicWindow", "ExtraBrowserDocks")
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default();
-        docks.retain(|d| d["title"] != DOCK_TITLE);
-        docks.push(json!({ "title": DOCK_TITLE, "url": dock_url, "uuid": uuid() }));
+        docks.retain(|d| !is_our_dock(d));
+        docks.push(json!({ "title": dock_title(), "url": dock_url, "uuid": uuid() }));
         ini_set(t, "BasicWindow", "ExtraBrowserDocks", &Value::Array(docks).to_string())
     })?;
-    step(&format!("painel \"{DOCK_TITLE}\" adicionado (menu Docks)"));
+    let dock = dock_title();
+    step(&t!("\"{dock}\" panel added (Docks menu)", "painel \"{dock}\" adicionado (menu Docks)"));
 
-    println!("\nPronto!");
+    println!("\n{}", t!("Done!", "Pronto!"));
     if cfg.stream_key.is_empty() {
-        println!("Falta so a chave de transmissao: preencha no painel \"{DOCK_TITLE}\" dentro do OBS.");
+        println!("{}", t!(
+            "Only the stream key is missing: fill it in the \"{dock}\" panel inside OBS.",
+            "Falta so a chave de transmissao: preencha no painel \"{dock}\" dentro do OBS."
+        ));
     }
-    if ask("Abrir o OBS agora? [S/n] ").to_lowercase().starts_with('n') {
+    if ask(&t!("Open OBS now? [Y/n] ", "Abrir o OBS agora? [S/n] ")).to_lowercase().starts_with('n') {
         return Ok(());
     }
     launch_obs();
@@ -281,42 +319,49 @@ fn uninstall(p: &Paths) -> Result<()> {
             write_json(&c, &v)?;
         }
     }
-    step("script removido do OBS");
+    step(&t!("script removed from OBS", "script removido do OBS"));
     if p.user_ini().exists() {
         edit_ini(&p.user_ini(), |t| {
             let mut docks: Vec<Value> = ini_get(t, "BasicWindow", "ExtraBrowserDocks")
                 .and_then(|s| serde_json::from_str(&s).ok())
                 .unwrap_or_default();
-            docks.retain(|d| d["title"] != DOCK_TITLE);
+            docks.retain(|d| !is_our_dock(d));
             ini_set(t, "BasicWindow", "ExtraBrowserDocks", &Value::Array(docks).to_string())
         })?;
-        step("painel removido");
+        step(&t!("panel removed", "painel removido"));
     }
     if p.service_backup().exists() {
         std::fs::copy(p.service_backup(), p.profile_dir()?.join("service.json"))?;
-        step("configuracao de transmissao original restaurada");
+        step(&t!("original stream settings restored", "configuracao de transmissao original restaurada"));
     }
-    println!("\nDesinstalado. A pasta {} pode ser apagada.", p.install_dir.display());
+    println!(
+        "\n{}",
+        t!(
+            "Uninstalled. The folder {} can be deleted.",
+            "Desinstalado. A pasta {} pode ser apagada.",
+            p.install_dir.display()
+        )
+    );
     Ok(())
 }
 
 fn ask_destination(cfg: &mut Config) {
-    println!("\nPara onde voce transmite?");
-    println!("  1 = Twitch   2 = YouTube   3 = Kick / outra (colar URL)");
-    match ask("Opcao (Enter = Twitch): ").as_str() {
+    println!("\n{}", t!("Where do you stream to?", "Para onde voce transmite?"));
+    println!("{}", t!("  1 = Twitch   2 = YouTube   3 = Kick / other (paste URL)", "  1 = Twitch   2 = YouTube   3 = Kick / outra (colar URL)"));
+    match ask(&t!("Option (Enter = Twitch): ", "Opcao (Enter = Twitch): ")).as_str() {
         "2" => cfg.upstream_url = YOUTUBE_URL.into(),
         "3" => {
-            let url = ask("URL do servidor (rtmp:// ou rtmps://): ");
+            let url = ask(&t!("Server URL (rtmp:// or rtmps://): ", "URL do servidor (rtmp:// ou rtmps://): "));
             if url.starts_with("rtmp://") || url.starts_with("rtmps://") {
                 cfg.upstream_url = url;
             } else {
-                println!("URL invalida, usando Twitch. Troque depois no painel.");
+                println!("{}", t!("Invalid URL, using Twitch. Change it later in the panel.", "URL invalida, usando Twitch. Troque depois no painel."));
                 cfg.upstream_url = TWITCH_URL.into();
             }
         }
         _ => cfg.upstream_url = TWITCH_URL.into(),
     }
-    cfg.stream_key = ask("Chave de transmissao (Enter = preencher depois no painel): ");
+    cfg.stream_key = ask(&t!("Stream key (Enter = fill in later in the panel): ", "Chave de transmissao (Enter = preencher depois no painel): "));
 }
 
 fn step(msg: &str) {
@@ -349,8 +394,11 @@ fn wait_obs_closed() {
     if !obs_running() {
         return;
     }
-    println!("\nFeche o OBS para continuar (ele regrava as configuracoes ao fechar).");
-    print!("Aguardando o OBS fechar");
+    println!("\n{}", t!(
+        "Close OBS to continue (it rewrites its settings when it closes).",
+        "Feche o OBS para continuar (ele regrava as configuracoes ao fechar)."
+    ));
+    print!("{}", t!("Waiting for OBS to close", "Aguardando o OBS fechar"));
     while obs_running() {
         print!(".");
         let _ = std::io::stdout().flush();
@@ -375,7 +423,7 @@ fn launch_obs() {
             return;
         }
     }
-    println!("Nao achei o OBS para abrir, abra ele normalmente.");
+    println!("{}", t!("OBS not found, please open it yourself.", "Nao achei o OBS para abrir, abra ele normalmente."));
 }
 
 fn copy_with_retry(from: &Path, to: &Path) -> Result<()> {
@@ -393,7 +441,7 @@ fn copy_with_retry(from: &Path, to: &Path) -> Result<()> {
             return Ok(());
         }
     }
-    bail!("nao consegui copiar para {} (o relay ainda esta aberto?)", to.display())
+    bail!("{}", t!("could not copy to {} (is the relay still running?)", "nao consegui copiar para {} (o relay ainda esta aberto?)", to.display()))
 }
 
 fn same_file(a: &Path, b: &Path) -> bool {
@@ -416,12 +464,12 @@ fn script_index(v: &Value, lua: &Path) -> Option<usize> {
 }
 
 fn read_json(p: &Path) -> Result<Value> {
-    let t = std::fs::read_to_string(p).with_context(|| format!("lendo {}", p.display()))?;
-    serde_json::from_str(t.trim_start_matches('\u{feff}')).with_context(|| format!("lendo {}", p.display()))
+    let t = std::fs::read_to_string(p).with_context(|| format!("reading {}", p.display()))?;
+    serde_json::from_str(t.trim_start_matches('\u{feff}')).with_context(|| format!("reading {}", p.display()))
 }
 
 fn write_json(p: &Path, v: &Value) -> Result<()> {
-    std::fs::write(p, serde_json::to_string_pretty(v)?).with_context(|| format!("gravando {}", p.display()))
+    std::fs::write(p, serde_json::to_string_pretty(v)?).with_context(|| format!("writing {}", p.display()))
 }
 
 fn backup_once(p: &Path) -> Result<()> {
@@ -441,7 +489,7 @@ fn edit_ini(p: &Path, f: impl FnOnce(&str) -> String) -> Result<()> {
     }
     let out = f(text);
     std::fs::write(p, if bom { format!("\u{feff}{out}") } else { out })
-        .with_context(|| format!("gravando {}", p.display()))
+        .with_context(|| format!("writing {}", p.display()))
 }
 
 pub fn ini_get(text: &str, section: &str, key: &str) -> Option<String> {

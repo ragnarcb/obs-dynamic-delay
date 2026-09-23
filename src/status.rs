@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 
 use crate::config::Config;
+use crate::t;
 use crate::engine::{EngineStatus, Phase};
 
 /// State shared between the engine, the upstream, the HTTP API and the UDP port.
@@ -94,34 +95,36 @@ pub struct Status {
 impl Status {
     /// Human readable status, shown inside OBS by the script.
     pub fn summary(&self) -> String {
+        let d = self.delay_seconds;
         let mut lines = vec![if self.enabled {
-            format!("Delay LIGADO ({}s)", self.delay_seconds)
+            t!("Delay ON ({d}s)", "Delay LIGADO ({d}s)")
         } else {
-            format!("Delay DESLIGADO (configurado: {}s)", self.delay_seconds)
+            t!("Delay OFF (set to {d}s)", "Delay DESLIGADO (configurado: {d}s)")
         }];
         lines.push(match &self.engine {
-            None => "Sem live no momento".to_string(),
+            None => t!("Not live right now", "Sem live no momento"),
             Some(e) => {
                 let phase = match e.phase {
-                    Phase::Live => "AO VIVO",
-                    Phase::Delayed => "COM DELAY",
-                    Phase::Growing => "aguardando keyframe",
-                    Phase::Filling => "congelado, aplicando delay",
-                    Phase::Shrinking => "cortando para o vivo",
+                    Phase::Live => t!("LIVE", "AO VIVO"),
+                    Phase::Delayed => t!("DELAYED", "COM DELAY"),
+                    Phase::Growing => t!("waiting for a keyframe", "aguardando keyframe"),
+                    Phase::Filling => t!("holding a frame, applying delay", "congelado, aplicando delay"),
+                    Phase::Shrinking => t!("cutting back to live", "cortando para o vivo"),
                 };
-                format!("{phase} | atraso atual {:.1}s", e.current_ms as f64 / 1000.0)
+                let secs = e.current_ms as f64 / 1000.0;
+                t!("{phase} | current delay {secs:.1}s", "{phase} | atraso atual {secs:.1}s")
             }
         });
-        let obs = if self.obs_connected { "OBS transmitindo" } else { "OBS parado" };
+        let obs = if self.obs_connected { t!("OBS streaming", "OBS transmitindo") } else { t!("OBS idle", "OBS parado") };
         let up = match self.upstream {
-            UpstreamState::Idle => "plataforma parada",
-            UpstreamState::Connecting => "conectando na plataforma",
-            UpstreamState::Connected => "plataforma conectada",
-            UpstreamState::Reconnecting => "plataforma RECONECTANDO",
+            UpstreamState::Idle => t!("platform idle", "plataforma parada"),
+            UpstreamState::Connecting => t!("connecting to the platform", "conectando na plataforma"),
+            UpstreamState::Connected => t!("platform connected", "plataforma conectada"),
+            UpstreamState::Reconnecting => t!("platform RECONNECTING", "plataforma RECONECTANDO"),
         };
         lines.push(format!("{obs} | {up}"));
         if let (true, Some(e)) = (self.upstream != UpstreamState::Connected, &self.upstream_error) {
-            lines.push(format!("Erro: {e}"));
+            lines.push(t!("Error: {e}", "Erro: {e}"));
         }
         lines.join("\n")
     }

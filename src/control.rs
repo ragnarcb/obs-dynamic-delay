@@ -15,7 +15,9 @@ use tower_http::cors::CorsLayer;
 
 use crate::EngineMsg;
 use crate::config::destination_from_obs;
+use crate::i18n::{self, Lang};
 use crate::status::{Cmd, ObsAction, ObsInfo, Shared, Status};
+use crate::t;
 
 pub const PANEL: &str = include_str!("panel.html");
 const CLOCK: &str = include_str!("clock.html");
@@ -99,6 +101,8 @@ struct ConfigView {
     #[serde(default)]
     delay_scene: Option<String>,
     #[serde(default)]
+    language: Option<String>,
+    #[serde(default)]
     max_delay_seconds: u32,
 }
 
@@ -112,6 +116,7 @@ async fn get_config(State(s): State<AppState>) -> impl IntoResponse {
         delay_seconds: c.delay_seconds,
         grow_mode: Some(c.grow_mode),
         delay_scene: Some(c.delay_scene),
+        language: Some(c.language),
         max_delay_seconds: c.max_delay_seconds,
     })
 }
@@ -119,7 +124,10 @@ async fn get_config(State(s): State<AppState>) -> impl IntoResponse {
 async fn set_config(State(s): State<AppState>, Json(v): Json<ConfigView>) -> impl IntoResponse {
     let url = v.upstream_url.trim().to_string();
     if !(url.starts_with("rtmp://") || url.starts_with("rtmps://")) {
-        return Json(serde_json::json!({ "ok": false, "error": "a URL precisa começar com rtmp:// ou rtmps://" }));
+        return Json(serde_json::json!({
+            "ok": false,
+            "error": t!("the URL must start with rtmp:// or rtmps://", "a URL precisa começar com rtmp:// ou rtmps://")
+        }));
     }
     {
         let mut c = s.shared.config.lock().unwrap();
@@ -134,6 +142,11 @@ async fn set_config(State(s): State<AppState>, Json(v): Json<ConfigView>) -> imp
         if let Some(sc) = v.delay_scene {
             c.delay_scene = sc.trim().to_string();
         }
+        if let Some(l) = v.language {
+            let lang = Lang::parse(&l);
+            i18n::set(lang);
+            c.language = lang.code().to_string();
+        }
     }
     s.shared.save_config();
     let _ = s.tx.send(EngineMsg::Cmd(Cmd::Set(v.delay_seconds)));
@@ -147,7 +160,10 @@ fn queue_obs_action(s: &AppState, action: ObsAction) -> Json<serde_json::Value> 
     if !b.info().script {
         return Json(serde_json::json!({
             "ok": false,
-            "error": "o script do OBS não está rodando (Ferramentas > Scripts)"
+            "error": t!(
+                "the OBS script is not running (Tools > Scripts)",
+                "o script do OBS não está rodando (Ferramentas > Scripts)"
+            )
         }));
     }
     b.pending.push_back(action);

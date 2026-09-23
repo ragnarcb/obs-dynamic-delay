@@ -22,6 +22,8 @@ pub struct Config {
     pub filler_fps: u32,
     pub http_listen: String,
     pub udp_listen: String,
+    /// "en" or "pt": language of the panel, the OBS script and messages.
+    pub language: String,
 }
 
 impl Default for Config {
@@ -38,6 +40,7 @@ impl Default for Config {
             filler_fps: 2,
             http_listen: "127.0.0.1:8787".into(),
             udp_listen: "127.0.0.1:8788".into(),
+            language: crate::i18n::DEFAULT.code().into(),
         }
     }
 }
@@ -69,7 +72,10 @@ impl Config {
     pub fn to_toml(&self) -> String {
         format!(
             r#"# obs-dynamic-delay configuration
-# Normally edited from the "Delay dinamico" panel inside OBS.
+# Normally edited from the "Dynamic Delay" panel inside OBS.
+
+# Language of the panel, the OBS script and messages: "en" or "pt".
+language = {lang}
 
 # Address OBS streams to (OBS: Settings > Stream > Custom, rtmp://127.0.0.1:1935/live).
 listen = {listen}
@@ -117,6 +123,7 @@ udp_listen = {udp}
             fps = self.filler_fps,
             http = q(&self.http_listen),
             udp = q(&self.udp_listen),
+            lang = q(&self.language),
         )
     }
 }

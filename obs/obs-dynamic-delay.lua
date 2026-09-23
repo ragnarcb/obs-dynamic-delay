@@ -1,10 +1,12 @@
--- obs-dynamic-delay: liga o OBS ao relay de delay dinâmico.
--- Instalado pelo obs-dynamic-delay.exe (ou: Ferramentas > Scripts > "+", com o exe na mesma pasta).
+-- obs-dynamic-delay: connects OBS to the dynamic delay relay.
+-- Installed by obs-dynamic-delay.exe (or: Tools > Scripts > "+", with the exe in the same folder).
 --
--- * abre o relay escondido junto com o OBS e fecha junto
--- * atalhos (Configurações > Atalhos > "Delay dinâmico")
--- * executa no OBS o que o painel pede (configurar/restaurar a transmissão)
--- * troca para a cena de delay enquanto o delay é aplicado (modo "mostrar cena")
+-- * starts the relay hidden together with OBS and closes it with OBS
+-- * hotkeys (Settings > Hotkeys > "Dynamic Delay")
+-- * runs inside OBS what the panel asks for (configure/restore the stream settings)
+-- * switches to the delay scene while the delay builds up (grow mode "scene")
+--
+-- Texts are English or Portuguese, following `language` in config.toml.
 
 obs = obslua
 local ffi = require("ffi")
@@ -17,6 +19,13 @@ local manage_relay = true
 local relay_path = ""
 local step = 5
 local ports = { rtmp = 1935, http = 8787, udp = 8788 }
+local lang = "en"
+
+-- Picks the text for the configured language.
+local function L(en, pt)
+  if lang == "pt" then return pt end
+  return en
+end
 
 ---------------------------------------------------------------------------
 -- Sockets (LuaJIT FFI, no extra dependencies)
@@ -137,7 +146,7 @@ local function exe_path()
   return dir() .. EXE_NAME
 end
 
--- Ports come from the relay's config.toml (edited by the installer/panel).
+-- Ports and language come from the relay's config.toml (edited by the installer/panel).
 local function read_ports()
   local f = io.open(config_path(), "r")
   if not f then return end
@@ -149,6 +158,7 @@ local function read_ports()
   ports.rtmp = port("listen") or ports.rtmp
   ports.http = port("http_listen") or ports.http
   ports.udp = port("udp_listen") or ports.udp
+  lang = text:match("\n%s*language%s*=%s*\"(%a+)\"") or lang
 end
 
 local function relay_server()
@@ -168,7 +178,7 @@ end
 local function launch()
   local exe = exe_path()
   if not exists(exe) then
-    obs.script_log(obs.LOG_WARNING, "executavel do relay nao encontrado: " .. exe)
+    obs.script_log(obs.LOG_WARNING, L("relay executable not found: ", "executavel do relay nao encontrado: ") .. exe)
     return false
   end
   if is_windows then
@@ -176,7 +186,7 @@ local function launch()
     -- 0 = SW_HIDE: the relay runs in the background, logs go to obs-dynamic-delay.log
     local r = shell32.ShellExecuteA(nil, "open", exe, '"' .. config_path() .. '"', wd, 0)
     if tonumber(ffi.cast("intptr_t", r)) <= 32 then
-      obs.script_log(obs.LOG_WARNING, "falha ao iniciar " .. exe)
+      obs.script_log(obs.LOG_WARNING, L("could not start ", "falha ao iniciar ") .. exe)
       return false
     end
   else
@@ -210,7 +220,7 @@ local function restart_tick()
     launch()
   elseif restart_tries > 15 then
     obs.timer_remove(restart_tick)
-    obs.script_log(obs.LOG_WARNING, "o relay nao fechou para reiniciar")
+    obs.script_log(obs.LOG_WARNING, L("the relay did not close for the restart", "o relay nao fechou para reiniciar"))
   end
 end
 
@@ -263,7 +273,7 @@ end
 
 local function configure_obs()
   if obs.obs_frontend_streaming_active() then
-    report("Pare a live antes de configurar o OBS.")
+    report(L("Stop the stream before configuring OBS.", "Pare a live antes de configurar o OBS."))
     return
   end
   local notes = {}
@@ -278,7 +288,7 @@ local function configure_obs()
     obs.obs_data_release(st)
     obs.obs_data_release(backup)
     send("import\t" .. (info.server or "") .. "\t" .. (info.key or "") .. "\t" .. (info.service or ""))
-    table.insert(notes, "destino e chave importados do OBS")
+    table.insert(notes, L("destination and key imported from OBS", "destino e chave importados do OBS"))
   end
 
   local data = obs.obs_data_create()
@@ -287,22 +297,22 @@ local function configure_obs()
   obs.obs_data_set_bool(data, "use_auth", false)
   set_service("rtmp_custom", data)
   obs.obs_data_release(data)
-  table.insert(notes, "OBS transmite para " .. relay_server())
+  table.insert(notes, L("OBS streams to ", "OBS transmite para ") .. relay_server())
 
   local ok = pcall(function()
     obs.config_set_bool(obs.obs_frontend_get_profile_config(), "Output", "DelayEnable", false)
   end)
-  if ok then table.insert(notes, "Stream Delay nativo desligado") end
-  report("Pronto! " .. table.concat(notes, "; ") .. ".")
+  if ok then table.insert(notes, L("built-in Stream Delay turned off", "Stream Delay nativo desligado")) end
+  report(L("Done! ", "Pronto! ") .. table.concat(notes, "; ") .. ".")
 end
 
 local function restore_obs()
   if obs.obs_frontend_streaming_active() then
-    report("Pare a live antes de restaurar.")
+    report(L("Stop the stream before restoring.", "Pare a live antes de restaurar."))
     return
   end
   if not exists(backup_path()) then
-    report("Nao ha configuracao original salva.")
+    report(L("No original settings were saved.", "Nao ha configuracao original salva."))
     return
   end
   local backup = obs.obs_data_create_from_json_file(backup_path())
@@ -310,9 +320,9 @@ local function restore_obs()
   local st = obs.obs_data_get_obj(backup, "settings")
   if t ~= "" and st ~= nil then
     set_service(t, st)
-    report("Configuracao original de transmissao restaurada.")
+    report(L("Original stream settings restored.", "Configuracao original de transmissao restaurada."))
   else
-    report("O backup da configuracao original esta vazio.")
+    report(L("The backup of the original settings is empty.", "O backup da configuracao original esta vazio."))
   end
   if st ~= nil then obs.obs_data_release(st) end
   obs.obs_data_release(backup)
@@ -345,7 +355,8 @@ local function show_scene(name)
   local src = obs.obs_get_source_by_name(name)
   if src == nil then
     send("scene_failed " .. name)
-    report("A cena de delay \"" .. name .. "\" nao existe; congelei a imagem da live.")
+    report(L("The delay scene \"", "A cena de delay \"") .. name ..
+      L("\" does not exist; the live picture was frozen instead.", "\" nao existe; congelei a imagem da live."))
     return
   end
   previous_scene = program_scene_name()
@@ -393,37 +404,50 @@ local function poll_tick()
     reply = recv_on(poll_sock, 1)
   end
   send_on(poll_sock, "poll " .. (obs_configured() and "1" or "0"))
-  if polls % 10 == 0 then send_scene_list() end
+  if polls % 10 == 0 then
+    send_scene_list()
+    read_ports() -- picks up a language change made in the panel
+  end
   polls = polls + 1
 end
 
 ---------------------------------------------------------------------------
 -- Hotkeys
 ---------------------------------------------------------------------------
+-- Descriptions are resolved at load time, in the configured language.
 local actions = {
-  { id = "dyn_delay_toggle", desc = "Delay dinâmico: ligar/desligar", cmd = function() return "toggle" end },
-  { id = "dyn_delay_on", desc = "Delay dinâmico: ligar", cmd = function() return "on" end },
-  { id = "dyn_delay_off", desc = "Delay dinâmico: desligar (voltar ao vivo)", cmd = function() return "off" end },
-  { id = "dyn_delay_plus", desc = "Delay dinâmico: aumentar", cmd = function() return "add " .. step end },
-  { id = "dyn_delay_minus", desc = "Delay dinâmico: diminuir", cmd = function() return "add -" .. step end },
+  { id = "dyn_delay_toggle", en = "Dynamic Delay: toggle on/off", pt = "Delay dinâmico: ligar/desligar",
+    cmd = function() return "toggle" end },
+  { id = "dyn_delay_on", en = "Dynamic Delay: turn on", pt = "Delay dinâmico: ligar", cmd = function() return "on" end },
+  { id = "dyn_delay_off", en = "Dynamic Delay: turn off (back to live)", pt = "Delay dinâmico: desligar (voltar ao vivo)",
+    cmd = function() return "off" end },
+  { id = "dyn_delay_plus", en = "Dynamic Delay: increase", pt = "Delay dinâmico: aumentar",
+    cmd = function() return "add " .. step end },
+  { id = "dyn_delay_minus", en = "Dynamic Delay: decrease", pt = "Delay dinâmico: diminuir",
+    cmd = function() return "add -" .. step end },
 }
 
 ---------------------------------------------------------------------------
 -- OBS script API
 ---------------------------------------------------------------------------
 function script_description()
-  return [[<h2>Delay dinâmico</h2>
+  read_ports()
+  return L([[<h2>Dynamic Delay</h2>
+<p>Settings live in the <b>Dynamic Delay</b> panel (<i>Docks</i> menu).
+Hotkeys in <i>Settings &gt; Hotkeys &gt; Dynamic Delay</i>.</p>]], [[<h2>Delay dinâmico</h2>
 <p>A configuração fica no painel <b>Delay dinâmico</b> (menu <i>Docks</i>).
-Atalhos em <i>Configurações &gt; Atalhos &gt; Delay dinâmico</i>.</p>]]
+Atalhos em <i>Configurações &gt; Atalhos &gt; Delay dinâmico</i>.</p>]])
 end
 
 local function refresh_status()
   local r = request("status", 400)
   if r == nil then
-    r = exists(exe_path()) and "Relay fechado." or ("Relay nao encontrado: " .. exe_path())
+    r = exists(exe_path()) and L("Relay closed.", "Relay fechado.")
+      or (L("Relay not found: ", "Relay nao encontrado: ") .. exe_path())
   end
   if not obs_configured() then
-    r = r .. "\nOBS AINDA NAO configurado: clique em \"Configurar o OBS automaticamente\"."
+    r = r .. L("\nOBS NOT configured yet: click \"Configure OBS automatically\".",
+      "\nOBS AINDA NAO configurado: clique em \"Configurar o OBS automaticamente\".")
   end
   obs.obs_data_set_string(S, "status_info", r)
 end
@@ -432,27 +456,30 @@ function script_properties()
   if S then refresh_status() end
   local p = obs.obs_properties_create()
   obs.obs_properties_add_text(p, "status_info", "Status", obs.OBS_TEXT_INFO)
-  obs.obs_properties_add_button(p, "btn_refresh", "Atualizar status", function() refresh_status(); return true end)
-  obs.obs_properties_add_button(p, "btn_toggle", "Ligar/desligar delay agora", function()
+  obs.obs_properties_add_button(p, "btn_refresh", L("Refresh status", "Atualizar status"), function()
+    refresh_status(); return true
+  end)
+  obs.obs_properties_add_button(p, "btn_toggle", L("Toggle delay now", "Ligar/desligar delay agora"), function()
     send("toggle"); refresh_status(); return true
   end)
-  obs.obs_properties_add_button(p, "btn_configure", "Configurar o OBS automaticamente", function()
+  obs.obs_properties_add_button(p, "btn_configure", L("Configure OBS automatically", "Configurar o OBS automaticamente"), function()
     configure_obs(); return true
   end)
-  obs.obs_properties_add_button(p, "btn_restore", "Restaurar configuração original do OBS", function()
+  obs.obs_properties_add_button(p, "btn_restore", L("Restore original OBS settings", "Restaurar configuração original do OBS"), function()
     restore_obs(); return true
   end)
-  obs.obs_properties_add_button(p, "btn_panel", "Abrir painel no navegador", function()
+  obs.obs_properties_add_button(p, "btn_panel", L("Open panel in the browser", "Abrir painel no navegador"), function()
     open_target("http://127.0.0.1:" .. ports.http .. "/"); return false
   end)
-  obs.obs_properties_add_int(p, "step", "Passo do aumentar/diminuir (s)", 1, 120, 1)
-  obs.obs_properties_add_bool(p, "manage_relay", "Abrir e fechar o relay junto com o OBS")
-  obs.obs_properties_add_button(p, "btn_restart", "Reiniciar relay", function()
-    if not restart_relay() then obs.obs_data_set_string(S, "status_info", "Nao da para reiniciar durante a live.") end
+  obs.obs_properties_add_int(p, "step", L("Increase/decrease step (s)", "Passo do aumentar/diminuir (s)"), 1, 120, 1)
+  obs.obs_properties_add_bool(p, "manage_relay", L("Start and close the relay with OBS", "Abrir e fechar o relay junto com o OBS"))
+  obs.obs_properties_add_button(p, "btn_restart", L("Restart relay", "Reiniciar relay"), function()
+    if not restart_relay() then obs.obs_data_set_string(S, "status_info", L("Cannot restart during a stream.", "Nao da para reiniciar durante a live.")) end
     return true
   end)
-  obs.obs_properties_add_path(p, "relay_path", "Executável do relay (vazio = mesma pasta do script)",
-    obs.OBS_PATH_FILE, "Executável (*.exe);;Todos (*.*)", nil)
+  obs.obs_properties_add_path(p, "relay_path",
+    L("Relay executable (empty = same folder as the script)", "Executável do relay (vazio = mesma pasta do script)"),
+    obs.OBS_PATH_FILE, L("Executable (*.exe);;All (*.*)", "Executável (*.exe);;Todos (*.*)"), nil)
   return p
 end
 
@@ -471,7 +498,7 @@ end
 local function on_event(event)
   if event == obs.OBS_FRONTEND_EVENT_STREAMING_STARTING and manage_relay and obs_configured() then
     if not ensure_relay(true) then
-      obs.script_log(obs.LOG_WARNING, "relay nao iniciou; a live vai falhar ao conectar")
+      obs.script_log(obs.LOG_WARNING, L("relay did not start; the stream will fail to connect", "relay nao iniciou; a live vai falhar ao conectar"))
     end
   end
 end
@@ -480,7 +507,7 @@ function script_load(s)
   script_update(s)
   read_ports()
   for _, a in ipairs(actions) do
-    a.hk = obs.obs_hotkey_register_frontend(a.id, a.desc, function(pressed)
+    a.hk = obs.obs_hotkey_register_frontend(a.id, L(a.en, a.pt), function(pressed)
       if pressed then send(a.cmd()) end
     end)
     local arr = obs.obs_data_get_array(s, a.id)

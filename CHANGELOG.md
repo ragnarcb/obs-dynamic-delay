@@ -1,30 +1,43 @@
 # Changelog
 
-Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); versões seguem [SemVer](https://semver.org/lang/pt-BR/).
+Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
+
+## [0.3.0] - 2026-09-23
+
+### Added
+
+- English and Portuguese (Brazil) for everything the user sees: panel, installer, OBS script (hotkeys, buttons, messages) and relay status.
+- Language picker in the panel settings; the `language` setting is stored in `config.toml`.
+- Two installers per release: `Dynamic-Delay-Installer.exe` (English) and `Instalar-Delay-Dinamico.exe` (Portuguese).
+
+### Changed
+
+- Repository documentation in English (`README.md`), with a Portuguese version (`README.pt-BR.md`).
+- The OBS dock is named "Dynamic Delay" in English and "Delay dinâmico" in Portuguese; reinstalling in another language replaces it.
 
 ## [0.2.0] - 2026-09-23
 
-### Adicionado
+### Added
 
-- Escolha do que o público vê ao ligar ou aumentar o delay (painel > Configuração):
-  - **Rebobinar** (novo padrão): a live volta no tempo na hora e reapresenta os últimos segundos, sem congelar.
-  - **Mostrar uma cena do OBS**: o script troca para a cena escolhida, e o quadro dela fica na tela enquanto o delay enche; depois volta para a cena anterior (também no modo estúdio).
-  - **Congelar a imagem**: comportamento da 0.1.0.
-- O painel lista as cenas do OBS.
+- Choice of what viewers see when the delay is switched on or increased (panel > Settings):
+  - **Rewind** (new default): the stream jumps back instantly and replays the last seconds, with no freeze.
+  - **Show an OBS scene**: the script switches to the chosen scene, its frame stays on screen while the delay builds up, then OBS switches back to the previous scene (studio mode included).
+  - **Freeze the picture**: the 0.1.0 behaviour.
+- The panel lists the OBS scenes.
 
 ## [0.1.0] - 2026-09-23
 
-Primeira versão.
+First release.
 
-### Adicionado
+### Added
 
-- Relay RTMP local entre o OBS e a plataforma, com delay que liga, desliga e muda de tamanho durante a live.
-  - Aumentar o delay congela no próximo quadro-chave, com áudio AAC mudo, até o buffer encher.
-  - Diminuir corta no quadro-chave mais recente.
-  - Timestamps contínuos, inclusive com B-frames; suporte a H.264, HEVC/AV1 (Enhanced RTMP) e AAC.
-- Envio para RTMP e RTMPS (Twitch, YouTube, Kick e outros), com reconexão automática.
-- Painel "Delay dinâmico" como dock no OBS: estado, atraso real, presets, configuração de destino e chave.
-- Script Lua para o OBS: atalhos, abre e fecha o relay junto com o OBS, configura e restaura a transmissão.
-- Instalador com dois cliques: importa destino e chave, configura o OBS, desliga o delay nativo, adiciona script e dock, com backups; opção de desinstalar.
-- API HTTP (Stream Deck, bots) e comandos UDP.
-- Página de relógio (`/clock`) para medir o delay na live.
+- Local RTMP relay between OBS and the platform, with a delay that turns on, off and changes length while live.
+  - Growing the delay freezes on the next keyframe, with muted AAC audio, until the buffer is full.
+  - Shrinking cuts at the most recent keyframe.
+  - Continuous timestamps, B-frames included; H.264, HEVC/AV1 (Enhanced RTMP) and AAC.
+- RTMP and RTMPS output (Twitch, YouTube, Kick and others) with automatic reconnection.
+- "Dynamic Delay" panel as an OBS dock: state, real delay, presets, destination and key settings.
+- Lua script for OBS: hotkeys, starts and closes the relay with OBS, configures and restores the stream settings.
+- Two-click installer: imports destination and key, configures OBS, turns off the built-in delay, adds script and dock, with backups; uninstall option.
+- HTTP API (Stream Deck, bots) and UDP commands.
+- Clock page (`/clock`) to measure the delay on stream.
