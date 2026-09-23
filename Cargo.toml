@@ -5,7 +5,7 @@ edition = "2024"
 description = "Dynamic stream delay for OBS: switch the delay on and off while live"
 readme = "README.md"
 publish = false
-license = "MIT"
+license-file = "LICENSE"
 authors = ["ragnarcb"]
 repository = "https://github.com/ragnarcb/obs-dynamic-delay"
 
