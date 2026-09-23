@@ -3,41 +3,10 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
-pub const DEFAULT_CONFIG: &str = r#"# obs-dynamic-delay configuration
+pub const TWITCH_URL: &str = "rtmp://live.twitch.tv/app";
+pub const YOUTUBE_URL: &str = "rtmp://a.rtmp.youtube.com/live2";
 
-# Address OBS streams to. In OBS: Settings > Stream > Service "Custom...",
-# Server "rtmp://127.0.0.1:1935/live". The stream key can be your real key.
-listen = "127.0.0.1:1935"
-
-# Real destination. Examples:
-#   Twitch:  rtmp://live.twitch.tv/app
-#   YouTube: rtmp://a.rtmp.youtube.com/live2
-#   Kick:    the rtmps://... "Stream URL" shown in the Kick dashboard
-upstream_url = "rtmp://live.twitch.tv/app"
-
-# Leave empty to use the stream key typed in OBS.
-stream_key = ""
-
-# Delay applied when the delay is switched on (seconds).
-delay_seconds = 30
-
-# Start every stream with the delay already on.
-start_enabled = false
-
-# Upper limit for the delay. Memory use is roughly bitrate x delay.
-max_delay_seconds = 600
-
-# Frame rate of the frozen image shown while the delay builds up.
-filler_fps = 2
-
-# Control panel / API (add it to OBS as a Custom Browser Dock).
-http_listen = "127.0.0.1:8787"
-
-# UDP control port used by the OBS hotkey script.
-udp_listen = "127.0.0.1:8788"
-"#;
-
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Config {
     pub listen: String,
@@ -55,7 +24,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             listen: "127.0.0.1:1935".into(),
-            upstream_url: "rtmp://live.twitch.tv/app".into(),
+            upstream_url: TWITCH_URL.into(),
             stream_key: String::new(),
             delay_seconds: 30,
             start_enabled: false,
@@ -67,13 +36,15 @@ impl Default for Config {
     }
 }
 
+fn q(s: &str) -> String {
+    toml::Value::String(s.to_string()).to_string()
+}
+
 impl Config {
     /// Loads the config, writing the default one first if the file does not exist.
     pub fn load_or_create(path: &Path) -> Result<Config> {
         if !path.exists() {
-            std::fs::write(path, DEFAULT_CONFIG)
-                .with_context(|| format!("writing default config to {}", path.display()))?;
-            log::info!("created default config at {}", path.display());
+            Config::default().save(path)?;
         }
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("reading {}", path.display()))?;
@@ -83,14 +54,97 @@ impl Config {
         cfg.delay_seconds = cfg.delay_seconds.min(cfg.max_delay_seconds);
         Ok(cfg)
     }
+
+    pub fn save(&self, path: &Path) -> Result<()> {
+        std::fs::write(path, self.to_toml())
+            .with_context(|| format!("writing {}", path.display()))
+    }
+
+    pub fn to_toml(&self) -> String {
+        format!(
+            r#"# obs-dynamic-delay configuration
+# Normally edited from the "Delay dinamico" panel inside OBS.
+
+# Address OBS streams to (OBS: Settings > Stream > Custom, rtmp://127.0.0.1:1935/live).
+listen = {listen}
+
+# Real destination. Twitch: {TWITCH_URL}  YouTube: {YOUTUBE_URL}
+# Kick and others: the rtmp:// or rtmps:// URL shown in the platform dashboard.
+upstream_url = {url}
+
+# Leave empty to use the stream key typed in OBS.
+stream_key = {key}
+
+# Delay applied when the delay is switched on (seconds).
+delay_seconds = {delay}
+
+# Start every stream with the delay already on.
+start_enabled = {start}
+
+# Upper limit for the delay. Memory use is roughly bitrate x delay.
+max_delay_seconds = {max}
+
+# Frame rate of the frozen image shown while the delay builds up.
+filler_fps = {fps}
+
+# Control panel / API.
+http_listen = {http}
+
+# UDP control port used by the OBS script.
+udp_listen = {udp}
+"#,
+            listen = q(&self.listen),
+            url = q(&self.upstream_url),
+            key = q(&self.stream_key),
+            delay = self.delay_seconds,
+            start = self.start_enabled,
+            max = self.max_delay_seconds,
+            fps = self.filler_fps,
+            http = q(&self.http_listen),
+            udp = q(&self.udp_listen),
+        )
+    }
+}
+
+/// Maps the stream settings found in OBS to a destination URL.
+pub fn destination_from_obs(server: &str, service: &str) -> Option<String> {
+    if server.starts_with("rtmp://") || server.starts_with("rtmps://") {
+        if server.contains("127.0.0.1") || server.contains("localhost") {
+            return None; // already pointing to a local relay
+        }
+        return Some(server.to_string());
+    }
+    let service = service.to_ascii_lowercase();
+    if service.contains("twitch") {
+        Some(TWITCH_URL.into())
+    } else if service.contains("youtube") {
+        Some(YOUTUBE_URL.into())
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
-    fn default_file_matches_defaults() {
-        let parsed: super::Config = toml::from_str(super::DEFAULT_CONFIG).unwrap();
-        let d = super::Config::default();
-        assert_eq!(format!("{parsed:?}"), format!("{d:?}"));
+    fn roundtrips_through_toml() {
+        let mut c = Config::default();
+        c.stream_key = r#"a"b\c"#.into();
+        c.start_enabled = true;
+        let parsed: Config = toml::from_str(&c.to_toml()).unwrap();
+        assert_eq!(parsed, c);
+    }
+
+    #[test]
+    fn maps_obs_destinations() {
+        assert_eq!(destination_from_obs("auto", "Twitch").as_deref(), Some(TWITCH_URL));
+        assert_eq!(
+            destination_from_obs("rtmps://a.rtmps.youtube.com:443/live2", "YouTube - RTMPS").as_deref(),
+            Some("rtmps://a.rtmps.youtube.com:443/live2")
+        );
+        assert_eq!(destination_from_obs("rtmp://127.0.0.1:1935/live", ""), None);
+        assert_eq!(destination_from_obs("", "Some service"), None);
     }
 }

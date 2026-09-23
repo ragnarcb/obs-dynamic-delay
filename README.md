@@ -23,37 +23,38 @@ Nada é re-encodado: o relay só guarda e reenvia os pacotes que o OBS já codif
 
 ## Instalação
 
-Tudo é feito de dentro do OBS, sem editar arquivo nenhum.
+1. Baixe o `obs-dynamic-delay.exe` (aba Releases) ou compile com `cargo build --release`.
+2. **Dê dois cliques nele.** O instalador:
+   - espera o OBS fechar (o OBS regrava a configuração ao sair);
+   - copia o relay e o script para `%APPDATA%\obs-dynamic-delay`;
+   - importa o destino e a chave que estavam no OBS (ou pergunta, se não achar);
+   - faz o OBS transmitir pelo relay (`rtmp://127.0.0.1:1935/live`) e desliga o Stream Delay nativo;
+   - adiciona o script e o painel **Delay dinâmico** na tela do OBS;
+   - guarda backup de tudo que alterou (`.dd-backup` e `obs-service-backup.json`).
+3. Abra o OBS. O painel aparece como um dock (menu **Docks > Delay dinâmico**); arraste para onde quiser, por exemplo ao lado de "Controles".
+4. Em **Configurações > Atalhos**, procure "Delay dinâmico" e defina as teclas.
 
-1. Baixe o zip da aba Releases (ou rode `cargo build --release` e junte `target/release/obs-dynamic-delay.exe` com `obs/obs-dynamic-delay.lua` numa pasta). Deixe a pasta num lugar fixo.
-2. No OBS: **Ferramentas > Scripts > +** e escolha `obs-dynamic-delay.lua` dessa pasta. Não precisa instalar Python, o OBS já traz o LuaJIT.
-3. Nas propriedades do script, clique em **Configurar o OBS automaticamente**. Ele:
-   - importa a plataforma e a chave que já estavam configuradas no OBS;
-   - troca o destino do OBS para o relay local (`rtmp://127.0.0.1:1935/live`);
-   - desliga o Stream Delay nativo do OBS;
-   - guarda a configuração original (o botão **Restaurar configuração original do OBS** desfaz tudo).
-4. **Configurações > Atalhos**: procure "Delay dinâmico" e defina as teclas (ligar/desligar, ligar, desligar, aumentar, diminuir).
+Para atualizar ou desinstalar, dê dois cliques no exe de novo (ou `obs-dynamic-delay.exe --install` / `--uninstall`). A desinstalação remove o script e o painel e devolve a configuração de transmissão original.
 
-O relay abre escondido quando o OBS abre (e também ao clicar em "Iniciar transmissão", se estiver fechado) e fecha junto com o OBS, depois de terminar de enviar o trecho atrasado. O log fica em `obs-dynamic-delay.log`, na mesma pasta.
+### O painel "Delay dinâmico"
 
-### Propriedades do script
+- **Estado e atraso real** para o público (AO VIVO / AJUSTANDO / DELAY).
+- **Ligar/desligar**, presets (10, 30, 60, 120 s) e ±5 s.
+- **Configuração:** plataforma (Twitch, YouTube, Kick, outra), URL, chave, "começar toda live com delay".
+- **Configurar o OBS automaticamente** (aparece se o OBS não estiver apontando para o relay) e **Restaurar a configuração original**.
+- Status do OBS e da conexão com a plataforma, com a mensagem de erro quando houver.
 
-| Grupo | O que tem |
-|---|---|
-| Status | estado do delay, atraso atual, conexão com a plataforma, se o OBS está configurado; botões "Atualizar status" e "Ligar/desligar delay agora" |
-| Destino da live | plataforma (Twitch, YouTube, Kick, outra), URL, chave, configurar/restaurar o OBS |
-| Delay | segundos (muda na hora, até durante a live), começar toda live com delay, passo do aumentar/diminuir, abrir o painel no navegador |
-| Avançado | iniciar/fechar o relay junto com o OBS, reiniciar relay, caminho do executável, portas |
+O relay abre escondido junto com o OBS (e também ao clicar em "Iniciar transmissão", se estiver fechado) e fecha junto com o OBS, depois de terminar de enviar o trecho atrasado. O log fica em `obs-dynamic-delay.log`, na pasta de instalação. Mudanças de destino ou chave durante a live valem a partir da próxima live.
 
-Mudanças de destino, chave ou portas feitas durante a live valem a partir da próxima live.
+### Como as peças conversam
 
-### Dock (opcional)
+- **Painel:** página local (`dock.html`) que fala com a API HTTP do relay.
+- **Script Lua do OBS:** atalhos, abre e fecha o relay, e executa dentro do OBS o que o painel pede (trocar a configuração de transmissão), consultando o relay via UDP a cada segundo.
+- **Relay:** guarda a configuração em `config.toml`.
 
-**Docks > Docks de navegador personalizados**: nome "Delay", URL `http://127.0.0.1:8787/`. Mostra AO VIVO / AJUSTANDO / DELAY e o atraso em segundos, com botões.
+### Sem o instalador
 
-### Sem o script
-
-O relay também roda sozinho: `obs-dynamic-delay.exe [config.toml]`. Se o arquivo não existir, ele cria um com os comentários explicando cada opção.
+`obs-dynamic-delay.exe caminho\config.toml` roda só o relay (se o arquivo não existir, ele cria um comentado). O script `obs/obs-dynamic-delay.lua` pode ser adicionado à mão em Ferramentas > Scripts, com o exe na mesma pasta.
 
 ## API
 
@@ -67,11 +68,13 @@ Aceita GET e POST, então funciona direto no Stream Deck (ação "Website"), no 
 | `/api/add/{s}` | soma (aceita negativo: `/api/add/-5`) |
 | `/api/status` | estado em JSON |
 
-A porta UDP (`8788`) aceita os mesmos comandos em texto: `toggle`, `on`, `off`, `set 30`, `add -5`, e também `status` (responde um resumo), `quit` (fecha depois que não houver live) e `stay` (cancela o `quit`).
+Também há `GET/POST /api/config` (destino, chave, delay) e `POST /api/obs/configure` / `POST /api/obs/restore`.
+
+A porta UDP (`8788`) aceita os mesmos comandos em texto: `toggle`, `on`, `off`, `set 30`, `add -5`, e também `status` (responde um resumo), `quit` (fecha depois que não houver live), `stay` (cancela o `quit`) e os comandos da ponte com o script (`poll`, `import`, `result`).
 
 ## Por que Rust e não Python
 
-O trabalho pesado é um servidor + cliente RTMP que precisa segurar minutos de vídeo em memória e reenviar tudo no tempo certo, por horas, sem engasgar. Rust entrega isso num único `.exe` sem dependências, com uso de CPU desprezível e sem pausas de GC. Um script Python dentro do OBS não consegue interceptar o stream codificado, e exigiria que cada streamer configurasse um interpretador Python compatível com a versão do OBS. A parte que precisa rodar dentro do OBS (os atalhos) ficou em Lua, que já vem embutido no OBS.
+O trabalho pesado é um servidor + cliente RTMP que precisa segurar minutos de vídeo em memória e reenviar tudo no tempo certo, por horas, sem engasgar. Rust entrega isso num único `.exe` sem dependências, com uso de CPU desprezível e sem pausas de GC. Um script Python dentro do OBS não consegue interceptar o stream codificado, e exigiria que cada streamer configurasse um interpretador Python compatível com a versão do OBS. A parte que precisa rodar dentro do OBS (atalhos e ajustes nas configurações do OBS) ficou em Lua, que já vem embutido no OBS.
 
 ## Limitações
 
@@ -93,4 +96,5 @@ Estrutura:
 - `src/ingest.rs`: servidor RTMP que recebe do OBS
 - `src/upstream.rs`: cliente RTMP/RTMPS que publica na plataforma (reconecta sozinho)
 - `src/control.rs` + `src/panel.html`: API HTTP, painel e porta UDP
+- `src/installer.rs`: instalador (script, dock, configuração de transmissão do OBS)
 - `obs/obs-dynamic-delay.lua`: script do OBS (configuração, auto-configuração do OBS, atalhos, gerenciamento do relay)

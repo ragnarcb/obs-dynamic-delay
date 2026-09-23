@@ -1,6 +1,6 @@
 //! RTMP(S) client that publishes the delayed stream to the real platform.
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
@@ -19,7 +19,7 @@ use url::Url;
 use crate::engine::OutPacket;
 use crate::flv::{self, Kind};
 use crate::rtmp_io::{self, Io};
-use crate::status::{Status, UpstreamState};
+use crate::status::{Shared, UpstreamState};
 
 pub enum UpMsg {
     Start { key: String },
@@ -57,9 +57,9 @@ enum Ended {
 
 type Conn = (ClientSession, ReadHalf<Box<dyn Io>>, WriteHalf<Box<dyn Io>>);
 
-pub async fn run(url: String, fixed_key: String, mut rx: UnboundedReceiver<UpMsg>, status: Arc<Mutex<Status>>) {
+pub async fn run(shared: Arc<Shared>, mut rx: UnboundedReceiver<UpMsg>) {
     let set_state = |s: UpstreamState, err: Option<String>| {
-        let mut st = status.lock().unwrap();
+        let mut st = shared.status.lock().unwrap();
         st.upstream = s;
         if err.is_some() {
             st.upstream_error = err;
@@ -77,7 +77,11 @@ pub async fn run(url: String, fixed_key: String, mut rx: UnboundedReceiver<UpMsg
                 None => return,
             }
         };
-        let key = if fixed_key.is_empty() { key } else { fixed_key.clone() };
+        // Destination and key are read at every stream start, so panel edits apply to the next stream.
+        let (url, key) = {
+            let c = shared.config.lock().unwrap();
+            (c.upstream_url.clone(), if c.stream_key.is_empty() { key } else { c.stream_key.clone() })
+        };
 
         'session: loop {
             set_state(UpstreamState::Connecting, None);
@@ -85,7 +89,7 @@ pub async fn run(url: String, fixed_key: String, mut rx: UnboundedReceiver<UpMsg
                 Ok(conn) => {
                     log::info!("[upstream] publishing to {url}");
                     set_state(UpstreamState::Connected, None);
-                    status.lock().unwrap().upstream_error = None;
+                    shared.status.lock().unwrap().upstream_error = None;
                     match pump(conn, &mut rx, &mut cache).await {
                         Ok(Ended::Stopped) => break 'session,
                         Ok(Ended::ChannelClosed) => return,

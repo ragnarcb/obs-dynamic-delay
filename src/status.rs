@@ -1,6 +1,69 @@
+use std::collections::VecDeque;
+use std::path::PathBuf;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
 use serde::Serialize;
 
+use crate::config::Config;
 use crate::engine::{EngineStatus, Phase};
+
+/// State shared between the engine, the upstream, the HTTP API and the UDP port.
+pub struct Shared {
+    pub status: Mutex<Status>,
+    pub config: Mutex<Config>,
+    pub config_path: PathBuf,
+    pub bridge: Mutex<Bridge>,
+}
+
+impl Shared {
+    pub fn save_config(&self) {
+        let cfg = self.config.lock().unwrap().clone();
+        if let Err(e) = cfg.save(&self.config_path) {
+            log::warn!("{e:#}");
+        }
+    }
+}
+
+/// Actions the panel asks the OBS script to perform inside OBS.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ObsAction {
+    Configure,
+    Restore,
+}
+
+/// Link with the OBS script, which polls the relay over UDP.
+#[derive(Default)]
+pub struct Bridge {
+    pub pending: VecDeque<ObsAction>,
+    pub last_poll: Option<Instant>,
+    pub obs_configured: bool,
+    pub message: Option<(Instant, String)>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ObsInfo {
+    /// The OBS script is running and talking to the relay.
+    pub script: bool,
+    /// OBS streams to this relay.
+    pub configured: bool,
+    pub message: Option<String>,
+}
+
+impl Bridge {
+    pub fn info(&self) -> ObsInfo {
+        let script = self.last_poll.is_some_and(|t| t.elapsed() < Duration::from_secs(4));
+        ObsInfo {
+            script,
+            configured: script && self.obs_configured,
+            message: self
+                .message
+                .as_ref()
+                .filter(|(t, _)| t.elapsed() < Duration::from_secs(60))
+                .map(|(_, m)| m.clone()),
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]

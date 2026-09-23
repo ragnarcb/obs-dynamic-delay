@@ -6,77 +6,175 @@
 <title>Delay Dinâmico</title>
 <style>
   :root {
-    --bg: #1e1f24; --panel: #2a2c33; --line: #3a3d46; --text: #e8e9ed; --muted: #9a9dab;
-    --live: #3ecf6e; --delay: #f0a93b; --busy: #5aa7ff; --bad: #ff5d5d;
+    --bg: #1e1f24; --panel: #272930; --line: #3a3d46; --text: #e8e9ed; --muted: #9a9dab;
+    --live: #3ecf6e; --delay: #f0a93b; --busy: #5aa7ff; --bad: #ff5d5d; --input: #1b1c21;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, "Segoe UI", sans-serif; }
-  main { max-width: 420px; margin: 0 auto; padding: 12px; display: grid; gap: 10px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
-  .state { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .pill { font-weight: 700; letter-spacing: .04em; padding: 6px 10px; border-radius: 999px; font-size: 13px; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, "Segoe UI", sans-serif; }
+  main { padding: 8px; display: grid; gap: 8px; max-width: 480px; margin: 0 auto; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .pill { font-weight: 700; letter-spacing: .04em; padding: 4px 9px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
   .pill.live { background: rgba(62,207,110,.18); color: var(--live); }
   .pill.delayed { background: rgba(240,169,59,.18); color: var(--delay); }
   .pill.busy { background: rgba(90,167,255,.18); color: var(--busy); }
   .pill.off { background: #33353d; color: var(--muted); }
-  .big { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .big { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; margin-top: 4px; }
   .muted { color: var(--muted); font-size: 12px; }
-  button { font: inherit; color: var(--text); background: #353842; border: 1px solid var(--line); border-radius: 8px; padding: 9px 0; cursor: pointer; }
+  button { font: inherit; color: var(--text); background: #353842; border: 1px solid var(--line); border-radius: 6px; padding: 7px 0; cursor: pointer; }
   button:hover { background: #3f434e; }
-  button.on { background: var(--delay); color: #1b1300; border-color: transparent; font-weight: 700; }
-  #toggle { width: 100%; padding: 14px; font-size: 16px; font-weight: 700; }
-  .row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px; }
-  .row.two { grid-template-columns: 1fr 1fr; }
-  .dots { display: grid; gap: 4px; }
+  button.primary { background: var(--busy); color: #06121f; border-color: transparent; font-weight: 700; }
+  button.on { background: var(--delay); color: #1b1300; border-color: transparent; }
+  #toggle { width: 100%; padding: 11px; font-size: 15px; font-weight: 700; margin-top: 8px; }
+  .row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin-top: 6px; }
   .dot::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--muted); }
   .dot.ok::before { background: var(--live); } .dot.warn::before { background: var(--delay); } .dot.bad::before { background: var(--bad); }
+  .dots { display: grid; gap: 3px; }
   .err { color: var(--bad); font-size: 12px; word-break: break-word; }
+  .note { color: var(--busy); font-size: 12px; word-break: break-word; }
+  .warn-box { border-color: var(--delay); background: rgba(240,169,59,.08); }
+  .hidden { display: none !important; }
+  details > summary { cursor: pointer; font-weight: 600; list-style: none; }
+  details > summary::before { content: "▸ "; color: var(--muted); }
+  details[open] > summary::before { content: "▾ "; }
+  label { display: grid; gap: 3px; margin-top: 8px; color: var(--muted); font-size: 12px; }
+  label.check { display: flex; align-items: center; gap: 6px; color: var(--text); }
+  input[type=text], input[type=password], select {
+    font: inherit; color: var(--text); background: var(--input); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 8px; width: 100%;
+  }
+  .actions { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 10px; }
+  a { color: var(--muted); font-size: 12px; cursor: pointer; }
 </style>
 </head>
 <body>
 <main>
   <section class="card">
-    <div class="state">
+    <div class="top">
       <span id="pill" class="pill off">SEM LIVE</span>
       <span class="muted" id="phase"></span>
     </div>
     <div class="big" id="current">0,0 s</div>
-    <div class="muted">atraso atual para o público &middot; alvo <span id="target">0</span> s</div>
+    <div class="muted">atraso para o público &middot; configurado <b id="delay">30</b> s</div>
+    <button id="toggle">Ativar delay</button>
+    <div class="row">
+      <button data-set="10">10</button><button data-set="30">30</button><button data-set="60">60</button>
+      <button data-set="120">120</button><button data-add="-5">&minus;5</button><button data-add="5">+5</button>
+    </div>
   </section>
 
-  <section class="card">
-    <button id="toggle">Ativar delay</button>
-    <div class="muted" style="margin-top:8px">Delay configurado: <b id="delay">30</b> s</div>
-    <div class="row">
-      <button data-set="10">10s</button><button data-set="30">30s</button>
-      <button data-set="60">60s</button><button data-set="120">120s</button>
-    </div>
-    <div class="row two">
-      <button data-add="-5">&minus; 5s</button><button data-add="5">+ 5s</button>
-    </div>
+  <section class="card warn-box hidden" id="obsBox">
+    <div id="obsText"></div>
+    <div class="actions"><button class="primary" id="configureObs">Configurar o OBS automaticamente</button></div>
+  </section>
+
+  <section class="card warn-box hidden" id="keyBox">
+    Falta a <b>chave de transmissão</b>. Preencha em Configuração abaixo.
   </section>
 
   <section class="card dots">
     <span class="dot" id="obs">OBS</span>
     <span class="dot" id="up">Plataforma</span>
     <span class="err" id="err"></span>
+    <span class="note" id="msg"></span>
   </section>
+
+  <details class="card" id="cfgBox">
+    <summary>Configuração</summary>
+    <label>Plataforma
+      <select id="platform">
+        <option value="twitch">Twitch</option>
+        <option value="youtube">YouTube</option>
+        <option value="kick">Kick</option>
+        <option value="custom">Outra</option>
+      </select>
+    </label>
+    <label id="urlRow">URL do servidor (copie do painel da plataforma)
+      <input type="text" id="url" placeholder="rtmps://...">
+    </label>
+    <label>Chave de transmissão
+      <input type="password" id="key" autocomplete="off">
+    </label>
+    <label class="check"><input type="checkbox" id="startEnabled"> Começar toda live já com delay</label>
+    <div class="actions">
+      <button class="primary" id="save">Salvar</button>
+      <span class="note" id="saveMsg"></span>
+      <a id="restoreObs">Restaurar a configuração original de transmissão do OBS</a>
+    </div>
+  </details>
 </main>
 <script>
-  const $ = (id) => document.getElementById(id);
+  const API = window.DD_API || "";
+  const URLS = { twitch: "rtmp://live.twitch.tv/app", youtube: "rtmp://a.rtmp.youtube.com/live2" };
   const PHASES = {
     live: "ao vivo", delayed: "com delay", growing: "aguardando keyframe",
     filling: "congelado, aplicando delay", shrinking: "cortando para o vivo",
   };
   const UP = { idle: "parada", connecting: "conectando...", connected: "conectada", reconnecting: "reconectando..." };
-  const api = (path) => fetch(path, { method: "POST" }).then(refresh).catch(() => {});
+  const $ = (id) => document.getElementById(id);
+  const post = (path, body) =>
+    fetch(API + path, {
+      method: "POST",
+      headers: body ? { "Content-Type": "application/json" } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    }).then((r) => r.json());
 
-  $("toggle").onclick = () => api("/api/toggle");
-  document.querySelectorAll("[data-set]").forEach((b) => (b.onclick = () => api("/api/delay/" + b.dataset.set)));
-  document.querySelectorAll("[data-add]").forEach((b) => (b.onclick = () => api("/api/add/" + b.dataset.add)));
+  let cfg = null;
+  let delaySeconds = 30;
+
+  $("toggle").onclick = () => post("/api/toggle").then(refresh);
+  document.querySelectorAll("[data-set]").forEach((b) => (b.onclick = () => post("/api/delay/" + b.dataset.set).then(refresh)));
+  document.querySelectorAll("[data-add]").forEach((b) => (b.onclick = () => post("/api/add/" + b.dataset.add).then(refresh)));
+
+  function obsAction(path) {
+    post(path).then((r) => { if (!r.ok) $("msg").textContent = r.error; else $("msg").textContent = "Aplicando no OBS..."; });
+  }
+  $("configureObs").onclick = () => obsAction("/api/obs/configure");
+  // two clicks instead of confirm(): dialogs may be blocked inside OBS docks
+  let restoreArmed = 0;
+  $("restoreObs").onclick = () => {
+    if (Date.now() - restoreArmed < 5000) { restoreArmed = 0; obsAction("/api/obs/restore"); return; }
+    restoreArmed = Date.now();
+    $("saveMsg").textContent = "Clique de novo para confirmar: o OBS volta a transmitir direto, sem o delay dinâmico.";
+  };
+
+  function platformOf(url) {
+    for (const [k, v] of Object.entries(URLS)) if (url === v) return k;
+    return /kick|live-video\.net/.test(url) ? "kick" : "custom";
+  }
+  function showUrlRow() {
+    const p = $("platform").value;
+    $("urlRow").classList.toggle("hidden", p === "twitch" || p === "youtube");
+  }
+  $("platform").onchange = showUrlRow;
+
+  function loadConfig() {
+    return fetch(API + "/api/config").then((r) => r.json()).then((c) => {
+      cfg = c;
+      $("platform").value = platformOf(c.upstream_url);
+      $("url").value = URLS[$("platform").value] ? "" : c.upstream_url;
+      $("key").value = "";
+      $("key").placeholder = c.stream_key_set ? "salva (digite para trocar)" : "cole a chave aqui";
+      $("startEnabled").checked = c.start_enabled;
+      showUrlRow();
+      if (!c.stream_key_set) $("cfgBox").open = true;
+    });
+  }
+
+  $("save").onclick = () => {
+    const p = $("platform").value;
+    const url = URLS[p] || $("url").value.trim();
+    const body = { upstream_url: url, start_enabled: $("startEnabled").checked, delay_seconds: delaySeconds };
+    if ($("key").value.trim()) body.stream_key = $("key").value.trim();
+    post("/api/config", body).then((r) => {
+      $("saveMsg").textContent = !r.ok ? r.error : r.next_stream ? "Salvo. Destino novo vale na próxima live." : "Salvo.";
+      if (r.ok) loadConfig().then(refresh);
+    });
+  };
 
   function render(s) {
     const e = s.engine;
+    delaySeconds = s.delay_seconds;
     const pill = $("pill");
     if (!e) {
       pill.className = "pill off"; pill.textContent = "SEM LIVE"; $("phase").textContent = "";
@@ -88,26 +186,37 @@
       $("phase").textContent = PHASES[e.phase] || e.phase;
       $("current").textContent = (e.current_ms / 1000).toFixed(1).replace(".", ",") + " s";
     }
-    $("target").textContent = e ? Math.round(e.target_ms / 1000) : s.enabled ? s.delay_seconds : 0;
     $("delay").textContent = s.delay_seconds;
     const t = $("toggle");
     t.className = s.enabled ? "on" : "";
-    t.textContent = s.enabled ? "Desativar delay (voltar ao vivo)" : "Ativar delay de " + s.delay_seconds + "s";
-    $("obs").className = "dot " + (s.obs_connected ? "ok" : "");
-    $("obs").textContent = "OBS " + (s.obs_connected ? "transmitindo" : "desconectado");
+    t.textContent = s.enabled ? "Desligar delay (voltar ao vivo)" : "Ligar delay de " + s.delay_seconds + "s";
+
+    const o = s.obs || {};
+    $("obsBox").classList.toggle("hidden", !(o.script && !o.configured));
+    $("obsText").innerHTML = "O OBS ainda não está transmitindo pelo delay dinâmico.";
+    $("keyBox").classList.toggle("hidden", !cfg || cfg.stream_key_set);
+    $("obs").className = "dot " + (s.obs_connected ? "ok" : o.script ? (o.configured ? "" : "warn") : "bad");
+    $("obs").textContent = s.obs_connected ? "OBS transmitindo" : !o.script ? "script do OBS não está rodando" : o.configured ? "OBS pronto" : "OBS não configurado";
     const upCls = { connected: "ok", connecting: "warn", reconnecting: "bad", idle: "" }[s.upstream];
     $("up").className = "dot " + upCls;
     $("up").textContent = "Plataforma " + UP[s.upstream];
     $("err").textContent = s.upstream !== "connected" && s.upstream_error ? s.upstream_error : "";
+    if (o.message) { $("msg").textContent = o.message; if (/Pronto|restaurad/.test(o.message)) loadConfig(); }
   }
 
+  let offline = false;
   function refresh() {
-    return fetch("/api/status").then((r) => r.json()).then(render).catch(() => {
-      $("pill").className = "pill off"; $("pill").textContent = "RELAY OFFLINE";
+    return fetch(API + "/api/status").then((r) => r.json()).then((s) => {
+      if (offline || !cfg) { offline = false; loadConfig(); }
+      render(s);
+    }).catch(() => {
+      offline = true;
+      $("pill").className = "pill off"; $("pill").textContent = "RELAY FECHADO";
+      $("phase").textContent = "abre junto com o OBS";
     });
   }
   refresh();
-  setInterval(refresh, 500);
+  setInterval(refresh, 700);
 </script>
 </body>
 </html>

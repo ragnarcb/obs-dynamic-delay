@@ -3,12 +3,14 @@ mod control;
 mod engine;
 mod flv;
 mod ingest;
+mod installer;
 mod rtmp_io;
 mod status;
 mod upstream;
 
 use std::fs::File;
 use std::io::Write;
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -21,7 +23,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use crate::config::Config;
 use crate::engine::{Engine, TsUnwrapper};
 use crate::flv::Kind;
-use crate::status::{Cmd, Status, UpstreamState};
+use crate::status::{Bridge, Cmd, Shared, Status, UpstreamState};
 use crate::upstream::UpMsg;
 
 pub enum EngineMsg {
@@ -33,7 +35,7 @@ pub enum EngineMsg {
 }
 
 fn config_path() -> PathBuf {
-    if let Some(arg) = std::env::args().nth(1) {
+    if let Some(arg) = std::env::args().nth(1).filter(|a| !a.starts_with("--")) {
         return PathBuf::from(arg);
     }
     std::env::current_exe()
@@ -65,8 +67,19 @@ fn init_logging(config: &Path) {
     b.init();
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
+    let arg = std::env::args().nth(1);
+    match arg.as_deref() {
+        Some("--install") => return installer::wizard(installer::Mode::Install),
+        Some("--uninstall") => return installer::wizard(installer::Mode::Uninstall),
+        // double-clicked in Explorer: show the installer
+        None if std::io::stdin().is_terminal() => return installer::wizard(installer::Mode::Ask),
+        _ => {}
+    }
+    tokio::runtime::Runtime::new()?.block_on(relay())
+}
+
+async fn relay() -> Result<()> {
     let path = config_path();
     let cfg = Config::load_or_create(&path)?;
     // The UDP port doubles as a single-instance lock: bind it before touching the log file.
@@ -82,22 +95,27 @@ async fn main() -> Result<()> {
     init_logging(&path);
     log::info!("config {} | upstream {} | delay {}s", path.display(), cfg.upstream_url, cfg.delay_seconds);
 
-    let status = Arc::new(Mutex::new(Status {
-        enabled: cfg.start_enabled,
-        delay_seconds: cfg.delay_seconds,
-        max_delay_seconds: cfg.max_delay_seconds,
-        obs_connected: false,
-        upstream: UpstreamState::Idle,
-        upstream_error: None,
-        engine: None,
-    }));
+    let shared = Arc::new(Shared {
+        status: Mutex::new(Status {
+            enabled: cfg.start_enabled,
+            delay_seconds: cfg.delay_seconds,
+            max_delay_seconds: cfg.max_delay_seconds,
+            obs_connected: false,
+            upstream: UpstreamState::Idle,
+            upstream_error: None,
+            engine: None,
+        }),
+        config: Mutex::new(cfg.clone()),
+        config_path: path.clone(),
+        bridge: Mutex::new(Bridge::default()),
+    });
     let (tx, rx) = mpsc::unbounded_channel();
     let (up_tx, up_rx) = mpsc::unbounded_channel();
 
-    tokio::spawn(upstream::run(cfg.upstream_url.clone(), cfg.stream_key.clone(), up_rx, status.clone()));
-    tokio::spawn(run_engine(cfg.clone(), rx, up_tx, status.clone()));
-    tokio::spawn(control::serve_udp(udp, tx.clone(), status.clone()));
-    let http = tokio::spawn(control::serve_http(cfg.http_listen.clone(), tx.clone(), status));
+    tokio::spawn(upstream::run(shared.clone(), up_rx));
+    tokio::spawn(run_engine(cfg.clone(), rx, up_tx, shared.clone()));
+    tokio::spawn(control::serve_udp(udp, tx.clone(), shared.clone()));
+    let http = tokio::spawn(control::serve_http(cfg.http_listen.clone(), tx.clone(), shared));
 
     tokio::select! {
         r = ingest::serve(cfg.listen.clone(), tx) => r?,
@@ -111,7 +129,7 @@ async fn run_engine(
     cfg: Config,
     mut rx: UnboundedReceiver<EngineMsg>,
     up_tx: UnboundedSender<UpMsg>,
-    status: Arc<Mutex<Status>>,
+    shared: Arc<Shared>,
 ) {
     let mut engine = Engine::new(cfg.filler_fps);
     let mut unwrapper = TsUnwrapper::new();
@@ -145,6 +163,10 @@ async fn run_engine(
                         publishing = Some(session);
                         if !upstream_active {
                             upstream_active = true;
+                            if shared.config.lock().unwrap().start_enabled {
+                                enabled = true;
+                                engine.set_target(target(enabled, delay));
+                            }
                             let _ = up_tx.send(UpMsg::Start { key });
                         }
                     }
@@ -173,6 +195,15 @@ async fn run_engine(
                             }
                         }
                         log::info!("delay {} ({}s)", if enabled { "ON" } else { "OFF" }, delay);
+                        if matches!(cmd, Cmd::Set(_) | Cmd::Add(_)) {
+                            let changed = {
+                                let mut c = shared.config.lock().unwrap();
+                                std::mem::replace(&mut c.delay_seconds, delay) != delay
+                            };
+                            if changed {
+                                shared.save_config();
+                            }
+                        }
                         engine.set_target(target(enabled, delay));
                     }
                 }
@@ -197,7 +228,7 @@ async fn run_engine(
                 }
                 ticks += 1;
                 if ticks.is_multiple_of(20) {
-                    let mut st = status.lock().unwrap();
+                    let mut st = shared.status.lock().unwrap();
                     st.enabled = enabled;
                     st.delay_seconds = delay;
                     st.obs_connected = publishing.is_some();
