@@ -230,6 +230,7 @@ The plugin was tested against a simulated Stream Deck, not on real hardware yet:
 | The panel does not show up | **Docks > Dynamic Delay**. If it is not there, run the installer again with OBS closed. |
 | "Windows protected your PC" | The exe is not code-signed. Click **More info > Run anyway**. |
 | Chat commands do nothing | Turn **Twitch chat commands** on under **Features and panel** and type the channel name in its block. The log (`obs-dynamic-delay.log`) must show `[chat] joined #yourchannel`. |
+| Viewers only get 720p (or the stream buffers) | OBS was sending more than the platform accepts. With the Twitch/Kick service OBS caps the encoder by itself; with the relay (a custom server) the OBS script now does the same: bitrate cap (Twitch 6000, Kick 8000 kbps) and a keyframe every 2 s, keeping your 1080p. It applies when the script loads and at every stream start, and it is skipped if "Apply service settings" is off (Advanced) or "Ignore streaming service setting recommendations" is on (Simple). The panel warns while live if OBS is above the limit. |
 | Phone cannot open the deck | Same Wi-Fi, allow the connection in the Windows firewall prompt, and use the link from the QR code. |
 | A deck key for scenes or audio does nothing | The OBS script must be running (the deck shows a red dot when the relay is unreachable); check the scene or source name in the editor. |
 | I want to stream without the relay again | **Settings > Restore OBS' original stream settings** (click twice to confirm). |

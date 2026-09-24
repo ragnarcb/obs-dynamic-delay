@@ -6,48 +6,58 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#16171b">
+<meta name="theme-color" content="#0d0e12">
 <title>Dynamic Delay Deck</title>
 <style>
   :root {
-    --bg: #16171b; --key: #26282f; --line: #363943; --text: #eceef3; --muted: #9a9dab;
-    --blue: #5aa7ff; --green: #3ecf6e; --orange: #f0a93b; --red: #ff5d5d; --grey: #7d8190;
+    --bg: #0d0e12; --key: #1a1c22; --key-2: #20232b; --border: rgba(255,255,255,.08); --text: #eceef2; --text-2: #a9adb9; --text-3: #8a8f9c;
+    --blue: #60a5fa; --green: #34d399; --orange: #fbbf24; --red: #f87171; --grey: #a9adb9;
+    --blue-soft: rgba(96,165,250,.2); --green-soft: rgba(52,211,153,.2); --orange-soft: rgba(251,191,36,.2); --red-soft: rgba(248,113,113,.22); --grey-soft: rgba(169,173,185,.16);
+    --font: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.3 system-ui, "Segoe UI", sans-serif;
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font: 14px/1.3 var(--font); -webkit-font-smoothing: antialiased;
     user-select: none; -webkit-user-select: none; touch-action: manipulation; overscroll-behavior: none; }
   body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
-  header { display: flex; align-items: center; gap: 10px; padding: 12px 14px 8px; }
-  .pill { font-weight: 800; letter-spacing: .05em; padding: 5px 11px; border-radius: 999px; font-size: 13px; background: #30323a; color: var(--muted); }
-  .pill.live { background: rgba(62,207,110,.18); color: var(--green); }
-  .pill.delayed { background: rgba(240,169,59,.2); color: var(--orange); }
-  .pill.busy { background: rgba(90,167,255,.2); color: var(--blue); }
-  .pill.bad { background: rgba(255,93,93,.22); color: var(--red); }
-  #secs { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
-  #conn { margin-left: auto; width: 10px; height: 10px; border-radius: 50%; background: var(--red); }
-  #conn.ok { background: var(--green); }
-  #gear { color: var(--muted); text-decoration: none; font-size: 22px; padding: 0 2px 0 8px; }
-  #grid { display: grid; gap: 10px; padding: 8px 14px 18px; }
-  .key { position: relative; aspect-ratio: 1; border-radius: 18px; background: var(--key); border: 2px solid var(--line);
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; overflow: hidden;
-    transition: transform .06s, background .15s, border-color .15s; cursor: pointer; }
-  .key:active, .key.down { transform: scale(.94); }
-  .key .icon { font-size: clamp(26px, 9vw, 44px); line-height: 1; }
-  .key .label { font-size: clamp(11px, 3.4vw, 15px); font-weight: 700; text-align: center; padding: 0 6px; overflow-wrap: anywhere; }
-  .key .sub { font-size: clamp(10px, 3vw, 13px); color: var(--muted); font-variant-numeric: tabular-nums; }
-  .key.lit { border-color: var(--c); background: color-mix(in srgb, var(--c) 26%, var(--key)); box-shadow: 0 0 18px -4px var(--c); }
-  .key.lit .sub { color: var(--text); }
-  .key.flash { animation: flash .35s; }
+  .i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  header { display: flex; align-items: center; gap: 10px; padding: 12px 14px 10px; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; letter-spacing: .06em; padding: 5px 11px 5px 10px; border-radius: 999px;
+    font-size: 12.5px; background: var(--grey-soft); color: var(--text-2); }
+  .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .pill.live { background: var(--green-soft); color: var(--green); }
+  .pill.delayed { background: var(--orange-soft); color: var(--orange); }
+  .pill.busy { background: var(--blue-soft); color: var(--blue); }
+  .pill.bad { background: var(--red-soft); color: var(--red); }
+  #secs { font-size: 24px; font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  #conn { margin-left: auto; width: 9px; height: 9px; border-radius: 50%; background: var(--red); box-shadow: 0 0 0 4px var(--red-soft); }
+  #conn.ok { background: var(--green); box-shadow: 0 0 0 4px var(--green-soft); }
+  #gear { color: var(--text-2); display: grid; place-items: center; width: 44px; height: 44px; margin: -10px -8px -10px 0; border-radius: 12px; }
+  #gear:active { background: var(--key); }
+  #grid { display: grid; gap: 10px; padding: 4px 14px 18px; }
+  .key { position: relative; aspect-ratio: 1; border-radius: 18px; background: linear-gradient(180deg, var(--key-2), var(--key)); border: 1px solid var(--border);
+    box-shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 2px 6px rgba(0,0,0,.35);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; overflow: hidden;
+    transition: transform .08s, background .18s, border-color .18s, box-shadow .18s; cursor: pointer; }
+  .key:active, .key.down { transform: scale(.95); }
+  .key .icon { color: var(--c); display: grid; place-items: center; }
+  .key .icon .i { width: clamp(24px, 8vw, 40px); height: clamp(24px, 8vw, 40px); stroke-width: 1.9; }
+  .key .label { font-size: clamp(11px, 3.4vw, 15px); font-weight: 650; text-align: center; padding: 0 6px; overflow-wrap: anywhere; line-height: 1.2; }
+  .key .sub { font-size: clamp(10px, 3vw, 13px); color: var(--text-3); font-variant-numeric: tabular-nums; min-height: 1.2em; }
+  .key.lit { border-color: var(--c); background: linear-gradient(180deg, var(--cs), rgba(0,0,0,0)), var(--key); box-shadow: 0 0 0 1px var(--c) inset, 0 0 22px -6px var(--c); }
+  .key.lit .sub { color: var(--text); font-weight: 600; }
+  .key.flash::after { content: ""; position: absolute; inset: 0; background: var(--c); opacity: 0; animation: flash .35s ease-out; pointer-events: none; }
   .key.fail { animation: shake .35s; border-color: var(--red); }
-  .key .hold { position: absolute; inset: auto 0 0 0; height: 0; background: color-mix(in srgb, var(--c) 45%, transparent); }
-  .key .holdhint { position: absolute; top: 6px; right: 8px; font-size: 11px; color: var(--muted); }
-  @keyframes flash { 0% { background: var(--c); } 100% { } }
+  .key .hold { position: absolute; inset: auto 0 0 0; height: 0; background: var(--cs); }
+  .key .holdhint { position: absolute; top: 7px; right: 9px; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); }
+  @keyframes flash { 0% { opacity: .35; } 100% { opacity: 0; } }
   @keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
-  #toast { position: fixed; left: 14px; right: 14px; bottom: calc(14px + env(safe-area-inset-bottom)); padding: 12px 14px; border-radius: 12px;
-    background: #2c2f37; border: 1px solid var(--line); font-weight: 600; display: none; }
-  #toast.show { display: block; }
-  #toast.bad { border-color: var(--red); background: #3a2226; }
-  .msg { padding: 30px 20px; text-align: center; color: var(--muted); font-size: 16px; }
+  #toast { position: fixed; left: 14px; right: 14px; bottom: calc(14px + env(safe-area-inset-bottom)); padding: 13px 15px; border-radius: 14px;
+    background: #23262f; border: 1px solid rgba(255,255,255,.12); box-shadow: 0 10px 30px rgba(0,0,0,.5); font-weight: 550;
+    opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; pointer-events: none; }
+  #toast.show { opacity: 1; transform: none; }
+  #toast.bad { border-color: rgba(248,113,113,.45); }
+  .msg { padding: 40px 24px; text-align: center; color: var(--text-2); font-size: 15px; line-height: 1.5; }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
 </head>
 <body>
@@ -55,10 +65,10 @@
   <span id="pill" class="pill">...</span>
   <span id="secs"></span>
   <span id="conn" title=""></span>
-  <a id="gear" href="#" title="Panel">⚙</a>
+  <a id="gear" href="#" title="Panel" aria-label="Panel"></a>
 </header>
 <div id="grid"></div>
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 <script>
 "use strict";
 const TOKEN = new URLSearchParams(location.search).get("token") || "";
@@ -84,10 +94,29 @@ const TEXT = {
     on: "LIGADO", offWord: "DESLIGADO", muted: "mudo", streaming: "no ar", recording: "gravando",
   },
 };
+// Lucide icons (ISC license)
+const SVG = {
+  timer: '<line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/>',
+  live: '<path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/>',
+  plusminus: '<path d="M12 3v10"/><path d="M7 8h10"/><path d="M7 19h10"/>',
+  scissors: '<circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/>',
+  replay: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  clapper: '<path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',
+  siren: '<path d="M7 18v-6a5 5 0 1 1 10 0v6"/><path d="M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2z"/><path d="M21 12h1"/><path d="M18.5 4.5 18 5"/><path d="M2 12h1"/><path d="M12 2v1"/><path d="m4.929 4.929.707.707"/><path d="M12 12v6"/>',
+  fastforward: '<polygon points="13 19 22 12 13 5 13 19"/><polygon points="2 19 11 12 2 5 2 19"/>',
+  scene: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
+  mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>',
+  micoff: '<line x1="2" x2="22" y1="2" y2="22"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/><path d="M5 10v2a7 7 0 0 0 12 5"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><line x1="12" x2="12" y1="19" y2="22"/>',
+  stream: '<path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5"/><circle cx="12" cy="9" r="2"/><path d="M16.2 4.8c2 2 2.26 5.11.8 7.47"/><path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1"/><path d="M9.5 18h5"/><path d="m8 22 4-11 4 11"/>',
+  record: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4" fill="currentColor"/>',
+  settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  dot: '<circle cx="12" cy="12" r="3"/>',
+};
+const svg = (name) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${SVG[name] || SVG.dot}</svg>`;
 const ICONS = {
-  "delay.toggle": "⏱️", "delay.on": "⏱️", "delay.off": "🟢", "delay.set": "⏱️", "delay.add": "⏲️",
-  censor: "✂️", replay: "⏪", clip: "🎬", panic: "⚠️", catchup: "⏩",
-  "obs.scene": "🖼️", "obs.mute": "🎙️", "obs.stream": "📡", "obs.record": "⏺️",
+  "delay.toggle": "timer", "delay.on": "timer", "delay.off": "live", "delay.set": "timer", "delay.add": "plusminus",
+  censor: "scissors", replay: "replay", clip: "clapper", panic: "siren", catchup: "fastforward",
+  "obs.scene": "scene", "obs.mute": "mic", "obs.stream": "stream", "obs.record": "record",
 };
 const DEFAULT_COLOR = {
   "delay.toggle": "orange", "delay.on": "orange", "delay.off": "green", "delay.set": "orange", "delay.add": "grey",
@@ -138,7 +167,7 @@ function stateOf(k, s) {
     case "obs.scene": return { lit: o.program_scene === k.arg };
     case "obs.mute": {
       const a = (o.audio || []).find((x) => x.name === k.arg);
-      return { lit: !!(a && a.muted), sub: a && a.muted ? T().muted : "", icon: a && a.muted ? "🔇" : "🎙️" };
+      return { lit: !!(a && a.muted), sub: a && a.muted ? T().muted : "", icon: a && a.muted ? "micoff" : "mic" };
     }
     case "obs.stream": return { lit: !!o.streaming, sub: o.streaming ? T().streaming : "" };
     case "obs.record": return { lit: !!o.recording, sub: o.recording ? T().recording : "" };
@@ -162,10 +191,14 @@ function buildGrid() {
   grid.replaceChildren(...cfg.deck.keys.map((k, i) => {
     const el = document.createElement("div");
     el.className = "key";
-    el.style.setProperty("--c", `var(--${k.color || DEFAULT_COLOR[k.action] || "blue"})`);
+    const c = k.color || DEFAULT_COLOR[k.action] || "blue";
+    el.style.setProperty("--c", `var(--${c})`);
+    el.style.setProperty("--cs", `var(--${c}-soft)`);
+    el.setAttribute("role", "button");
     el.innerHTML = '<span class="icon"></span><span class="label"></span><span class="sub"></span><span class="hold"></span>';
     el.querySelector(".label").textContent = labelOf(k);
-    el.querySelector(".icon").textContent = ICONS[k.action] || "•";
+    el.querySelector(".icon").innerHTML = svg(ICONS[k.action]);
+    el.dataset.icon = ICONS[k.action] || "dot";
     const hold = HOLD[k.action];
     if (hold) {
       const hint = document.createElement("span");
@@ -209,7 +242,9 @@ function render(s) {
     const st = stateOf(k, s);
     el.classList.toggle("lit", !!st.lit);
     el.querySelector(".sub").textContent = st.sub || "";
-    if (st.icon) el.querySelector(".icon").textContent = st.icon;
+    if (st.icon && el.dataset.icon !== st.icon) { el.dataset.icon = st.icon; el.querySelector(".icon").innerHTML = svg(st.icon); }
+    el.setAttribute("aria-pressed", String(!!st.lit));
+    el.setAttribute("aria-label", labelOf(k) + (st.sub ? `, ${st.sub}` : ""));
   });
 }
 
@@ -237,6 +272,7 @@ async function refresh() {
 }
 
 $("gear").href = "/?token=" + encodeURIComponent(TOKEN);
+$("gear").innerHTML = svg("settings");
 if (!TOKEN) {
   $("grid").replaceChildren(Object.assign(document.createElement("div"), { className: "msg", textContent: T().noToken }));
 } else {

@@ -3,87 +3,255 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>Dynamic Delay</title>
 <style>
+  /* ------------------------------------------------------------ tokens */
   :root {
-    --bg: #1e1f24; --panel: #272930; --line: #3a3d46; --text: #e8e9ed; --muted: #9a9dab;
-    --live: #3ecf6e; --delay: #f0a93b; --busy: #5aa7ff; --bad: #ff5d5d; --input: #1b1c21;
+    --bg: #111217; --surface: #181a20; --surface-2: #20232b; --surface-3: #282c36; --input: #0e0f13;
+    --border: rgba(255,255,255,.07); --border-2: rgba(255,255,255,.12); --border-3: rgba(255,255,255,.2);
+    --text: #eceef2; --text-2: #a9adb9; --text-3: #8a8f9c;
+    --accent: #4f8cff; --accent-hover: #6a9dff; --accent-soft: rgba(79,140,255,.14); --on-accent: #fff;
+    --live: #34d399; --live-soft: rgba(52,211,153,.14);
+    --delay: #fbbf24; --delay-soft: rgba(251,191,36,.14);
+    --busy: #60a5fa; --busy-soft: rgba(96,165,250,.14);
+    --bad: #f87171; --bad-strong: #ef4444; --bad-soft: rgba(248,113,113,.14);
+    --violet: #a78bfa; --violet-soft: rgba(167,139,250,.14);
+    --grey-soft: rgba(169,173,185,.12);
+    --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-pill: 999px;
+    --shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 1px 2px rgba(0,0,0,.35);
+    --shadow-pop: 0 10px 30px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.3);
+    --ease: cubic-bezier(.2,.8,.2,1); --fast: 120ms; --med: 200ms;
+    --font: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, "Segoe UI", sans-serif; }
-  main { padding: 8px; display: grid; gap: 8px; max-width: 520px; margin: 0 auto; }
-  #modules, #banners { display: grid; gap: 8px; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.45 var(--font); -webkit-font-smoothing: antialiased; }
+  body { min-height: 100vh; }
+  main { padding: 0 10px 10px; display: grid; gap: 10px; max-width: 520px; margin: 0 auto; }
+  #modules, #banners { display: grid; gap: 10px; }
   #banners:empty { display: none; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
-  .card > h3 { margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
-  .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .pill { font-weight: 700; letter-spacing: .04em; padding: 4px 9px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
-  .pill.live { background: rgba(62,207,110,.18); color: var(--live); }
-  .pill.delayed { background: rgba(240,169,59,.18); color: var(--delay); }
-  .pill.busy { background: rgba(90,167,255,.18); color: var(--busy); }
-  .pill.off { background: #33353d; color: var(--muted); }
-  .pill.bad { background: rgba(255,93,93,.2); color: var(--bad); }
-  .big { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; margin-top: 4px; }
-  .muted { color: var(--muted); font-size: 12px; }
-  p.muted { margin: 8px 0 0; }
-  button { font: inherit; color: var(--text); background: #353842; border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; cursor: pointer; }
-  button:hover:not(:disabled) { background: #3f434e; }
-  button:disabled { opacity: .45; cursor: default; }
-  button.primary { background: var(--busy); color: #06121f; border-color: transparent; font-weight: 700; }
-  button.warn { background: var(--delay); color: #1b1300; border-color: transparent; font-weight: 700; }
-  button.danger { background: var(--bad); color: #210404; border-color: transparent; font-weight: 700; }
-  button.wide { width: 100%; padding: 11px; font-size: 15px; font-weight: 700; }
-  button.small { padding: 3px 7px; font-size: 12px; }
-  .row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin-top: 6px; }
-  .row button { padding: 7px 0; }
-  .line { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
-  .line > .grow { flex: 1; }
-  .dot::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--muted); }
-  .dot.ok::before { background: var(--live); } .dot.warn::before { background: var(--delay); } .dot.bad::before { background: var(--bad); }
-  .dots { display: grid; gap: 3px; }
-  .err { color: var(--bad); font-size: 12px; word-break: break-word; }
-  .note { color: var(--busy); font-size: 12px; word-break: break-word; }
-  .box { border: 1px solid var(--delay); background: rgba(240,169,59,.08); border-radius: 8px; padding: 10px; }
-  .box.bad { border-color: var(--bad); background: rgba(255,93,93,.12); }
   .hidden { display: none !important; }
-  details > summary { cursor: pointer; font-weight: 600; list-style: none; }
-  details > summary::before { content: "▸ "; color: var(--muted); }
-  details[open] > summary::before { content: "▾ "; }
-  label { display: grid; gap: 3px; margin-top: 8px; color: var(--muted); font-size: 12px; }
-  label.check { display: flex; align-items: center; gap: 6px; color: var(--text); }
+  .i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  ::selection { background: var(--accent-soft); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ------------------------------------------------------------ app bar */
+  .appbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 10px; padding: 10px 10px 8px; margin: 0 -10px;
+    background: rgba(17,18,23,.86); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
+  .brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .logo { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; flex: none;
+    background: linear-gradient(135deg, #4f8cff, #7c5cff); box-shadow: 0 2px 8px rgba(79,140,255,.35); color: #fff; }
+  .logo .i { width: 15px; height: 15px; stroke-width: 2.4; }
+  .brand-name { font-weight: 650; font-size: 13.5px; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 8px; border-radius: var(--r-pill);
+    font-size: 11.5px; font-weight: 550; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border); white-space: nowrap; }
+  .chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); }
+  .chip.ok::before { background: var(--live); box-shadow: 0 0 0 3px var(--live-soft); }
+  .chip.warn::before { background: var(--delay); box-shadow: 0 0 0 3px var(--delay-soft); }
+  .chip.bad::before { background: var(--bad); box-shadow: 0 0 0 3px var(--bad-soft); }
+
+  /* ------------------------------------------------------------ cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow); }
+  .card-head, details.card > summary { display: flex; align-items: center; gap: 10px; padding: 11px 12px; }
+  .card-head { padding-bottom: 0; }
+  .card-title { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: -.005em; flex: 1; min-width: 0; }
+  .card-body { padding: 10px 12px 12px; display: grid; gap: 10px; }
+  .ico { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; flex: none; background: var(--grey-soft); color: var(--text-2); }
+  .ico .i { width: 15px; height: 15px; }
+  .tone-blue { background: var(--busy-soft); color: var(--busy); }
+  .tone-green { background: var(--live-soft); color: var(--live); }
+  .tone-amber { background: var(--delay-soft); color: var(--delay); }
+  .tone-red { background: var(--bad-soft); color: var(--bad); }
+  .tone-violet { background: var(--violet-soft); color: var(--violet); }
+  details.card > summary { cursor: pointer; list-style: none; border-radius: var(--r-lg); user-select: none; transition: background var(--fast); }
+  details.card > summary::-webkit-details-marker { display: none; }
+  details.card > summary:hover { background: rgba(255,255,255,.02); }
+  details.card > summary .chev { color: var(--text-3); transition: transform var(--med) var(--ease); }
+  details[open].card > summary .chev { transform: rotate(180deg); }
+  details[open].card > summary { border-bottom: 1px solid var(--border); border-radius: var(--r-lg) var(--r-lg) 0 0; }
+  details.card > .card-body { padding-top: 12px; }
+  .group { display: grid; gap: 10px; }
+  .group + .group { padding-top: 12px; border-top: 1px solid var(--border); }
+  .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); margin: 0; }
+
+  /* ------------------------------------------------------------ delay hero */
+  .hero { padding: 14px 14px 12px; display: grid; gap: 12px; position: relative; overflow: hidden; --tone: var(--text-3); }
+  .hero::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 2px; background: var(--tone); opacity: .9; transition: background var(--med); }
+  .hero[data-tone=live] { --tone: var(--live); } .hero[data-tone=delayed] { --tone: var(--delay); }
+  .hero[data-tone=busy] { --tone: var(--busy); } .hero[data-tone=bad] { --tone: var(--bad); }
+  .hero-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 22px; }
+  .phase { color: var(--text-2); font-size: 12px; text-align: right; }
+  .readout { display: flex; align-items: baseline; gap: 6px; }
+  .big { font-size: 44px; font-weight: 650; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .unit { font-size: 18px; font-weight: 550; color: var(--text-2); }
+  .meter { height: 6px; border-radius: var(--r-pill); background: var(--surface-3); overflow: hidden; }
+  .meter > span { display: block; height: 100%; width: 100%; background: var(--tone); transform-origin: left; transform: scaleX(0); transition: transform 600ms linear, background var(--med); }
+  .sub { color: var(--text-2); font-size: 12px; margin-top: -4px; }
+  .presets { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .presets .btn { padding: 0; height: 32px; font-variant-numeric: tabular-nums; font-size: 12.5px; }
+  .presets .btn[aria-pressed=true] { background: var(--accent-soft); border-color: rgba(79,140,255,.5); color: #cfe0ff; }
+
+  /* ------------------------------------------------------------ status pill */
+  .pill { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; font-size: 11.5px; letter-spacing: .06em; padding: 4px 10px 4px 9px;
+    border-radius: var(--r-pill); white-space: nowrap; background: var(--grey-soft); color: var(--text-2); }
+  .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .pill.live { background: var(--live-soft); color: var(--live); }
+  .pill.live::before { animation: pulse 1.6s var(--ease) infinite; }
+  .pill.delayed { background: var(--delay-soft); color: var(--delay); }
+  .pill.busy { background: var(--busy-soft); color: var(--busy); }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(52,211,153,.55); } 100% { box-shadow: 0 0 0 7px rgba(52,211,153,0); } }
+
+  /* ------------------------------------------------------------ buttons */
+  .btn { font: inherit; font-weight: 550; color: var(--text); background: var(--surface-2); border: 1px solid var(--border-2); border-radius: var(--r-md);
+    height: 32px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; cursor: pointer; white-space: nowrap;
+    transition: background var(--fast), border-color var(--fast), color var(--fast), transform var(--fast); touch-action: manipulation; }
+  .btn:hover:not(:disabled) { background: var(--surface-3); border-color: var(--border-3); }
+  .btn:active:not(:disabled) { transform: scale(.98); }
+  .btn:disabled { opacity: .42; cursor: not-allowed; }
+  .btn .lbl { overflow: hidden; text-overflow: ellipsis; }
+  .btn.primary { background: var(--accent); border-color: transparent; color: var(--on-accent); }
+  .btn.primary:hover:not(:disabled) { background: var(--accent-hover); }
+  .btn.warn { background: var(--delay); border-color: transparent; color: #1f1400; }
+  .btn.warn:hover:not(:disabled) { background: #fcd05a; }
+  .btn.danger { background: var(--bad-strong); border-color: transparent; color: #fff; }
+  .btn.danger:hover:not(:disabled) { background: #f55a5a; }
+  .btn.wide { width: 100%; height: 42px; font-size: 14px; font-weight: 650; border-radius: var(--r-md); }
+  .btn.wide .i { width: 18px; height: 18px; }
+  .btn.small { height: 28px; padding: 0 10px; font-size: 12px; }
+  .btn.icon { width: 28px; height: 28px; padding: 0; color: var(--text-2); background: transparent; border-color: transparent; }
+  .btn.icon:hover:not(:disabled) { background: var(--surface-3); color: var(--text); border-color: transparent; }
+  .btn.icon.del:hover:not(:disabled) { background: var(--bad-soft); color: var(--bad); }
+  .btn.link { height: auto; padding: 2px 0; background: none; border: 0; color: var(--text-2); font-weight: 500; font-size: 12.5px; justify-content: flex-start; white-space: normal; text-align: left; }
+  .btn.link:hover:not(:disabled) { background: none; color: var(--text); }
+  .btn.link.dangerous { color: var(--text-3); }
+  .btn.link.dangerous:hover:not(:disabled) { color: var(--bad); }
+  .btn.done { color: var(--live); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .actions > .btn.primary:only-child, .actions.stack > .btn { flex: 1; }
+  .actions.stack { display: grid; }
+
+  /* ------------------------------------------------------------ forms */
+  label { display: grid; gap: 5px; }
+  .field-label { font-size: 12px; font-weight: 550; color: var(--text-2); }
+  .hint { margin: 0; color: var(--text-3); font-size: 12px; line-height: 1.5; }
   input[type=text], input[type=password], input[type=number], select {
-    font: inherit; color: var(--text); background: var(--input); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%;
+    font: inherit; color: var(--text); background: var(--input); border: 1px solid var(--border-2); border-radius: var(--r-md);
+    height: 32px; padding: 0 10px; width: 100%; min-width: 0; transition: border-color var(--fast), box-shadow var(--fast); }
+  input::placeholder { color: var(--text-3); }
+  input:hover, select:hover { border-color: var(--border-3); }
+  input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  select { appearance: none; -webkit-appearance: none; padding-right: 30px; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a8f9c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 9px center; background-size: 14px; }
+  select option { background: var(--surface-2); color: var(--text); }
+  input[type=number] { width: 84px; font-variant-numeric: tabular-nums; text-align: right; padding-right: 6px; }
+  .inline { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .inline > .field-label { flex: 1; }
+  /* switches */
+  input[type=checkbox] { appearance: none; -webkit-appearance: none; margin: 0; flex: none; width: 32px; height: 18px; border-radius: var(--r-pill);
+    background: var(--surface-3); border: 1px solid var(--border-2); position: relative; cursor: pointer; transition: background var(--med), border-color var(--med); }
+  input[type=checkbox]::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #c9ccd4;
+    transition: transform var(--med) var(--ease), background var(--med); }
+  input[type=checkbox]:checked { background: var(--accent); border-color: transparent; }
+  input[type=checkbox]:checked::after { transform: translateX(14px); background: #fff; }
+  input[type=checkbox]:disabled { opacity: .4; cursor: not-allowed; }
+  input[type=checkbox]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  label.check { display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--text); font-size: 12.5px; line-height: 1.4; }
+  .note { font-size: 12px; color: var(--busy); word-break: break-word; }
+  .note:empty { display: none; }
+  .err { color: var(--bad); font-size: 12px; word-break: break-word; }
+
+  /* ------------------------------------------------------------ lists */
+  .items { display: grid; gap: 8px; }
+  .items:empty { display: none; }
+  .item { display: grid; gap: 8px; padding: 10px; border-radius: var(--r-md); background: var(--surface-2); border: 1px solid var(--border); }
+  .item-row { display: flex; align-items: center; gap: 6px; }
+  .item-row > .grow { flex: 1; min-width: 0; }
+  .index { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; flex: none; font-size: 11px; font-weight: 700;
+    background: var(--surface-3); color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .swatch { width: 12px; height: 12px; border-radius: 4px; flex: none; background: var(--c, var(--text-3)); box-shadow: 0 0 0 1px var(--border-2); }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { padding: 9px 10px; border-radius: var(--r-md); background: var(--surface-2); border: 1px solid var(--border); display: grid; gap: 2px; }
+  .stat-label { font-size: 11px; color: var(--text-3); font-weight: 550; letter-spacing: .02em; }
+  .stat-value { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .rows { display: grid; }
+  .rows > * { padding: 8px 0; border-top: 1px solid var(--border); }
+  .rows > *:first-child { border-top: 0; padding-top: 0; }
+  .rows > *:last-child { padding-bottom: 0; }
+  .out { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; }
+  .out .full { grid-column: 1 / -1; }
+  .dot { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+  .dot::before { content: ""; width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--text-3); }
+  .dot.ok::before { background: var(--live); } .dot.warn::before { background: var(--delay); } .dot.bad::before { background: var(--bad); }
+  .dot b { font-weight: 600; }
+  .dim { color: var(--text-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .link-row { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+  .link-row > .grow { flex: 1; min-width: 0; }
+  .qr-wrap { display: grid; justify-items: center; gap: 10px; padding: 12px; border-radius: var(--r-md); background: var(--surface-2); border: 1px solid var(--border); }
+  .qr-wrap:empty { display: none; }
+  .qr { background: #fff; padding: 10px; border-radius: 10px; }
+  .qr svg { display: block; width: 168px; height: 168px; }
+  code { font: 11.5px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--text-2); background: var(--input); border: 1px solid var(--border);
+    padding: 6px 8px; border-radius: var(--r-sm); word-break: break-all; display: block; width: 100%; }
+
+  /* customize table */
+  .mods { display: grid; }
+  .mod { display: grid; grid-template-columns: 1fr 40px 40px 60px; gap: 6px; align-items: center; padding: 9px 0; border-top: 1px solid var(--border); }
+  .mod.head { border-top: 0; padding: 0 0 6px; }
+  .mod.head span { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); text-align: center; }
+  .mod-name { display: grid; gap: 1px; min-width: 0; }
+  .mod-name b { font-weight: 600; font-size: 12.5px; }
+  .mod-name span { color: var(--text-3); font-size: 11.5px; line-height: 1.4; }
+  .mod > .cell { display: flex; justify-content: center; }
+  .mod .order { display: flex; justify-content: flex-end; gap: 2px; }
+
+  /* ------------------------------------------------------------ callouts, toast */
+  .callout { display: flex; gap: 10px; padding: 11px 12px; border-radius: var(--r-lg); border: 1px solid rgba(251,191,36,.28); background: rgba(251,191,36,.07); }
+  .callout > .i { color: var(--delay); margin-top: 1px; }
+  .callout.bad { border-color: rgba(248,113,113,.32); background: rgba(248,113,113,.08); }
+  .callout.bad > .i { color: var(--bad); }
+  .callout.info { border-color: rgba(96,165,250,.3); background: rgba(96,165,250,.07); }
+  .callout.info > .i { color: var(--busy); }
+  .callout-body { display: grid; gap: 8px; flex: 1; min-width: 0; font-size: 12.5px; }
+  .toast { position: fixed; left: 50%; bottom: 12px; z-index: 50; width: min(500px, calc(100% - 20px)); display: flex; gap: 10px; align-items: flex-start;
+    padding: 11px 13px; border-radius: var(--r-lg); background: #23262f; border: 1px solid var(--border-2); box-shadow: var(--shadow-pop);
+    font-size: 12.5px; font-weight: 500; opacity: 0; visibility: hidden; transform: translate(-50%, 8px);
+    transition: opacity var(--med) var(--ease), transform var(--med) var(--ease), visibility 0s linear var(--med); }
+  .toast.show { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition: opacity var(--med) var(--ease), transform var(--med) var(--ease); }
+  .toast > .i { color: var(--live); margin-top: 1px; }
+  .toast.bad { border-color: rgba(248,113,113,.4); }
+  .toast.bad > .i { color: var(--bad); }
+  .empty { display: grid; justify-items: center; text-align: center; gap: 8px; padding: 28px 16px; }
+  .empty .ico { width: 40px; height: 40px; border-radius: 12px; }
+  .empty .ico .i { width: 20px; height: 20px; }
+  .empty b { font-size: 14px; }
+
+  /* ------------------------------------------------------------ footer */
+  .credit { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; color: var(--text-3); font-size: 11.5px; padding: 4px 0 8px; }
+  .credit a { color: var(--text-2); text-decoration: none; font-weight: 550; }
+  .credit a:hover { color: var(--accent-hover); text-decoration: underline; }
+  #ver:empty { display: none; }
+  #ver::after { content: "·"; margin-left: 6px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
   }
-  input[type=number] { width: 72px; }
-  .actions { display: grid; gap: 6px; margin-top: 10px; }
-  a { color: var(--muted); font-size: 12px; cursor: pointer; }
-  .list > div { display: grid; gap: 4px; padding: 8px 0; border-top: 1px solid var(--line); }
-  .list > div:first-child { border-top: 0; padding-top: 0; }
-  .out { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 6px 0; border-top: 1px solid var(--line); align-items: center; }
-  .kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin-bottom: 4px; }
-  .mods > div { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-top: 1px solid var(--line); }
-  .mods > div:first-child { border-top: 0; }
-  .mods > div > span { flex: 1; }
-  .qr { background: #fff; padding: 8px; border-radius: 8px; width: fit-content; margin: 8px auto; }
-  .qr svg { display: block; width: 180px; height: 180px; }
-  code { background: var(--input); padding: 2px 5px; border-radius: 4px; font-size: 11px; word-break: break-all; display: block; }
-  .credit { text-align: center; color: var(--muted); font-size: 11px; padding: 2px 0 6px; }
-  .credit a { color: var(--busy); font-size: 11px; text-decoration: none; }
-  .credit a:hover { text-decoration: underline; }
-  #toast { position: sticky; top: 4px; z-index: 5; }
-  .line > .keylabel { flex: 1 1 60%; min-width: 0; }
-  .line > .keycolor { flex: 0 1 40%; width: auto; }
 </style>
 </head>
 <body>
 <main>
-  <div id="toast" class="hidden"></div>
+  <header class="appbar">
+    <div class="brand"><span class="logo" id="logo"></span><span class="brand-name" data-t="appName"></span></div>
+    <span id="conn" class="chip" role="status"></span>
+  </header>
   <div id="banners"></div>
   <div id="modules"></div>
   <details class="card" id="settingsCard"></details>
   <details class="card" id="customizeCard"></details>
-  <footer class="credit"><span data-t="developedBy"></span> <a id="author" href="https://github.com/ragnarcb" target="_blank" rel="noopener">ragnarcb</a></footer>
+  <footer class="credit"><span id="ver"></span><span><span data-t="developedBy"></span> <a id="author" href="https://github.com/ragnarcb" target="_blank" rel="noopener">ragnarcb</a></span></footer>
 </main>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script>
 "use strict";
 const API = window.DD_API || "";
@@ -93,13 +261,16 @@ const URLS = { twitch: "rtmp://live.twitch.tv/app", youtube: "rtmp://a.rtmp.yout
 // ---------------------------------------------------------------- texts
 const TEXT = {
   en: {
-    developedBy: "Developed by", noToken: "Missing access token. Open the panel from OBS (Docks > Dynamic Delay) or the script's \"Open panel\" button.",
-    relayOff: "RELAY CLOSED", relayOffHint: "opens together with OBS", noLive: "NOT LIVE", live: "LIVE", adjusting: "ADJUSTING", delayed: "DELAY", replay: "REPLAY", panicPill: "PANIC",
+    appName: "Dynamic Delay", developedBy: "Developed by", noToken: "Missing access token. Open the panel from OBS (Docks > Dynamic Delay) or the script's \"Open panel\" button.",
+    relayOff: "RELAY CLOSED", relayOffHint: "opens together with OBS", relayClosed: "The relay is closed", relayClosedHint: "It opens together with OBS. Start OBS with the Dynamic Delay script loaded.",
+    noLive: "NOT LIVE", live: "LIVE", adjusting: "ADJUSTING", delayed: "DELAY", replay: "REPLAY", panicPill: "PANIC",
     phases: { live: "live", delayed: "delayed", growing: "waiting for a keyframe", filling: "holding a frame, applying delay", shrinking: "cutting back to live" },
     delayForViewers: "delay for viewers", setTo: "set to", toggleOff: "Turn delay off (back to live)", toggleOn: (s) => `Turn on ${s}s delay`,
+    setPreset: (s) => `Set the delay to ${s} seconds`, addPreset: (s) => (s < 0 ? `Remove ${-s} seconds` : `Add ${s} seconds`),
     obsNotUsing: "OBS is not streaming through the dynamic delay yet.", configureObs: "Configure OBS automatically",
     keyMissing: "The stream key is missing. Fill it in under Settings.", update: (v) => `Version ${v} is available.`, download: "Download",
     alertDown: (n) => `${n}: connection lost, reconnecting...`,
+    overLimit: (k, p, m) => `OBS is sending ${k} kbps, above the ${p} limit of ${m} kbps, so viewers may drop to 720p. Stop and start the stream: the OBS script sets the encoder to the ${p} rules.`,
     m: {
       delay: "Delay", censor: "Delete before it airs", replay: "Instant replay", clips: "Clips", panic: "Panic button", health: "Stream health",
       multistream: "Multistream", rules: "Delay by scene", chat: "Twitch chat commands", phone: "Phone deck", streamdeck: "Stream Deck / API",
@@ -114,17 +285,17 @@ const TEXT = {
     },
     seconds: "Seconds", censorBtn: (s) => `Delete the last ${s}s`, censorHint: "Only works with the delay on: the part viewers have not seen yet is removed and the stream holds its last frame over the gap.",
     replayBtn: (s) => `Replay the last ${s}s`, replayHint: "Viewers see the last seconds again, then the stream returns to the normal delay.",
-    clipBtn: (s) => `Save the last ${s}s`, lastClip: "Last clip:", folder: "Folder:", openFolder: "Open clips folder", clipHint: "Includes what has not aired yet. MP4 (H.264 + AAC), ready for TikTok and Shorts.",
+    clipBtn: (s) => `Save the last ${s}s`, lastClip: "Last clip", folder: "Folder", openFolder: "Open clips folder", clipHint: "Includes what has not aired yet. MP4 (H.264 + AAC), ready for TikTok and Shorts.",
     panicBtn: "PANIC", panicOff: "End panic mode", panicScene: "Scene to show", panicMute: "Mute all audio", panicCensor: "Also delete the unaired seconds (needs the delay on)",
     none: "(none)", uptime: "Live for", fromObs: "From OBS", reconnects: "reconnects", behind: (s) => `${s}s behind after an outage`, catchUp: "Catch up",
-    outage: "Keep what was missed during a connection drop (seconds, 0 = off)", alertSound: "Beep when a connection drops",
+    outage: "Keep what was missed during a connection drop (seconds, 0 = off)", alertSound: "Beep when a connection drops", destinations: "Destinations",
     states: { idle: "idle", connecting: "connecting...", connected: "connected", reconnecting: "reconnecting..." },
-    mainDest: "The main destination is set under Settings. Add more here:", addDest: "+ Add destination", name: "Name", url: "Server URL", key: "Stream key", enabled: "On",
+    mainDest: "The main destination is set under Settings. Add more here:", addDest: "Add destination", name: "Name", url: "Server URL", key: "Stream key", enabled: "On",
     remove: "Remove", save: "Save", saved: "Saved.", savedNext: "Saved. Destination changes apply to the next stream.",
-    addRule: "+ Add rule", actOn: "turn on", actOff: "turn off", actSet: "turn on with", rulesHint: "When one of these scenes goes on air, the delay changes by itself.",
+    addRule: "Add rule", actOn: "turn on", actOff: "turn off", actSet: "turn on with", rulesHint: "When one of these scenes goes on air, the delay changes by itself.",
     chatOn: "Listen to chat commands", channel: "Channel", channelHint: "your channel name, e.g. ragnar_cb", allow: "Who can use them", allowB: "only me", allowM: "me and mods", allowV: "me, mods and VIPs", prefix: "Command",
     chatHint: (p) => `In chat: ${p} on · ${p} off · ${p} 60 · ${p} censor · ${p} replay · ${p} clip · ${p} panic`,
-    openDeck: "Open the deck on this PC (tablet or second monitor)", deckKeys: "Deck keys", deckColumns: "Columns", addKey: "+ Add key",
+    openDeck: "Open the deck on this PC (tablet or second monitor)", deckKeys: "Deck keys", deckColumns: "Columns", addKey: "Add key",
     deckDefaults: "Restore the default keys", keyLabel: "Text on the key (empty = automatic)", noAudio: "(open OBS to list the audio sources)",
     deckActions: {
       "delay.toggle": "Delay: toggle", "delay.on": "Delay: turn on", "delay.off": "Delay: off (back to live)", "delay.set": "Delay: turn on with N seconds",
@@ -142,19 +313,23 @@ const TEXT = {
     growRewind: "Rewind (replays the last seconds, no freeze)", growScene: "Show an OBS scene while the delay builds up", growFreeze: "Freeze the live picture while the delay builds up",
     sceneLabel: "Scene shown while the delay builds up", sceneTip: "Tip: make a scene with just an image or text. It is shown still and muted.", noScenes: "(open OBS to list the scenes)",
     startEnabled: "Start every stream with the delay on", language: "Language", restoreObs: "Restore OBS' original stream settings",
+    grpStream: "Stream destination", grpDelay: "Delay behavior", grpGeneral: "General",
     confirmRestore: "Click again to confirm: OBS goes back to streaming directly, without the dynamic delay.", applying: "Applying in OBS...", pickScene: "Pick the scene.",
     customize: "Features and panel", customizeHint: "On: the feature works (off = it does nothing at all, its commands are refused and its background work stops). Panel: shows its block here. Arrows: order.",
-    active: "On", inPanel: "Panel", alwaysOn: "always on",
+    active: "On", inPanel: "Panel", alwaysOn: "always on", feature: "Feature",
     up: "Move up", down: "Move down", obsStreaming: "OBS streaming", scriptMissing: "OBS script is not running", obsReady: "OBS ready", obsNotConfigured: "OBS not configured",
   },
   pt: {
-    developedBy: "Desenvolvido por", noToken: "Falta o token de acesso. Abra o painel pelo OBS (Docks > Delay dinâmico) ou pelo botão \"Abrir painel\" do script.",
-    relayOff: "RELAY FECHADO", relayOffHint: "abre junto com o OBS", noLive: "SEM LIVE", live: "AO VIVO", adjusting: "AJUSTANDO", delayed: "DELAY", replay: "REPLAY", panicPill: "PÂNICO",
+    appName: "Delay dinâmico", developedBy: "Desenvolvido por", noToken: "Falta o token de acesso. Abra o painel pelo OBS (Docks > Delay dinâmico) ou pelo botão \"Abrir painel\" do script.",
+    relayOff: "RELAY FECHADO", relayOffHint: "abre junto com o OBS", relayClosed: "O relay está fechado", relayClosedHint: "Ele abre junto com o OBS. Abra o OBS com o script do Delay dinâmico carregado.",
+    noLive: "SEM LIVE", live: "AO VIVO", adjusting: "AJUSTANDO", delayed: "DELAY", replay: "REPLAY", panicPill: "PÂNICO",
     phases: { live: "ao vivo", delayed: "com delay", growing: "aguardando keyframe", filling: "congelado, aplicando delay", shrinking: "cortando para o vivo" },
     delayForViewers: "atraso para o público", setTo: "configurado", toggleOff: "Desligar delay (voltar ao vivo)", toggleOn: (s) => `Ligar delay de ${s}s`,
+    setPreset: (s) => `Colocar o delay em ${s} segundos`, addPreset: (s) => (s < 0 ? `Tirar ${-s} segundos` : `Somar ${s} segundos`),
     obsNotUsing: "O OBS ainda não está transmitindo pelo delay dinâmico.", configureObs: "Configurar o OBS automaticamente",
     keyMissing: "Falta a chave de transmissão. Preencha em Configuração.", update: (v) => `A versão ${v} está disponível.`, download: "Baixar",
     alertDown: (n) => `${n}: conexão caiu, reconectando...`,
+    overLimit: (k, p, m) => `O OBS está mandando ${k} kbps, acima do limite da ${p} de ${m} kbps, e o público pode cair para 720p. Pare e inicie a live: o script do OBS ajusta o encoder às regras da ${p}.`,
     m: {
       delay: "Delay", censor: "Apagar antes de ir ao ar", replay: "Replay instantâneo", clips: "Clipes", panic: "Botão de pânico", health: "Saúde da live",
       multistream: "Multistream", rules: "Delay por cena", chat: "Comandos no chat da Twitch", phone: "Deck no celular", streamdeck: "Stream Deck / API",
@@ -169,17 +344,17 @@ const TEXT = {
     },
     seconds: "Segundos", censorBtn: (s) => `Apagar os últimos ${s}s`, censorHint: "Só funciona com o delay ligado: o trecho que o público ainda não viu é removido e a live segura o último quadro no lugar.",
     replayBtn: (s) => `Replay dos últimos ${s}s`, replayHint: "O público vê os últimos segundos de novo e depois a live volta ao delay normal.",
-    clipBtn: (s) => `Salvar os últimos ${s}s`, lastClip: "Último clipe:", folder: "Pasta:", openFolder: "Abrir pasta dos clipes", clipHint: "Inclui o que ainda não foi ao ar. MP4 (H.264 + AAC), pronto para TikTok e Shorts.",
+    clipBtn: (s) => `Salvar os últimos ${s}s`, lastClip: "Último clipe", folder: "Pasta", openFolder: "Abrir pasta dos clipes", clipHint: "Inclui o que ainda não foi ao ar. MP4 (H.264 + AAC), pronto para TikTok e Shorts.",
     panicBtn: "PÂNICO", panicOff: "Sair do modo pânico", panicScene: "Cena para mostrar", panicMute: "Mutar todo o áudio", panicCensor: "Também apagar o que ainda não foi ao ar (precisa do delay ligado)",
     none: "(nenhuma)", uptime: "No ar há", fromObs: "Vindo do OBS", reconnects: "reconexões", behind: (s) => `${s}s atrás depois de uma queda`, catchUp: "Alcançar",
-    outage: "Guardar o que foi perdido numa queda de conexão (segundos, 0 = desligado)", alertSound: "Apitar quando uma conexão cair",
+    outage: "Guardar o que foi perdido numa queda de conexão (segundos, 0 = desligado)", alertSound: "Apitar quando uma conexão cair", destinations: "Destinos",
     states: { idle: "parada", connecting: "conectando...", connected: "conectada", reconnecting: "reconectando..." },
-    mainDest: "O destino principal fica em Configuração. Adicione outros aqui:", addDest: "+ Adicionar destino", name: "Nome", url: "URL do servidor", key: "Chave de transmissão", enabled: "Ligado",
+    mainDest: "O destino principal fica em Configuração. Adicione outros aqui:", addDest: "Adicionar destino", name: "Nome", url: "URL do servidor", key: "Chave de transmissão", enabled: "Ligado",
     remove: "Remover", save: "Salvar", saved: "Salvo.", savedNext: "Salvo. Mudanças de destino valem na próxima live.",
-    addRule: "+ Adicionar regra", actOn: "ligar", actOff: "desligar", actSet: "ligar com", rulesHint: "Quando uma dessas cenas entra no ar, o delay muda sozinho.",
+    addRule: "Adicionar regra", actOn: "ligar", actOff: "desligar", actSet: "ligar com", rulesHint: "Quando uma dessas cenas entra no ar, o delay muda sozinho.",
     chatOn: "Ouvir comandos no chat", channel: "Canal", channelHint: "nome do seu canal, ex.: ragnar_cb", allow: "Quem pode usar", allowB: "só eu", allowM: "eu e os mods", allowV: "eu, mods e VIPs", prefix: "Comando",
     chatHint: (p) => `No chat: ${p} on · ${p} off · ${p} 60 · ${p} apagar · ${p} replay · ${p} clipe · ${p} panico`,
-    openDeck: "Abrir o deck neste PC (tablet ou segundo monitor)", deckKeys: "Botões do deck", deckColumns: "Colunas", addKey: "+ Adicionar botão",
+    openDeck: "Abrir o deck neste PC (tablet ou segundo monitor)", deckKeys: "Botões do deck", deckColumns: "Colunas", addKey: "Adicionar botão",
     deckDefaults: "Restaurar os botões padrão", keyLabel: "Texto no botão (vazio = automático)", noAudio: "(abra o OBS para listar as fontes de áudio)",
     deckActions: {
       "delay.toggle": "Delay: ligar/desligar", "delay.on": "Delay: ligar", "delay.off": "Delay: desligar (voltar ao vivo)", "delay.set": "Delay: ligar com N segundos",
@@ -197,9 +372,10 @@ const TEXT = {
     growRewind: "Rebobinar (repete os últimos segundos, sem congelar)", growScene: "Mostrar uma cena do OBS enquanto o delay enche", growFreeze: "Congelar a imagem da live enquanto o delay enche",
     sceneLabel: "Cena mostrada enquanto o delay enche", sceneTip: "Dica: crie uma cena só com uma imagem ou texto. Ela aparece parada e sem som.", noScenes: "(abra o OBS para listar as cenas)",
     startEnabled: "Começar toda live já com delay", language: "Idioma", restoreObs: "Restaurar a configuração original de transmissão do OBS",
+    grpStream: "Destino da live", grpDelay: "Comportamento do delay", grpGeneral: "Geral",
     confirmRestore: "Clique de novo para confirmar: o OBS volta a transmitir direto, sem o delay dinâmico.", applying: "Aplicando no OBS...", pickScene: "Escolha a cena.",
     customize: "Recursos e painel", customizeHint: "Ativo: o recurso funciona (desligado = não faz nada, os comandos dele são recusados e o trabalho em segundo plano para). Painel: mostra o bloco aqui. Setas: ordem.",
-    active: "Ativo", inPanel: "Painel", alwaysOn: "sempre ativo",
+    active: "Ativo", inPanel: "Painel", alwaysOn: "sempre ativo", feature: "Recurso",
     up: "Subir", down: "Descer", obsStreaming: "OBS transmitindo", scriptMissing: "script do OBS não está rodando", obsReady: "OBS pronto", obsNotConfigured: "OBS não configurado",
   },
 };
@@ -218,6 +394,55 @@ const T = () => TEXT[lang] || TEXT.en;
 const num = (x) => (lang === "pt" ? x.toFixed(1).replace(".", ",") : x.toFixed(1));
 const $ = (id) => document.getElementById(id);
 
+// ---------------------------------------------------------------- icons (Lucide, ISC license)
+const ICON = {
+  timer: '<line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/>',
+  scissors: '<circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/>',
+  replay: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  clapper: '<path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',
+  siren: '<path d="M7 18v-6a5 5 0 1 1 10 0v6"/><path d="M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2z"/><path d="M21 12h1"/><path d="M18.5 4.5 18 5"/><path d="M2 12h1"/><path d="M12 2v1"/><path d="m4.929 4.929.707.707"/><path d="M12 12v6"/>',
+  activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+  tower: '<path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5"/><circle cx="12" cy="9" r="2"/><path d="M16.2 4.8c2 2 2.26 5.11.8 7.47"/><path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1"/><path d="M9.5 18h5"/><path d="m8 22 4-11 4 11"/>',
+  layers: '<path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
+  chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  phone: '<rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/>',
+  grid: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+  settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  sliders: '<line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/>',
+  power: '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/>',
+  chevron: '<path d="m6 9 6 6 6-6"/>',
+  up: '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+  down: '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  folder: '<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>',
+  external: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+  key: '<path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5"/>',
+  sparkles: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>',
+  plug: '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>',
+  fastforward: '<polygon points="13 19 22 12 13 5 13 19"/><polygon points="2 19 11 12 2 5 2 19"/>',
+};
+function icon(name, cls) {
+  const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  s.setAttribute("viewBox", "0 0 24 24");
+  s.setAttribute("class", "i" + (cls ? " " + cls : ""));
+  s.setAttribute("aria-hidden", "true");
+  s.innerHTML = ICON[name] || "";
+  return s;
+}
+// block -> [icon, tone]
+const LOOK = {
+  delay: ["timer", "amber"], censor: ["scissors", "red"], replay: ["replay", "blue"], clips: ["clapper", "blue"], panic: ["siren", "red"],
+  health: ["activity", "green"], multistream: ["tower", "violet"], rules: ["layers", "amber"], chat: ["chat", "violet"], phone: ["phone", "blue"],
+  streamdeck: ["grid", "grey"], settings: ["settings", "grey"], customize: ["sliders", "grey"],
+};
+const badge = (look) => h("span", { class: "ico tone-" + LOOK[look][1] }, icon(LOOK[look][0]));
+
 // ---------------------------------------------------------------- DOM helpers
 function h(tag, attrs, ...kids) {
   const el = document.createElement(tag);
@@ -232,10 +457,30 @@ function h(tag, attrs, ...kids) {
   for (const kid of kids.flat()) if (kid != null && kid !== "") el.append(kid instanceof Node ? kid : document.createTextNode(kid));
   return el;
 }
-const field = (label, input) => h("label", {}, label, input);
-function numberInput(value, min, max, onchange) {
-  return h("input", { type: "number", min, max, value, onchange: (e) => onchange(Math.max(min, Math.min(max, parseInt(e.target.value) || min))) });
+const field = (label, input, hint) => h("label", {}, h("span", { class: "field-label", text: label }), input, hint ? h("span", { class: "hint", text: hint }) : null);
+const inlineField = (label, input) => h("label", { class: "inline" }, h("span", { class: "field-label", text: label }), input);
+const hint = (text) => h("p", { class: "hint", text });
+const check = (checked, text, onchange) => h("label", { class: "check" }, h("input", { type: "checkbox", checked, onchange }), h("span", { text }));
+// A button with an optional icon; b.lbl is the text node holder, for updates.
+function button(cls, iconName, text, onclick, attrs) {
+  const lbl = h("span", { class: "lbl", text });
+  const b = h("button", Object.assign({ class: "btn " + (cls || ""), type: "button", onclick }, attrs || {}), iconName ? icon(iconName) : null, lbl);
+  b.lbl = lbl;
+  return b;
 }
+const iconButton = (name, label, onclick, disabled, cls) =>
+  h("button", { class: "btn icon " + (cls || ""), type: "button", "aria-label": label, title: label, disabled, onclick }, icon(name));
+function copyButton(getText) {
+  const b = button("small", "copy", T().copy, () => copyText(getText()).then(() => {
+    b.lbl.textContent = T().copied; b.classList.add("done");
+    setTimeout(() => { b.lbl.textContent = T().copy; b.classList.remove("done"); }, 1500);
+  }));
+  return b;
+}
+function numberInput(value, min, max, onchange) {
+  return h("input", { type: "number", min, max, value, inputmode: "numeric", onchange: (e) => onchange(Math.max(min, Math.min(max, parseInt(e.target.value) || min))) });
+}
+const callout = (kind, iconName, ...content) => h("div", { class: "callout " + kind }, icon(iconName), h("div", { class: "callout-body" }, ...content));
 // Scene pickers refresh their options when OBS reports its scenes.
 let sceneSelects = [];
 function fillSceneSelect(sel) {
@@ -284,138 +529,155 @@ const MODULES = {
   delay: {
     build() {
       this.pill = h("span", { class: "pill off" });
-      this.phase = h("span", { class: "muted" });
-      this.big = h("div", { class: "big", text: num(0) + " s" });
-      this.sub = h("div", { class: "muted" });
-      this.toggle = h("button", { class: "wide", onclick: () => cmd("toggle") });
-      const row = h("div", { class: "row" },
-        ...[10, 30, 60, 120].map((s) => h("button", { text: s, onclick: () => cmd("set/" + s) })),
-        h("button", { text: "−5", onclick: () => cmd("add/-5") }), h("button", { text: "+5", onclick: () => cmd("add/5") }));
-      return [h("div", { class: "top" }, this.pill, this.phase), this.big, this.sub, h("div", { style: "margin-top:8px" }, this.toggle), row];
+      this.phase = h("span", { class: "phase" });
+      this.big = h("span", { class: "big", text: num(0) });
+      this.fill = h("span");
+      this.sub = h("div", { class: "sub" });
+      this.toggle = button("wide", "power", "", () => cmd("toggle"));
+      this.presets = [10, 30, 60, 120].map((s) => {
+        const b = h("button", { class: "btn", type: "button", text: `${s}s`, "aria-label": T().setPreset(s), onclick: () => cmd("set/" + s) });
+        b.secs = s;
+        return b;
+      });
+      const presets = h("div", { class: "presets" }, ...this.presets,
+        h("button", { class: "btn", type: "button", text: "−5", "aria-label": T().addPreset(-5), onclick: () => cmd("add/-5") }),
+        h("button", { class: "btn", type: "button", text: "+5", "aria-label": T().addPreset(5), onclick: () => cmd("add/5") }));
+      return [h("div", { class: "hero-top" }, this.pill, this.phase),
+        h("div", {}, h("div", { class: "readout" }, this.big, h("span", { class: "unit", text: "s" }))),
+        h("div", { class: "meter", "aria-hidden": "true" }, this.fill), this.sub, this.toggle, presets];
     },
     update(s) {
       const e = s.engine;
-      if (s.panic) { this.pill.className = "pill bad"; this.pill.textContent = T().panicPill; }
-      else if (!e) { this.pill.className = "pill off"; this.pill.textContent = T().noLive; }
-      else if (e.replaying) { this.pill.className = "pill busy"; this.pill.textContent = T().replay; }
+      let tone;
+      if (s.panic) { tone = "bad"; this.pill.textContent = T().panicPill; }
+      else if (!e) { tone = "off"; this.pill.textContent = T().noLive; }
+      else if (e.replaying) { tone = "busy"; this.pill.textContent = T().replay; }
       else {
         const busy = ["filling", "growing", "shrinking"].includes(e.phase);
-        this.pill.className = "pill " + (busy ? "busy" : e.phase === "live" ? "live" : "delayed");
+        tone = busy ? "busy" : e.phase === "live" ? "live" : "delayed";
         this.pill.textContent = e.phase === "live" ? T().live : busy ? T().adjusting : T().delayed;
       }
+      this.pill.className = "pill " + tone;
+      this.card.dataset.tone = tone;
       this.phase.textContent = e ? T().phases[e.phase] || e.phase : "";
-      this.big.textContent = num(e ? e.current_ms / 1000 : 0) + " s";
+      const cur = e ? e.current_ms / 1000 : 0;
+      this.big.textContent = num(cur);
+      this.fill.style.transform = `scaleX(${Math.min(1, cur / Math.max(1, s.delay_seconds, cur))})`;
       this.sub.textContent = `${T().delayForViewers} · ${T().setTo} ${s.delay_seconds} s`;
-      this.toggle.className = "wide" + (s.enabled ? " warn" : "");
-      this.toggle.textContent = s.enabled ? T().toggleOff : T().toggleOn(s.delay_seconds);
+      this.toggle.className = "btn wide " + (s.enabled ? "warn" : "primary");
+      this.toggle.lbl.textContent = s.enabled ? T().toggleOff : T().toggleOn(s.delay_seconds);
+      for (const b of this.presets) b.setAttribute("aria-pressed", String(s.enabled && s.delay_seconds === b.secs));
     },
   },
   censor: {
     build() {
-      this.btn = h("button", { class: "wide danger", onclick: () => cmd("censor/" + cfg.censor_seconds) });
-      return [this.btn, h("div", { class: "line" }, h("span", { class: "grow muted", text: T().seconds }),
-        numberInput(cfg.censor_seconds, 1, 120, (v) => saveConfig({ censor_seconds: v }))), h("p", { class: "muted", text: T().censorHint })];
+      this.btn = button("wide danger", "scissors", "", () => cmd("censor/" + cfg.censor_seconds));
+      return [this.btn, inlineField(T().seconds, numberInput(cfg.censor_seconds, 1, 120, (v) => saveConfig({ censor_seconds: v }))), hint(T().censorHint)];
     },
-    update(s) { this.btn.textContent = T().censorBtn(cfg.censor_seconds); this.btn.disabled = !s.engine || !s.enabled; },
+    update(s) { this.btn.lbl.textContent = T().censorBtn(cfg.censor_seconds); this.btn.disabled = !s.engine || !s.enabled; },
   },
   replay: {
     build() {
-      this.btn = h("button", { class: "wide primary", onclick: () => cmd("replay/" + cfg.replay_seconds) });
-      return [this.btn, h("div", { class: "line" }, h("span", { class: "grow muted", text: T().seconds }),
-        numberInput(cfg.replay_seconds, 3, 60, (v) => saveConfig({ replay_seconds: v }))), h("p", { class: "muted", text: T().replayHint })];
+      this.btn = button("wide primary", "replay", "", () => cmd("replay/" + cfg.replay_seconds));
+      return [this.btn, inlineField(T().seconds, numberInput(cfg.replay_seconds, 3, 60, (v) => saveConfig({ replay_seconds: v }))), hint(T().replayHint)];
     },
-    update(s) { this.btn.textContent = T().replayBtn(cfg.replay_seconds); this.btn.disabled = !s.engine || s.engine.replaying; },
+    update(s) { this.btn.lbl.textContent = T().replayBtn(cfg.replay_seconds); this.btn.disabled = !s.engine || s.engine.replaying; },
   },
   clips: {
     build() {
-      this.btn = h("button", { class: "wide primary", onclick: () => cmd("clip/" + cfg.clip_seconds) });
-      this.last = h("div", { class: "muted", style: "margin-top:6px; word-break: break-all" });
-      return [this.btn, h("div", { class: "line" }, h("span", { class: "grow muted", text: T().seconds }),
-        numberInput(cfg.clip_seconds, 5, 120, (v) => saveConfig({ clip_seconds: v }))), this.last,
-        h("div", { class: "line" }, h("a", { text: T().openFolder, onclick: () => api("/api/open/clips", { method: "POST" }) })),
-        h("p", { class: "muted", text: T().clipHint })];
+      this.btn = button("wide primary", "clapper", "", () => cmd("clip/" + cfg.clip_seconds));
+      this.lastLabel = h("span", { class: "field-label" });
+      this.last = h("code");
+      return [this.btn, inlineField(T().seconds, numberInput(cfg.clip_seconds, 5, 120, (v) => saveConfig({ clip_seconds: v }))),
+        h("div", { class: "group", style: "gap:6px" }, this.lastLabel, this.last),
+        button("link", "folder", T().openFolder, () => api("/api/open/clips", { method: "POST" })), hint(T().clipHint)];
     },
     update(s) {
-      this.btn.textContent = T().clipBtn(cfg.clip_seconds); this.btn.disabled = !s.engine;
-      this.last.textContent = s.last_clip ? `${T().lastClip} ${s.last_clip}` : `${T().folder} ${cfg.clips_path}`;
+      this.btn.lbl.textContent = T().clipBtn(cfg.clip_seconds); this.btn.disabled = !s.engine;
+      this.lastLabel.textContent = s.last_clip ? T().lastClip : T().folder;
+      this.last.textContent = s.last_clip || cfg.clips_path;
     },
   },
   panic: {
     build() {
-      this.btn = h("button", { class: "wide danger", onclick: () => cmd("panic") });
+      this.btn = button("wide danger", "siren", "", () => cmd("panic"));
       return [this.btn,
         field(T().panicScene, sceneSelect(cfg.panic_scene, (v) => saveConfig({ panic_scene: v }), true)),
-        h("label", { class: "check" }, h("input", { type: "checkbox", checked: cfg.panic_mute, onchange: (e) => saveConfig({ panic_mute: e.target.checked }) }), T().panicMute),
-        h("label", { class: "check" }, h("input", { type: "checkbox", checked: cfg.panic_censor, onchange: (e) => saveConfig({ panic_censor: e.target.checked }) }), T().panicCensor)];
+        check(cfg.panic_mute, T().panicMute, (e) => saveConfig({ panic_mute: e.target.checked })),
+        check(cfg.panic_censor, T().panicCensor, (e) => saveConfig({ panic_censor: e.target.checked }))];
     },
-    update(s) { this.btn.textContent = s.panic ? T().panicOff : T().panicBtn; this.btn.className = "wide " + (s.panic ? "warn" : "danger"); },
+    update(s) { this.btn.lbl.textContent = s.panic ? T().panicOff : T().panicBtn; this.btn.className = "btn wide " + (s.panic ? "warn" : "danger"); },
   },
   health: {
     build() {
-      this.kv = h("div", { class: "kv" });
-      this.obs = h("div", { class: "dots" });
-      this.outs = h("div");
-      return [this.kv, this.obs, this.outs,
-        cfg.features.outage ? field(T().outage, numberInput(cfg.outage_buffer_seconds, 0, 300, (v) => saveConfig({ outage_buffer_seconds: v }))) : null,
-        h("label", { class: "check" }, h("input", { type: "checkbox", checked: cfg.alert_sound, onchange: (e) => saveConfig({ alert_sound: e.target.checked }) }), T().alertSound)];
+      this.up = h("span", { class: "stat-value", text: "-" });
+      this.kbps = h("span", { class: "stat-value", text: "-" });
+      this.obs = h("div");
+      this.outs = h("div", { class: "rows" });
+      return [h("div", { class: "stats" },
+          h("div", { class: "stat" }, h("span", { class: "stat-label", text: T().uptime }), this.up),
+          h("div", { class: "stat" }, h("span", { class: "stat-label", text: T().fromObs }), this.kbps)),
+        this.obs, this.outs,
+        cfg.features.outage ? inlineField(T().outage, numberInput(cfg.outage_buffer_seconds, 0, 300, (v) => saveConfig({ outage_buffer_seconds: v }))) : null,
+        check(cfg.alert_sound, T().alertSound, (e) => saveConfig({ alert_sound: e.target.checked }))];
     },
     update(s) {
       const up = s.health.uptime_s;
       const hms = `${Math.floor(up / 3600)}:${String(Math.floor(up / 60) % 60).padStart(2, "0")}:${String(up % 60).padStart(2, "0")}`;
-      this.kv.replaceChildren(h("span", { class: "muted", text: T().uptime }), h("span", { text: s.engine ? hms : "-" }),
-        h("span", { class: "muted", text: T().fromObs }), h("span", { text: s.engine ? `${s.health.in_kbps} kbps` : "-" }));
+      this.up.textContent = s.engine ? hms : "-";
+      this.kbps.textContent = s.engine ? `${s.health.in_kbps} kbps` : "-";
       this.obs.replaceChildren(obsLine(s));
       const cls = { connected: "ok", connecting: "warn", reconnecting: "bad", idle: "" };
       this.outs.replaceChildren(...(s.outputs || []).map((o) => h("div", { class: "out" },
-        h("span", { class: "dot " + cls[o.state], text: `${o.name} · ${T().states[o.state]}` }),
-        h("span", { class: "muted", text: o.state === "connected" ? `${o.kbps} kbps` : "" }),
+        h("span", { class: "dot " + cls[o.state] }, h("span", {}, h("b", { text: o.name }), ` · ${T().states[o.state]}`)),
+        h("span", { class: "dim", text: o.state === "connected" ? `${o.kbps} kbps` : "" }),
         o.behind_ms > 2000 ? h("span", { class: "note", text: T().behind(Math.round(o.behind_ms / 1000)) }) : null,
-        o.behind_ms > 2000 ? h("button", { class: "small", text: T().catchUp, onclick: () => cmd("catchup") }) : null,
-        o.state !== "connected" && o.error ? h("span", { class: "err", style: "grid-column: 1 / -1", text: o.error }) : null,
-        o.reconnects ? h("span", { class: "muted", style: "grid-column: 1 / -1", text: `${o.reconnects} ${T().reconnects}` }) : null)));
+        o.behind_ms > 2000 ? button("small", "fastforward", T().catchUp, () => cmd("catchup")) : null,
+        o.state !== "connected" && o.error ? h("span", { class: "err full", text: o.error }) : null,
+        o.reconnects ? h("span", { class: "dim full", text: `${o.reconnects} ${T().reconnects}` }) : null)));
     },
   },
   multistream: {
     build() {
-      this.list = h("div", { class: "list" });
+      this.list = h("div", { class: "items" });
       this.msg = h("span", { class: "note" });
       this.draft = (cfg.destinations || []).map((d) => Object.assign({}, d));
       this.render();
-      return [h("p", { class: "muted", style: "margin-top:0", text: T().mainDest }), this.list,
-        h("div", { class: "line" }, h("button", { text: T().addDest, onclick: () => { this.draft.push({ name: "", url: "", key: "", enabled: true }); this.render(); } }),
-          h("button", { class: "primary", text: T().save, onclick: () => saveConfig({ destinations: this.draft }, this.msg) })), this.msg];
+      return [hint(T().mainDest), this.list,
+        h("div", { class: "actions" }, button("", "plus", T().addDest, () => { this.draft.push({ name: "", url: "", key: "", enabled: true }); this.render(); }),
+          button("primary", "check", T().save, () => saveConfig({ destinations: this.draft }, this.msg))), this.msg];
     },
     render() {
-      this.list.replaceChildren(...this.draft.map((d, i) => h("div", {},
-        h("div", { class: "line" },
-          h("input", { type: "text", class: "grow", placeholder: T().name, value: d.name, oninput: (e) => (d.name = e.target.value) }),
-          h("label", { class: "check", style: "margin:0" }, h("input", { type: "checkbox", checked: d.enabled, onchange: (e) => (d.enabled = e.target.checked) }), T().enabled),
-          h("button", { class: "small", text: T().remove, onclick: () => { this.draft.splice(i, 1); this.render(); } })),
-        h("input", { type: "text", placeholder: "rtmp(s)://...  " + T().url, value: d.url, oninput: (e) => (d.url = e.target.value) }),
-        h("input", { type: "password", autocomplete: "off", placeholder: d.key_set ? T().keySaved : T().key, value: d.key_set ? "" : d.key || "", oninput: (e) => (d.key = e.target.value) }))));
+      this.list.replaceChildren(...this.draft.map((d, i) => h("div", { class: "item" },
+        h("div", { class: "item-row" },
+          h("input", { type: "text", class: "grow", placeholder: T().name, "aria-label": T().name, value: d.name, oninput: (e) => (d.name = e.target.value) }),
+          h("input", { type: "checkbox", checked: d.enabled, title: T().enabled, "aria-label": T().enabled, onchange: (e) => (d.enabled = e.target.checked) }),
+          iconButton("x", T().remove, () => { this.draft.splice(i, 1); this.render(); }, false, "del")),
+        h("input", { type: "text", placeholder: "rtmp(s)://...  " + T().url, "aria-label": T().url, value: d.url, oninput: (e) => (d.url = e.target.value) }),
+        h("input", { type: "password", autocomplete: "off", "aria-label": T().key, placeholder: d.key_set ? T().keySaved : T().key, value: d.key_set ? "" : d.key || "", oninput: (e) => (d.key = e.target.value) }))));
     },
     update() {},
   },
   rules: {
     build() {
-      this.list = h("div", { class: "list" });
+      this.list = h("div", { class: "items" });
       this.msg = h("span", { class: "note" });
       this.draft = (cfg.scene_rules || []).map((r) => Object.assign({}, r));
       this.render();
-      return [h("p", { class: "muted", style: "margin-top:0", text: T().rulesHint }), this.list,
-        h("div", { class: "line" }, h("button", { text: T().addRule, onclick: () => { this.draft.push({ scene: "", action: "on" }); this.render(); } }),
-          h("button", { class: "primary", text: T().save, onclick: () => saveConfig({ scene_rules: this.draft.filter((r) => r.scene) }, this.msg) })), this.msg];
+      return [hint(T().rulesHint), this.list,
+        h("div", { class: "actions" }, button("", "plus", T().addRule, () => { this.draft.push({ scene: "", action: "on" }); this.render(); }),
+          button("primary", "check", T().save, () => saveConfig({ scene_rules: this.draft.filter((r) => r.scene) }, this.msg))), this.msg];
     },
     render() {
       this.list.replaceChildren(...this.draft.map((r, i) => {
         const kind = r.action.startsWith("set:") ? "set" : r.action;
         const secs = kind === "set" ? parseInt(r.action.slice(4)) || 30 : 30;
-        const act = h("select", { onchange: (e) => { r.action = e.target.value === "set" ? `set:${secs}` : e.target.value; this.render(); } },
+        const act = h("select", { class: "grow", onchange: (e) => { r.action = e.target.value === "set" ? `set:${secs}` : e.target.value; this.render(); } },
           h("option", { value: "on", text: T().actOn }), h("option", { value: "off", text: T().actOff }), h("option", { value: "set", text: T().actSet }));
         act.value = kind;
-        return h("div", {}, h("div", { class: "line" }, h("div", { class: "grow" }, sceneSelect(r.scene, (v) => (r.scene = v))),
-          h("button", { class: "small", text: T().remove, onclick: () => { this.draft.splice(i, 1); this.render(); } })),
-          h("div", { class: "line" }, act, kind === "set" ? numberInput(secs, 1, 600, (v) => (r.action = `set:${v}`)) : null, kind === "set" ? h("span", { class: "muted", text: "s" }) : null));
+        return h("div", { class: "item" }, h("div", { class: "item-row" }, h("div", { class: "grow" }, sceneSelect(r.scene, (v) => (r.scene = v))),
+          iconButton("x", T().remove, () => { this.draft.splice(i, 1); this.render(); }, false, "del")),
+          h("div", { class: "item-row" }, act, kind === "set" ? numberInput(secs, 1, 600, (v) => (r.action = `set:${v}`)) : null, kind === "set" ? h("span", { class: "dim", text: "s" }) : null));
       }));
     },
     update() {},
@@ -427,69 +689,67 @@ const MODULES = {
       const allow = h("select", { onchange: (e) => (c.allow = e.target.value) },
         h("option", { value: "broadcaster", text: T().allowB }), h("option", { value: "mods", text: T().allowM }), h("option", { value: "vips", text: T().allowV }));
       allow.value = c.allow;
-      const hint = h("p", { class: "muted", text: T().chatHint(c.prefix) });
+      const tip = hint(T().chatHint(c.prefix));
       return [field(T().channel, h("input", { type: "text", placeholder: T().channelHint, value: c.channel, oninput: (e) => (c.channel = e.target.value) })),
         field(T().allow, allow),
-        field(T().prefix, h("input", { type: "text", value: c.prefix, oninput: (e) => { c.prefix = e.target.value; hint.textContent = T().chatHint(c.prefix); } })),
-        hint, h("div", { class: "actions" }, h("button", { class: "primary", text: T().save, onclick: () => saveConfig({ twitch_chat: c }, this.msg) }), this.msg)];
+        field(T().prefix, h("input", { type: "text", value: c.prefix, oninput: (e) => { c.prefix = e.target.value; tip.textContent = T().chatHint(c.prefix); } })),
+        tip, h("div", { class: "actions" }, button("primary", "check", T().save, () => saveConfig({ twitch_chat: c }, this.msg))), this.msg];
     },
     update() {},
   },
   phone: {
     build() {
-      this.qr = h("div");
-      this.link = h("div");
+      this.qr = h("div", { class: "qr-wrap" });
       this.msg = h("span", { class: "note" });
       this.draft = { columns: cfg.deck.columns, keys: cfg.deck.keys.map((k) => Object.assign({}, k)) };
-      this.list = h("div", { class: "list" });
-      const cols = h("select", { onchange: (e) => (this.draft.columns = parseInt(e.target.value)) },
+      this.list = h("div", { class: "items" });
+      const cols = h("select", { style: "width:84px", onchange: (e) => (this.draft.columns = parseInt(e.target.value)) },
         ...[2, 3, 4, 5, 6].map((n) => h("option", { value: n, text: `${n}` })));
       cols.value = String(this.draft.columns);
       this.render();
-      return [this.qr, this.link, h("p", { class: "muted", text: T().lanHint }),
-        h("div", { class: "line" }, h("a", { text: T().openDeck, onclick: () => api("/api/open/deck", { method: "POST" }) })),
-        h("h3", { style: "margin-top:12px", text: T().deckKeys }),
-        h("div", { class: "line" }, h("span", { class: "grow muted", text: T().deckColumns }), cols),
-        this.list,
-        h("div", { class: "line" },
-          h("button", { text: T().addKey, onclick: () => { this.draft.keys.push({ action: "delay.toggle", arg: "", label: "", color: "" }); this.render(); } }),
-          h("button", { class: "primary", text: T().save, onclick: () => saveConfig({ deck: this.draft }, this.msg) })),
-        h("div", { class: "line" }, h("a", { text: T().deckDefaults, onclick: () => saveConfig({ deck: { columns: 3, keys: DEFAULT_DECK } }, this.msg) })),
-        this.msg];
+      return [this.qr, hint(T().lanHint),
+        button("link", "external", T().openDeck, () => api("/api/open/deck", { method: "POST" })),
+        h("div", { class: "group" }, h("p", { class: "eyebrow", text: T().deckKeys }), inlineField(T().deckColumns, cols), this.list,
+          h("div", { class: "actions" },
+            button("", "plus", T().addKey, () => { this.draft.keys.push({ action: "delay.toggle", arg: "", label: "", color: "" }); this.render(); }),
+            button("primary", "check", T().save, () => saveConfig({ deck: this.draft }, this.msg))),
+          button("link dangerous", "replay", T().deckDefaults, () => saveConfig({ deck: { columns: 3, keys: DEFAULT_DECK } }, this.msg)),
+          this.msg)];
     },
     render() {
       const k2 = this.draft.keys;
       this.list.replaceChildren(...k2.map((k, i) => {
-        const action = h("select", { onchange: (e) => { k.action = e.target.value; k.arg = ""; this.render(); } },
+        const action = h("select", { "aria-label": `${i + 1}`, onchange: (e) => { k.action = e.target.value; k.arg = ""; this.render(); } },
           ...DECK_ACTIONS.map((a) => h("option", { value: a, text: T().deckActions[a] })));
         action.value = k.action;
         let arg = null;
         if (k.action === "obs.scene") arg = sceneSelect(k.arg, (v) => (k.arg = v), false, "scene");
         else if (k.action === "obs.mute") arg = sceneSelect(k.arg, (v) => (k.arg = v), false, "audio");
         else if (k.action === "delay.set" || k.action === "delay.add" || ["censor", "replay", "clip"].includes(k.action)) {
-          arg = h("input", { type: "number", value: k.arg, placeholder: k.action === "delay.add" ? "5 / -5" : T().seconds, oninput: (e) => (k.arg = e.target.value) });
+          arg = h("input", { type: "number", style: "width:100%;text-align:left", value: k.arg, placeholder: k.action === "delay.add" ? "5 / -5" : T().seconds, oninput: (e) => (k.arg = e.target.value) });
         }
-        const color = h("select", { class: "keycolor", onchange: (e) => (k.color = e.target.value) },
+        const swatch = h("span", { class: "swatch" });
+        const paint = () => swatch.style.setProperty("--c", k.color ? SWATCH[k.color] : "transparent");
+        const color = h("select", { style: "width:auto;flex:0 1 44%", "aria-label": T().colors[""], onchange: (e) => { k.color = e.target.value; paint(); } },
           ...["", "blue", "green", "orange", "red", "grey"].map((c) => h("option", { value: c, text: T().colors[c] })));
         color.value = k.color || "";
-        return h("div", {},
-          h("div", { class: "line" }, h("b", { text: `${i + 1}` }), h("div", { class: "grow" }, action),
-            h("button", { class: "small", text: "↑", disabled: i === 0, onclick: () => { [k2[i - 1], k2[i]] = [k2[i], k2[i - 1]]; this.render(); } }),
-            h("button", { class: "small", text: "↓", disabled: i === k2.length - 1, onclick: () => { [k2[i + 1], k2[i]] = [k2[i], k2[i + 1]]; this.render(); } }),
-            h("button", { class: "small", text: "✕", title: T().remove, onclick: () => { k2.splice(i, 1); this.render(); } })),
-          arg ? h("div", { class: "line" }, h("div", { class: "grow" }, arg)) : null,
-          h("div", { class: "line" }, h("input", { type: "text", class: "keylabel", placeholder: T().keyLabel, value: k.label, oninput: (e) => (k.label = e.target.value) }), color));
+        paint();
+        return h("div", { class: "item" },
+          h("div", { class: "item-row" }, h("span", { class: "index", text: `${i + 1}` }), h("div", { class: "grow" }, action),
+            iconButton("up", T().up, () => { [k2[i - 1], k2[i]] = [k2[i], k2[i - 1]]; this.render(); }, i === 0),
+            iconButton("down", T().down, () => { [k2[i + 1], k2[i]] = [k2[i], k2[i + 1]]; this.render(); }, i === k2.length - 1),
+            iconButton("x", T().remove, () => { k2.splice(i, 1); this.render(); }, false, "del")),
+          arg ? h("div", { class: "item-row" }, h("div", { class: "grow" }, arg)) : null,
+          h("div", { class: "item-row" }, h("input", { type: "text", class: "grow", placeholder: T().keyLabel, "aria-label": T().keyLabel, value: k.label, oninput: (e) => (k.label = e.target.value) }), swatch, color));
       }));
     },
     async load() {
       const r = await api("/api/lan");
       this.qr.replaceChildren();
-      this.link.replaceChildren();
       if (r.enabled && r.url) {
         const box = h("div", { class: "qr" });
         box.innerHTML = r.qr; // SVG generated by the relay
-        this.qr.append(box);
-        this.link.append(h("code", { text: r.url }));
+        this.qr.append(box, h("div", { class: "link-row", style: "width:100%" }, h("code", { class: "grow", text: r.url }), copyButton(() => r.url)));
       }
     },
     update() {
@@ -503,18 +763,15 @@ const MODULES = {
     build() {
       const base = (API || location.origin) + "/api/cmd/";
       const rows = [[T().toggle, "toggle"], [T().on, "on"], [T().off, "off"], [T().m.censor, "censor"], [T().m.replay, "replay"], [T().m.clips, "clip"], [T().m.panic, "panic"]];
-      const tokenBtn = h("button", { class: "small", text: T().copy, onclick: () => copyText(TOKEN).then(() => { tokenBtn.textContent = T().copied; setTimeout(() => (tokenBtn.textContent = T().copy), 1500); }) });
-      return [h("p", { class: "muted", style: "margin-top:0", text: T().sdPlugin }),
-        h("div", { class: "line" }, h("span", { class: "grow" }, h("b", { text: T().token })), tokenBtn),
-        h("p", { class: "muted", text: T().sdHint }), ...rows.map(([label, c]) => {
-        const url = `${base}${c}?token=${TOKEN}`;
-        const btn = h("button", { class: "small", text: T().copy, onclick: () => copyText(url).then(() => { btn.textContent = T().copied; setTimeout(() => (btn.textContent = T().copy), 1500); }) });
-        return h("div", { class: "line" }, h("span", { class: "grow", text: label }), btn);
-      })];
+      return [hint(T().sdPlugin),
+        h("div", { class: "link-row" }, icon("key"), h("b", { class: "grow", text: T().token }), copyButton(() => TOKEN)),
+        hint(T().sdHint),
+        h("div", { class: "rows" }, ...rows.map(([label, c]) => h("div", { class: "link-row" }, h("span", { class: "grow", text: label }), copyButton(() => `${base}${c}?token=${TOKEN}`))))];
     },
     update() {},
   },
 };
+const SWATCH = { blue: "#60a5fa", green: "#34d399", orange: "#fbbf24", red: "#f87171", grey: "#8a8f9c" };
 
 function copyText(text) {
   if (navigator.clipboard) return navigator.clipboard.writeText(text).catch(() => fallback());
@@ -525,13 +782,26 @@ function copyText(text) {
   }
 }
 
-function obsLine(s) {
+// OBS link state: [dot class, text]
+function obsState(s) {
   const o = s.obs || {};
-  return h("span", { class: "dot " + (o.script ? (o.configured ? "ok" : "warn") : "bad"),
-    text: s.obs_connected ? T().obsStreaming : !o.script ? T().scriptMissing : o.configured ? T().obsReady : T().obsNotConfigured });
+  return [o.script ? (o.configured ? "ok" : "warn") : "bad",
+    s.obs_connected ? T().obsStreaming : !o.script ? T().scriptMissing : o.configured ? T().obsReady : T().obsNotConfigured];
+}
+function obsLine(s) {
+  const [cls, text] = obsState(s);
+  return h("span", { class: "dot " + cls, text });
+}
+function setChip(cls, text) {
+  const c = $("conn");
+  c.className = "chip " + cls;
+  c.textContent = text;
 }
 
 // ---------------------------------------------------------------- settings (always available)
+function summary(look, title) {
+  return h("summary", {}, badge(look), h("span", { class: "card-title", text: title }), icon("chevron", "chev"));
+}
 function buildSettings() {
   const card = $("settingsCard");
   const open = card.open;
@@ -547,7 +817,7 @@ function buildSettings() {
     h("option", { value: "freeze", text: T().growFreeze }));
   grow.value = cfg.grow_mode;
   const scene = sceneSelect(cfg.delay_scene, () => {});
-  const sceneRow = h("label", {}, T().sceneLabel, scene, h("span", { class: "muted", text: T().sceneTip }));
+  const sceneRow = field(T().sceneLabel, scene, T().sceneTip);
   const showRows = () => { urlRow.classList.toggle("hidden", !!URLS[platform.value]); sceneRow.classList.toggle("hidden", grow.value !== "scene"); };
   platform.onchange = showRows;
   grow.onchange = showRows;
@@ -557,19 +827,22 @@ function buildSettings() {
     h("option", { value: "en", text: "English" }), h("option", { value: "pt", text: "Português (Brasil)" }));
   language.value = cfg.language;
   let armed = 0;
-  const restore = h("a", { text: T().restoreObs, onclick: () => {
+  const restore = button("link dangerous", "replay", T().restoreObs, () => {
     if (Date.now() - armed < 5000) { armed = 0; obsAction("/api/obs/restore"); return; }
     armed = Date.now(); msg.textContent = T().confirmRestore;
-  } });
-  const save = h("button", { class: "primary", text: T().save, onclick: () => {
+  });
+  const save = button("primary", "check", T().save, () => {
     const body = { upstream_url: URLS[platform.value] || url.value.trim(), grow_mode: grow.value, delay_scene: scene.value, start_enabled: start.checked };
     if (key.value.trim()) body.stream_key = key.value.trim();
     if (body.grow_mode === "scene" && !body.delay_scene) { msg.textContent = T().pickScene; return; }
     saveConfig(body, msg);
-  } });
-  card.replaceChildren(h("summary", { text: T().settings }), field(T().platform, platform), urlRow, field(T().streamKey, key),
-    field(T().growLabel, grow), sceneRow, h("label", { class: "check" }, start, T().startEnabled), field(T().language, language),
-    h("div", { class: "actions" }, save, msg, restore));
+  });
+  card.replaceChildren(summary("settings", T().settings), h("div", { class: "card-body" },
+    h("div", { class: "group" }, h("p", { class: "eyebrow", text: T().grpStream }), field(T().platform, platform), urlRow, field(T().streamKey, key)),
+    h("div", { class: "group" }, h("p", { class: "eyebrow", text: T().grpDelay }), field(T().growLabel, grow), sceneRow,
+      h("label", { class: "check" }, start, h("span", { text: T().startEnabled }))),
+    h("div", { class: "group" }, h("p", { class: "eyebrow", text: T().grpGeneral }), field(T().language, language),
+      h("div", { class: "actions stack" }, save), msg, restore)));
   card.open = open || !cfg.stream_key_set;
 }
 
@@ -585,22 +858,23 @@ function buildCustomize() {
     if (on && block && !shown.includes(block)) patch.panel_modules = order.filter((m) => shown.includes(m) || m === block);
     saveConfig(patch);
   };
-  const switchFor = (feature, block) => feature
-    ? h("label", { class: "check", style: "margin:0" }, h("input", { type: "checkbox", checked: cfg.features[feature], onchange: (e) => setFeature(feature, e.target.checked, block) }), T().active)
-    : h("span", { class: "muted", text: T().alwaysOn });
-  const rows = order.map((m, i) => h("div", {},
-    h("span", {}, h("b", { text: T().m[m] }), h("br"), h("span", { class: "muted", text: T().mDesc[m] })),
-    switchFor(FEATURE_OF[m], m),
-    h("label", { class: "check", style: "margin:0" }, h("input", { type: "checkbox", checked: shown.includes(m), disabled: !featureOn(m), onchange: (e) => {
+  const name = (m) => h("span", { class: "mod-name" }, h("b", { text: T().m[m] }), h("span", { text: T().mDesc[m] }));
+  const switchFor = (feature, block, label) => h("span", { class: "cell" }, feature
+    ? h("input", { type: "checkbox", checked: cfg.features[feature], "aria-label": `${T().active}: ${label}`, title: T().active, onchange: (e) => setFeature(feature, e.target.checked, block) })
+    : h("input", { type: "checkbox", checked: true, disabled: true, "aria-label": `${label}: ${T().alwaysOn}`, title: T().alwaysOn }));
+  const rows = order.map((m, i) => h("div", { class: "mod" }, name(m),
+    switchFor(FEATURE_OF[m], m, T().m[m]),
+    h("span", { class: "cell" }, h("input", { type: "checkbox", checked: shown.includes(m), disabled: !featureOn(m), "aria-label": `${T().inPanel}: ${T().m[m]}`, title: T().inPanel, onchange: (e) => {
       if (e.target.checked) shown.push(m); else shown.splice(shown.indexOf(m), 1);
       commit();
-    } }), T().inPanel),
-    h("button", { class: "small", title: T().up, text: "↑", disabled: i === 0, onclick: () => { [order[i - 1], order[i]] = [order[i], order[i - 1]]; commit(); } }),
-    h("button", { class: "small", title: T().down, text: "↓", disabled: i === order.length - 1, onclick: () => { [order[i + 1], order[i]] = [order[i], order[i + 1]]; commit(); } })));
-  const extras = EXTRA_FEATURES.map((f) => h("div", {},
-    h("span", {}, h("b", { text: T().m[f] }), h("br"), h("span", { class: "muted", text: T().mDesc[f] })),
-    switchFor(f, null)));
-  card.replaceChildren(h("summary", { text: T().customize }), h("p", { class: "muted", text: T().customizeHint }), h("div", { class: "mods" }, ...rows, ...extras));
+    } })),
+    h("span", { class: "order" },
+      iconButton("up", T().up, () => { [order[i - 1], order[i]] = [order[i], order[i - 1]]; commit(); }, i === 0),
+      iconButton("down", T().down, () => { [order[i + 1], order[i]] = [order[i], order[i + 1]]; commit(); }, i === order.length - 1))));
+  const extras = EXTRA_FEATURES.map((f) => h("div", { class: "mod" }, name(f), switchFor(f, null, T().m[f]), h("span"), h("span")));
+  card.replaceChildren(summary("customize", T().customize), h("div", { class: "card-body" }, hint(T().customizeHint),
+    h("div", { class: "mods" }, h("div", { class: "mod head" }, h("span", { style: "text-align:left", text: T().feature }), h("span", { text: T().active }), h("span", { text: T().inPanel }), h("span")),
+      ...rows, ...extras)));
   card.open = open;
 }
 
@@ -611,6 +885,7 @@ function obsAction(path) {
 // ---------------------------------------------------------------- page assembly
 function buildAll() {
   sceneSelects = [];
+  bannersKey = null;
   document.documentElement.lang = lang === "pt" ? "pt-BR" : "en";
   document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T()[el.dataset.t]));
   const root = $("modules");
@@ -619,8 +894,12 @@ function buildAll() {
     const m = MODULES[id];
     if (!m || !featureOn(id)) continue;
     m.loaded = false;
-    const title = id === "delay" ? null : h("h3", { text: T().m[id] });
-    root.append(h("section", { class: "card", "data-module": id }, title, m.build()));
+    let card;
+    if (id === "delay") card = h("section", { class: "card hero", "data-module": id, "aria-label": T().m.delay }, m.build());
+    else card = h("section", { class: "card", "data-module": id },
+      h("header", { class: "card-head" }, badge(id), h("h2", { class: "card-title", text: T().m[id] })), h("div", { class: "card-body" }, m.build()));
+    m.card = card;
+    root.append(card);
   }
   buildSettings();
   buildCustomize();
@@ -629,16 +908,30 @@ function buildAll() {
 
 function toast(text, kind) {
   const el = $("toast");
-  el.className = "box" + (kind === "error" || kind === "warn" ? " bad" : "");
-  el.textContent = text;
+  const bad = kind === "error" || kind === "warn";
+  el.replaceChildren(icon(bad ? "alert" : "check"), h("span", { text }));
+  el.className = "toast show" + (bad ? " bad" : "");
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => el.classList.add("hidden"), 6000);
+  toast.timer = setTimeout(() => el.classList.remove("show"), 5000);
 }
 
 let lastEvent = null;
 let lastMessage = null;
 const downSince = {};
 let scenesKey = null;
+let bannersKey = null;
+let overSince = 0;
+// Strictest bitrate cap among the destinations (same rules as the OBS script).
+function platformLimit() {
+  const caps = { Twitch: 6000, Kick: 8000 };
+  let best = null;
+  for (const u of [cfg.upstream_url, ...(cfg.destinations || []).filter((d) => d.enabled).map((d) => d.url)]) {
+    const host = ((u || "").match(/^\w+:\/\/([^/:]+)/) || [])[1] || "";
+    const name = /twitch\.tv$|^ingest\..*live-video\.net$/i.test(host) ? "Twitch" : /live-video\.net$/i.test(host) ? "Kick" : null;
+    if (name && (!best || caps[name] < best.max)) best = { name, max: caps[name] };
+  }
+  return best;
+}
 function render(s) {
   status = s;
   const key = (s.obs?.scenes || []).join("\n") + "|" + (s.obs?.audio || []).map((a) => a.name).join("\n");
@@ -648,20 +941,37 @@ function render(s) {
     sceneSelects.forEach(fillSceneSelect);
   }
   for (const id of cfg.panel_modules) if (featureOn(id)) MODULES[id]?.update(s);
-  const banners = [];
+  setChip(...obsState(s));
+  $("ver").textContent = s.version ? "v" + s.version : "";
   const o = s.obs || {};
-  if (o.script && !o.configured) banners.push(h("div", { class: "box" }, T().obsNotUsing, h("div", { class: "actions" }, h("button", { class: "primary", text: T().configureObs, onclick: () => obsAction("/api/obs/configure") }))));
-  if (!cfg.stream_key_set) banners.push(h("div", { class: "box", text: T().keyMissing }));
-  if (updateVersion) banners.push(h("div", { class: "box" }, T().update(updateVersion) + " ", h("a", { text: T().download, onclick: () => api("/api/open/releases", { method: "POST" }) })));
+  const want = [];
+  if (o.script && !o.configured) want.push("obs");
+  if (!cfg.stream_key_set) want.push("key");
+  if (updateVersion) want.push("up:" + updateVersion);
+  const lim = platformLimit();
+  // above the cap for a while (plus 10% for bursts), not a single spike
+  overSince = s.engine && lim && s.health.in_kbps > lim.max * 1.1 ? overSince || Date.now() : 0;
+  if (overSince && Date.now() - overSince > 8000) want.push("over");
   for (const out of s.outputs || []) {
     if (s.engine && out.state === "reconnecting") {
-      banners.push(h("div", { class: "box bad", text: T().alertDown(out.name) }));
+      want.push("down:" + out.name);
       if (!downSince[out.name]) { downSince[out.name] = Date.now(); if (cfg.alert_sound) beep(); }
     } else delete downSince[out.name];
   }
-  // without the health block, still show whether OBS is connected
-  if (!cfg.panel_modules.includes("health")) banners.push(h("div", { class: "card dots" }, obsLine(s)));
-  $("banners").replaceChildren(...banners);
+  // rebuild the banners only when they change, so their buttons stay clickable
+  const bk = want.join("|") + lang;
+  if (bk !== bannersKey) {
+    bannersKey = bk;
+    $("banners").replaceChildren(...want.map((w) => {
+      if (w === "obs") return callout("", "plug", h("span", { text: T().obsNotUsing }),
+        h("div", { class: "actions" }, button("primary", "sparkles", T().configureObs, () => obsAction("/api/obs/configure"))));
+      if (w === "key") return callout("", "key", h("span", { text: T().keyMissing }));
+      if (w === "over") return callout("", "activity", h("span", { text: T().overLimit(s.health.in_kbps, lim.name, lim.max) }));
+      if (w.startsWith("up:")) return callout("info", "download", h("span", { text: T().update(updateVersion) }),
+        h("div", { class: "actions" }, button("small", "external", T().download, () => api("/api/open/releases", { method: "POST" }))));
+      return callout("bad", "alert", h("span", { text: T().alertDown(w.slice(5)) }));
+    }));
+  }
   const ev = s.event ? s.event.id : 0;
   if (lastEvent !== null && ev !== lastEvent && s.event) toast(s.event.text, s.event.kind);
   lastEvent = ev;
@@ -720,20 +1030,29 @@ async function refresh() {
     render(s);
   } catch (e) {
     offline = true;
-    const pill = document.querySelector("[data-module=delay] .pill");
-    if (pill) { pill.className = "pill off"; pill.textContent = T().relayOff; }
-    if (!cfg) $("modules").replaceChildren(h("div", { class: "card" }, h("span", { class: "pill off", text: T().relayOff }), " ", h("span", { class: "muted", text: T().relayOffHint })));
+    setChip("bad", T().relayOff.charAt(0) + T().relayOff.slice(1).toLowerCase());
+    const hero = document.querySelector("[data-module=delay]");
+    if (hero) {
+      const pill = hero.querySelector(".pill");
+      pill.className = "pill off"; pill.textContent = T().relayOff;
+      hero.dataset.tone = "bad";
+    }
+    if (!cfg) $("modules").replaceChildren(h("div", { class: "card empty" }, h("span", { class: "ico tone-red" }, icon("plug")),
+      h("b", { text: T().relayClosed }), hint(T().relayClosedHint)));
   }
 }
 
+$("logo").append(icon("timer"));
 $("author").onclick = (ev) => {
   // inside an OBS dock a plain link would navigate the dock itself: ask the relay to open the browser
   ev.preventDefault();
   api("/api/open/author", { method: "POST" }).catch(() => window.open($("author").href, "_blank"));
 };
 document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T()[el.dataset.t]));
+setChip("", "...");
 if (!TOKEN) {
-  $("modules").replaceChildren(h("div", { class: "box bad", text: T().noToken }));
+  setChip("bad", "Token");
+  $("modules").replaceChildren(callout("bad", "key", h("span", { text: T().noToken })));
 } else {
   refresh();
   setInterval(refresh, 700);

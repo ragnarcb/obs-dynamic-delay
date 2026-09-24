@@ -2,6 +2,18 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.7.0] - 2026-09-24
+
+### Changed
+
+- **New panel design:** a professional dark interface for the OBS dock. App bar with the OBS connection status, a delay hero with a large readout and a progress meter, cards with icons, grouped settings, switches instead of checkboxes, icon buttons with labels for screen readers, visible keyboard focus, toasts that do not steal focus, and reduced motion support. Works in older OBS browser docks (no newer CSS features).
+- **Phone deck:** vector icons instead of emoji, the same colors as the panel, key states announced to screen readers.
+- Banners are rebuilt only when they change, so their buttons are always clickable.
+
+### Fixed
+
+- **Streams dropping to 720p on Twitch:** streaming to the relay (a custom server) made OBS stop applying the platform's encoder rules, so it could send 10000 kbps with 4 s keyframes. The OBS script now applies them: bitrate cap (Twitch 6000, Kick 8000 kbps) and a keyframe every 2 s, keeping the resolution. It respects "Apply service settings" / "Ignore streaming service setting recommendations". The panel warns while live if OBS is above the limit.
+
 ## [0.6.0] - 2026-09-24
 
 ### Added

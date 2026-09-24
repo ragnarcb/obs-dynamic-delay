@@ -7,6 +7,7 @@
 -- * switches to the delay scene while the delay builds up (grow mode "scene")
 -- * panic button: cover scene and mute; tells the relay which scene is on air (scene rules)
 -- * phone deck: switch scenes, toggle mute, start/stop streaming and recording
+-- * keeps the platform's encoder rules (bitrate cap, 2 s keyframes) while OBS streams to the relay
 --
 -- Texts are English or Portuguese, following `language` in config.toml.
 
@@ -23,6 +24,7 @@ local step = 5
 local ports = { rtmp = 1935, http = 8787, udp = 8788 }
 local lang = "en"
 local api_token = ""
+local dest_urls = {}
 
 -- Picks the text for the configured language.
 local function L(en, pt)
@@ -163,6 +165,10 @@ local function read_ports()
   ports.udp = port("udp_listen") or ports.udp
   lang = text:match("\n%s*language%s*=%s*\"(%a+)\"") or lang
   api_token = text:match("\n%s*api_token%s*=%s*\"(%w+)\"") or api_token
+  -- main destination plus every multistream destination
+  dest_urls = {}
+  for u in text:gmatch("\n%s*upstream_url%s*=%s*\"([^\"]*)\"") do table.insert(dest_urls, u) end
+  for u in text:gmatch("\n%s*url%s*=%s*\"([^\"]*)\"") do table.insert(dest_urls, u) end
 end
 
 local function relay_server()
@@ -275,6 +281,100 @@ local function report(msg)
   if S then obs.obs_data_set_string(S, "status_info", msg) end
 end
 
+---------------------------------------------------------------------------
+-- Platform limits. With the Twitch/YouTube/Kick service selected, OBS applies
+-- the platform's rules to the encoder ("Apply service settings"). Streaming
+-- to the relay uses a custom server, so OBS stops doing it: a 10000 kbps,
+-- 4 s keyframe 1080p60 stream is off-spec for Twitch and viewers drop to 720p.
+-- This keeps those rules while OBS streams through the relay.
+---------------------------------------------------------------------------
+local PLATFORMS = {
+  { name = "Twitch", max = 6000, match = function(h) return h:find("twitch%.tv$") or h:find("^ingest%..*live%-video%.net$") end },
+  { name = "Kick", max = 8000, match = function(h) return h:find("live%-video%.net$") end },
+  { name = "YouTube", max = nil, match = function(h) return h:find("youtube%.com$") end },
+}
+
+local function platform_limits(service_name)
+  local names, max = {}, nil
+  local function add(p)
+    if not names[p.name] then names[p.name] = true; table.insert(names, p.name) end
+    if p.max and (max == nil or p.max < max) then max = p.max end
+  end
+  for _, p in ipairs(PLATFORMS) do
+    if service_name and service_name:lower():find(p.name:lower(), 1, true) == 1 then add(p) end
+  end
+  for _, u in ipairs(dest_urls) do
+    local host = (u:match("^%a+://([^/:]+)") or ""):lower()
+    for _, p in ipairs(PLATFORMS) do
+      if p.match(host) then
+        add(p)
+        break
+      end
+    end
+  end
+  if #names == 0 then return nil end
+  return { names = table.concat(names, " + "), max = max }
+end
+
+-- Returns a note describing what changed, or nil.
+local function apply_platform_limits(service_name)
+  local lim = platform_limits(service_name)
+  if lim == nil then return nil end
+  local cfg = obs.obs_frontend_get_profile_config()
+  if cfg == nil then return nil end
+  local advanced = obs.config_get_string(cfg, "Output", "Mode") == "Advanced"
+  -- the streamer can still opt out, as with a normal service
+  if advanced and not obs.config_get_bool(cfg, "AdvOut", "ApplyServiceSettings") then return nil end
+  if not advanced and obs.config_get_bool(cfg, "Stream1", "IgnoreRecommended") then return nil end
+  local changes = {}
+
+  if advanced then
+    local ok, dir_ = pcall(obs.obs_frontend_get_current_profile_path)
+    local enc_id = obs.config_get_string(cfg, "AdvOut", "Encoder")
+    if ok and dir_ and dir_ ~= "" and enc_id ~= "" then
+      local path = dir_ .. "/streamEncoder.json"
+      local file = obs.obs_data_create_from_json_file_safe(path, "bak") or obs.obs_data_create()
+      -- effective values: what is saved, over the encoder's defaults
+      local eff = obs.obs_encoder_defaults(enc_id) or obs.obs_data_create()
+      obs.obs_data_apply(eff, file)
+      local bitrate = obs.obs_data_get_int(eff, "bitrate")
+      local keyint = obs.obs_data_get_int(eff, "keyint_sec")
+      if lim.max and bitrate > lim.max then
+        obs.obs_data_set_int(file, "bitrate", lim.max)
+        table.insert(changes, bitrate .. " -> " .. lim.max .. " kbps")
+      end
+      if keyint == 0 or keyint > 2 then
+        obs.obs_data_set_int(file, "keyint_sec", 2)
+        table.insert(changes, L("keyframe every 2 s", "keyframe a cada 2 s"))
+      end
+      if #changes > 0 then
+        obs.obs_data_save_json_safe(file, path, "tmp", "bak")
+        -- the encoder OBS already created, for this very stream
+        local out = obs.obs_frontend_get_streaming_output()
+        if out ~= nil then
+          local enc = obs.obs_output_get_video_encoder(out)
+          if enc ~= nil then obs.obs_encoder_update(enc, file) end
+          obs.obs_output_release(out)
+        end
+      end
+      obs.obs_data_release(eff)
+      obs.obs_data_release(file)
+    end
+  elseif lim.max then
+    -- simple mode always uses 2 s keyframes; only the bitrate needs a cap
+    local bitrate = obs.config_get_int(cfg, "SimpleOutput", "VBitrate")
+    if bitrate > lim.max then
+      obs.config_set_int(cfg, "SimpleOutput", "VBitrate", lim.max)
+      pcall(obs.config_save_safe, cfg, "tmp", nil)
+      table.insert(changes, bitrate .. " -> " .. lim.max .. " kbps")
+    end
+  end
+  if #changes == 0 then return nil end
+  local note = L("encoder set to the ", "encoder ajustado às regras da ") .. lim.names .. L(" rules (", " (") .. table.concat(changes, ", ") .. ")"
+  obs.script_log(obs.LOG_INFO, note)
+  return note
+end
+
 local function configure_obs()
   if obs.obs_frontend_streaming_active() then
     report(L("Stop the stream before configuring OBS.", "Pare a live antes de configurar o OBS."))
@@ -282,6 +382,7 @@ local function configure_obs()
   end
   local notes = {}
   local info, svc = current_service()
+  local imported_service = nil
   if info and not obs_configured() then
     -- keep the original settings (same format as service.json) so they can be restored
     local backup = obs.obs_data_create()
@@ -293,6 +394,7 @@ local function configure_obs()
     obs.obs_data_release(backup)
     send("import\t" .. (info.server or "") .. "\t" .. (info.key or "") .. "\t" .. (info.service or ""))
     table.insert(notes, L("destination and key imported from OBS", "destino e chave importados do OBS"))
+    imported_service = info.service
   end
 
   local data = obs.obs_data_create()
@@ -307,6 +409,8 @@ local function configure_obs()
     obs.config_set_bool(obs.obs_frontend_get_profile_config(), "Output", "DelayEnable", false)
   end)
   if ok then table.insert(notes, L("built-in Stream Delay turned off", "Stream Delay nativo desligado")) end
+  local limits = apply_platform_limits(imported_service)
+  if limits then table.insert(notes, limits) end
   report(L("Done! ", "Pronto! ") .. table.concat(notes, "; ") .. ".")
 end
 
@@ -636,6 +740,10 @@ function script_update(s)
 end
 
 local function on_event(event)
+  if event == obs.OBS_FRONTEND_EVENT_STREAMING_STARTING and obs_configured() then
+    read_ports() -- the destination may have changed in the panel
+    apply_platform_limits()
+  end
   if event == obs.OBS_FRONTEND_EVENT_STREAMING_STARTING and manage_relay and obs_configured() then
     if not ensure_relay(true) then
       obs.script_log(obs.LOG_WARNING, L("relay did not start; the stream will fail to connect", "relay nao iniciou; a live vai falhar ao conectar"))
@@ -655,6 +763,7 @@ function script_load(s)
     obs.obs_data_array_release(arr)
   end
   obs.obs_frontend_add_event_callback(on_event)
+  if obs_configured() then apply_platform_limits() end
   if manage_relay then
     if relay_alive() and not obs.obs_frontend_streaming_active() then
       restart_relay() -- make sure the running relay is this version with this config
