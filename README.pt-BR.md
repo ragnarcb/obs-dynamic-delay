@@ -46,7 +46,8 @@ O "Stream Delay" que já vem no OBS só pode ser mudado com a live parada. Com o
 **Controle**
 - Um **painel dentro do OBS** feito de blocos: mostre só o que você usa, na ordem que quiser.
 - **Todo recurso pode ser desligado de verdade**, não só escondido: um recurso desligado não faz nada.
-- **Atalhos** do OBS, **plugin do Stream Deck**, **comandos no chat da Twitch** para você e seus mods, e **controle pelo celular** com QR code.
+- **O celular vira um Stream Deck:** uma grade de botões que você monta (delay, apagar, replay, clipe, pânico, cenas do OBS, mutar fontes de áudio, iniciar/parar transmissão e gravação), acesos com o estado ao vivo. Abre por QR code.
+- **Atalhos** do OBS, **plugin do Stream Deck** e **comandos no chat da Twitch** para você e seus mods.
 - **Saúde da live:** bitrate vindo do OBS, estado de cada destino e um apito quando uma conexão cai.
 - **Português e inglês** em tudo.
 
@@ -98,7 +99,7 @@ Por padrão o painel mostra **Delay**, **Apagar antes de ir ao ar** e **Saúde d
 | Multistream | destinos extras com nome, URL, chave e liga/desliga |
 | Delay por cena | regras: cena X no ar liga, desliga, ou liga com N segundos |
 | Comandos no chat da Twitch | canal, quem pode usar, nome do comando |
-| Controle pelo celular | QR code para abrir o painel no celular (mesmo Wi-Fi) |
+| Deck no celular | QR code do deck no celular e o editor dos botões |
 | Proteção contra queda de conexão (sem bloco) | liga/desliga em Recursos e painel; os segundos guardados ficam em Saúde da live |
 | Aviso de atualização (sem bloco) | liga/desliga em Recursos e painel |
 | Stream Deck / API | token de acesso para o plugin e links prontos |
@@ -171,9 +172,27 @@ Ative em **Recursos e painel** e escreva o nome do seu canal no bloco **Comandos
 
 `!delay on` · `!delay off` · `!delay 60` (liga com 60 s) · `!delay apagar [s]` · `!delay replay [s]` · `!delay clipe [s]` · `!delay panico` (também em inglês: `on`, `off`, `censor`, `clip`, `panic`).
 
-### Controle pelo celular
+### Deck no celular
 
-Ative o **Controle pelo celular** em **Recursos e painel** e aponte a câmera do celular para o QR code (mesmo Wi-Fi). Na primeira vez o Windows pode pedir para liberar a conexão. O link leva o token de acesso: quem tiver ele controla o delay, então não compartilhe.
+O celular (ou um tablet, ou um segundo monitor) vira um Stream Deck: uma grade de botões grandes em tela cheia, acesos com o estado ao vivo.
+
+![Deck no celular](docs/img/pt/deck-celular.png)
+
+1. Ative o **Deck no celular** em **Recursos e painel**.
+2. Aponte a câmera do celular para o QR code do bloco (mesmo Wi-Fi). Na primeira vez o Windows pode pedir para liberar a conexão. Dica: adicione a página à tela inicial para abrir como um app.
+3. Monte os botões no mesmo bloco: ação, alvo (cena, fonte de áudio ou segundos), texto, cor, ordem e número de colunas, e clique em **Salvar**. O celular pega o layout novo sozinho.
+
+| Ação do botão | O que faz | Aceso quando |
+|---|---|---|
+| Delay: ligar/desligar, ligar, desligar, ligar com N s, ±N s | controla o delay | delay ligado (mostra os segundos) |
+| Apagar antes de ir ao ar, Replay instantâneo, Salvar clipe | igual aos blocos | em replay |
+| Botão de pânico | liga/desliga o pânico | pânico ligado |
+| Alcançar depois de uma queda | descarta o atraso extra de um destino | um destino está atrás |
+| OBS: trocar para a cena | coloca a cena no ar | a cena está no ar |
+| OBS: mutar/desmutar fonte de áudio | alterna microfone, áudio do desktop, música... | a fonte está muda |
+| OBS: iniciar/parar transmissão ou gravação | **segure** o botão para confirmar | transmitindo / gravando |
+
+Os botões vibram ao tocar e tremem se algo deu errado. O link leva o token de acesso: quem tiver ele controla a sua live, então não compartilhe. No PC, "Abrir o deck neste PC" abre o mesmo deck no navegador.
 
 ## Atalhos
 
@@ -211,7 +230,8 @@ O plugin foi testado com um Stream Deck simulado, ainda não num aparelho de ver
 | O painel não aparece | **Docks > Delay dinâmico**. Se não estiver lá, rode o instalador de novo com o OBS fechado. |
 | "O Windows protegeu o computador" | O exe não tem assinatura digital. Clique em **Mais informações > Executar assim mesmo**. |
 | Os comandos do chat não fazem nada | Ative **Comandos no chat da Twitch** em **Recursos e painel** e escreva o nome do canal no bloco dele. O log (`obs-dynamic-delay.log`) precisa mostrar `[chat] joined #seucanal`. |
-| O celular não abre o painel | Mesmo Wi-Fi, libere a conexão no aviso do firewall do Windows e use o link do QR code. |
+| O celular não abre o deck | Mesmo Wi-Fi, libere a conexão no aviso do firewall do Windows e use o link do QR code. |
+| Um botão de cena ou áudio do deck não faz nada | O script do OBS precisa estar rodando (o deck mostra um ponto vermelho quando o relay não responde); confira o nome da cena ou da fonte no editor. |
 | Quero voltar a transmitir sem o relay | **Configuração > Restaurar a configuração original de transmissão do OBS** (clique duas vezes para confirmar). |
 
 Ao abrir uma issue, anexe o `obs-dynamic-delay.log`. As chaves de transmissão não aparecem nele.
@@ -224,7 +244,7 @@ O painel avisa quando sai uma versão nova. Baixe o instalador de novo e dê doi
 
 - Toda chamada à API precisa do token de acesso criado na primeira vez (`api_token` no `config.toml`). Sites abertos no seu navegador não conseguem controlar o delay nem ler a sua configuração.
 - A API nunca devolve chaves de transmissão nem o token.
-- Por padrão o painel só escuta no seu PC (`127.0.0.1`). O **controle pelo celular** (desligado por padrão) abre para a sua rede local, ainda protegido pelo token.
+- Por padrão o painel só escuta no seu PC (`127.0.0.1`). O **deck no celular** (desligado por padrão) abre para a sua rede local, ainda protegido pelo token. Um botão do deck só executa a ação salva para ele no editor.
 - Recursos desligados não fazem nada: sem conexão com o chat, sem porta na rede, sem buffers extras.
 - O relay só abre três lugares fixos no seu PC quando pedido (o GitHub do autor, a página de releases e a pasta dos clipes).
 
@@ -259,7 +279,8 @@ OBS ──RTMP──▶ 127.0.0.1:1935 ──▶ motor de delay ──▶ um cli
 | `/api/status` | estado em JSON (delay, motor, destinos, saúde, pânico, último clipe, eventos) |
 | `/api/config` | lê (GET) ou muda (POST JSON, só os campos enviados) a configuração |
 | `/api/obs/configure` · `/api/obs/restore` | pede ao script do OBS para configurar ou restaurar a transmissão |
-| `/api/lan` | link e QR code para o celular |
+| `/api/lan` | link e QR code do deck no celular |
+| `/deck` · `/api/deck/press/{n}` | página do deck · executa o botão número n |
 
 A porta UDP `8788` aceita os mesmos comandos em texto (`toggle`, `set 30`, `censor`...) e os que o script do OBS usa.
 
@@ -287,6 +308,7 @@ Rodar só o relay: `obs-dynamic-delay.exe caminho\config.toml`. Testar o instala
 | `src/installer.rs` | instalador com janelas e em texto |
 | `src/i18n.rs` | textos em inglês e português (macro `t!`) |
 | `src/panel.html` | painel; cada bloco é uma entrada em `MODULES`, textos em `TEXT` |
+| `src/deck.html` | deck no celular |
 | `obs/obs-dynamic-delay.lua` | script do OBS (textos pela função `L()`) |
 | `streamdeck/` | plugin do Stream Deck e o gerador dos ícones |
 

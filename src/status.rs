@@ -43,6 +43,11 @@ pub enum ObsAction {
     SceneBack,
     Panic { scene: String, mute: bool },
     Unpanic,
+    /// Phone deck keys.
+    Scene(String),
+    ToggleMute(String),
+    ToggleStream,
+    ToggleRecord,
 }
 
 impl ObsAction {
@@ -55,6 +60,10 @@ impl ObsAction {
             ObsAction::SceneBack => "scene_back".into(),
             ObsAction::Panic { scene, mute } => format!("panic\t{}\t{scene}", if *mute { 1 } else { 0 }),
             ObsAction::Unpanic => "unpanic".into(),
+            ObsAction::Scene(name) => format!("scene\t{name}"),
+            ObsAction::ToggleMute(name) => format!("mute\t{name}"),
+            ObsAction::ToggleStream => "stream_toggle".into(),
+            ObsAction::ToggleRecord => "record_toggle".into(),
         }
     }
 }
@@ -68,6 +77,16 @@ pub struct Bridge {
     pub message: Option<(Instant, String)>,
     pub scenes: Vec<String>,
     pub program_scene: String,
+    pub audio: Vec<AudioSource>,
+    pub streaming: bool,
+    pub recording: bool,
+}
+
+/// An OBS audio source and whether it is muted.
+#[derive(Clone, Debug, Serialize, PartialEq)]
+pub struct AudioSource {
+    pub name: String,
+    pub muted: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -80,6 +99,11 @@ pub struct ObsInfo {
     /// Scene names reported by the OBS script.
     pub scenes: Vec<String>,
     pub program_scene: String,
+    /// Audio sources with their mute state.
+    pub audio: Vec<AudioSource>,
+    /// OBS is streaming / recording (OBS itself, not the relay).
+    pub streaming: bool,
+    pub recording: bool,
 }
 
 impl Bridge {
@@ -95,6 +119,9 @@ impl Bridge {
                 .map(|(_, m)| m.clone()),
             scenes: self.scenes.clone(),
             program_scene: self.program_scene.clone(),
+            audio: self.audio.clone(),
+            streaming: self.streaming,
+            recording: self.recording,
         }
     }
 }
@@ -300,5 +327,6 @@ mod tests {
     fn encodes_actions() {
         assert_eq!(ObsAction::Panic { scene: "BRB".into(), mute: true }.encode(), "panic\t1\tBRB");
         assert_eq!(ObsAction::ShowScene("X".into()).encode(), "scene_show\tX");
+        assert_eq!(ObsAction::ToggleMute("Mic/Aux".into()).encode(), "mute\tMic/Aux");
     }
 }

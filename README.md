@@ -46,7 +46,8 @@ OBS' built-in "Stream Delay" can only be changed while the stream is stopped. Wi
 **Control**
 - A **panel inside OBS** made of blocks: show only what you use, in the order you want.
 - **Every feature can be switched off for real**, not just hidden: an off feature does no work at all.
-- OBS **hotkeys**, a **Stream Deck plugin**, **Twitch chat commands** for you and your mods, and **phone control** with a QR code.
+- **Your phone becomes a Stream Deck:** a grid of keys you design (delay, delete, replay, clip, panic, OBS scenes, mute audio sources, start/stop streaming and recording), lit with the live state. Open it with a QR code.
+- OBS **hotkeys**, a **Stream Deck plugin** and **Twitch chat commands** for you and your mods.
 - **Stream health:** input bitrate, per destination status, and a beep when a connection drops.
 - **English and Portuguese** everywhere.
 
@@ -98,7 +99,7 @@ By default the panel shows **Delay**, **Delete before it airs** and **Stream hea
 | Multistream | extra destinations with name, URL, key and an on/off switch |
 | Delay by scene | rules: scene X on air turns the delay on, off, or on with N seconds |
 | Twitch chat commands | channel, who may use them, command name |
-| Phone control | QR code to open the panel on your phone (same Wi-Fi) |
+| Phone deck | QR code for the phone deck and the editor of its keys |
 | Connection drop protection (no block) | switch under Features and panel; the seconds kept are set in Stream health |
 | Update notice (no block) | switch under Features and panel |
 | Stream Deck / API | access token for the plugin and ready-made links |
@@ -171,9 +172,27 @@ Turn it on under **Features and panel** and type your channel name in the **Twit
 
 `!delay on` · `!delay off` · `!delay 60` (turns on with 60 s) · `!delay censor [s]` · `!delay replay [s]` · `!delay clip [s]` · `!delay panic` (Portuguese aliases work too: `ligar`, `desligar`, `apagar`, `clipe`, `panico`).
 
-### Phone control
+### Phone deck
 
-Turn **Phone control** on under **Features and panel** and scan the QR code with the phone camera (same Wi-Fi). Windows may ask to allow the connection the first time. The link carries the access token: anyone with it can control the delay, so do not share it.
+Your phone (or a tablet, or a second monitor) becomes a Stream Deck: a full-screen grid of big keys, lit with the live state.
+
+![Phone deck](docs/img/en/phone-deck.png)
+
+1. Turn **Phone deck** on under **Features and panel**.
+2. Scan the QR code in its block with the phone camera (same Wi-Fi). Windows may ask to allow the connection the first time. Tip: add the page to the home screen to open it like an app.
+3. Design the keys in the same block: action, target (scene, audio source or seconds), text, color, order and number of columns, then **Save**. The phone picks up the new layout by itself.
+
+| Key action | What it does | Lit when |
+|---|---|---|
+| Delay: toggle / on / off / on with N s / ±N s | controls the delay | delay on (shows the seconds) |
+| Delete before it airs, Instant replay, Save clip | same as the blocks | replaying |
+| Panic button | panic on/off | panic on |
+| Catch up after a drop | drops a destination's outage backlog | a destination is behind |
+| OBS: switch to scene | puts that scene on air | the scene is on air |
+| OBS: mute/unmute audio source | toggles a mic, desktop audio, music... | the source is muted |
+| OBS: start/stop streaming or recording | **hold** the key to confirm | streaming / recording |
+
+Keys vibrate when pressed and shake if something failed. The link carries the access token: anyone with it can control your stream, so do not share it. On the PC, "Open the deck on this PC" opens the same deck in the browser.
 
 ## Hotkeys
 
@@ -211,7 +230,8 @@ The plugin was tested against a simulated Stream Deck, not on real hardware yet:
 | The panel does not show up | **Docks > Dynamic Delay**. If it is not there, run the installer again with OBS closed. |
 | "Windows protected your PC" | The exe is not code-signed. Click **More info > Run anyway**. |
 | Chat commands do nothing | Turn **Twitch chat commands** on under **Features and panel** and type the channel name in its block. The log (`obs-dynamic-delay.log`) must show `[chat] joined #yourchannel`. |
-| Phone cannot open the panel | Same Wi-Fi, allow the connection in the Windows firewall prompt, and use the link from the QR code. |
+| Phone cannot open the deck | Same Wi-Fi, allow the connection in the Windows firewall prompt, and use the link from the QR code. |
+| A deck key for scenes or audio does nothing | The OBS script must be running (the deck shows a red dot when the relay is unreachable); check the scene or source name in the editor. |
 | I want to stream without the relay again | **Settings > Restore OBS' original stream settings** (click twice to confirm). |
 
 When opening an issue, attach `obs-dynamic-delay.log`. The stream keys are not written to it.
@@ -224,7 +244,7 @@ The panel tells you when a new version is out. Download the installer again and 
 
 - Every API call needs the access token created on first start (`api_token` in `config.toml`). Websites open in your browser cannot control the delay or read your settings.
 - The API never returns stream keys or the token.
-- By default the panel only listens on your PC (`127.0.0.1`). **Phone control** (off by default) opens it to your local network, still protected by the token.
+- By default the panel only listens on your PC (`127.0.0.1`). The **phone deck** (off by default) opens it to your local network, still protected by the token. A deck key only runs the action saved for it in the editor.
 - Features you switch off do nothing: no chat connection, no LAN port, no extra buffers.
 - The relay only ever opens three fixed places on your PC when asked (the author's GitHub, the releases page, the clips folder).
 
@@ -259,7 +279,8 @@ OBS ──RTMP──▶ 127.0.0.1:1935 ──▶ delay engine ──▶ one RTMP
 | `/api/status` | state as JSON (delay, engine, destinations, health, panic, last clip, events) |
 | `/api/config` | reads (GET) or changes (POST JSON, only the fields you send) the settings |
 | `/api/obs/configure` · `/api/obs/restore` | asks the OBS script to configure or restore the stream settings |
-| `/api/lan` | phone link and QR code |
+| `/api/lan` | phone deck link and QR code |
+| `/deck` · `/api/deck/press/{n}` | phone deck page · runs key number n |
 
 UDP port `8788` takes the same commands as text (`toggle`, `set 30`, `censor`, ...) plus the ones used by the OBS script.
 
@@ -287,6 +308,7 @@ Run only the relay: `obs-dynamic-delay.exe path\config.toml`. Test the installer
 | `src/installer.rs` | windowed and console installer |
 | `src/i18n.rs` | English and Portuguese texts (`t!` macro) |
 | `src/panel.html` | panel; each block is an entry in `MODULES`, texts in `TEXT` |
+| `src/deck.html` | phone deck |
 | `obs/obs-dynamic-delay.lua` | OBS script (texts through `L()`) |
 | `streamdeck/` | Stream Deck plugin and its icon generator |
 

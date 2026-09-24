@@ -20,10 +20,11 @@ use tower_http::cors::CorsLayer;
 use crate::EngineMsg;
 use crate::config::{Config, destination_from_obs};
 use crate::i18n::{self, Lang};
-use crate::status::{Cmd, ObsAction, ObsInfo, Shared, Status};
+use crate::status::{AudioSource, Cmd, ObsAction, ObsInfo, Shared, Status};
 use crate::t;
 
 pub const PANEL: &str = include_str!("panel.html");
+const DECK: &str = include_str!("deck.html");
 pub const AUTHOR_URL: &str = "https://github.com/ragnarcb";
 pub const RELEASES_URL: &str = "https://github.com/ragnarcb/obs-dynamic-delay/releases/latest";
 
@@ -61,9 +62,11 @@ pub async fn serve_http(tx: UnboundedSender<EngineMsg>, shared: Arc<Shared>) -> 
         .route("/api/obs/restore", post(obs_restore))
         .route("/api/open/{target}", post(open_target))
         .route("/api/lan", get(lan_info))
+        .route("/api/deck/press/{index}", post(deck_press))
         .layer(middleware::from_fn_with_state(state.clone(), require_token));
     let app = Router::new()
         .route("/", get(|| async { Html(PANEL) }))
+        .route("/deck", get(|| async { Html(DECK) }))
         .merge(api)
         // the dock is a local file (origin "null"); every API call still needs the token
         .layer(CorsLayer::permissive())
@@ -259,6 +262,10 @@ async fn open_target(State(s): State<AppState>, Path(target): Path<String>) -> i
     let what = match target.as_str() {
         "author" => AUTHOR_URL.to_string(),
         "releases" => RELEASES_URL.to_string(),
+        "deck" => {
+            let c = s.shared.config.lock().unwrap();
+            format!("http://127.0.0.1:{}/deck?token={}", c.http_port(), c.api_token)
+        }
         "clips" => {
             let dir = s.shared.config.lock().unwrap().clips_path();
             let _ = std::fs::create_dir_all(&dir);
@@ -280,6 +287,48 @@ async fn open_target(State(s): State<AppState>, Path(target): Path<String>) -> i
     Json(json!({ "ok": r.is_ok() }))
 }
 
+/// Runs the action of a phone deck key. The phone only sends the key number;
+/// what it does comes from the saved deck, so a key can never do anything else.
+async fn deck_press(State(s): State<AppState>, Path(index): Path<usize>) -> Json<Value> {
+    let (on, key) = {
+        let c = s.shared.config.lock().unwrap();
+        (c.features.phone, c.deck.keys.get(index).cloned())
+    };
+    if !on {
+        return Json(json!({ "ok": false, "error": t!("Phone deck is turned off.", "O deck no celular está desativado.") }));
+    }
+    let Some(key) = key else { return Json(json!({ "ok": false, "error": "no such key" })) };
+    let secs = key.arg.trim().parse::<u32>().ok();
+    let cmd = match key.action.as_str() {
+        "delay.toggle" => Some(Cmd::Toggle),
+        "delay.on" => Some(Cmd::On),
+        "delay.off" => Some(Cmd::Off),
+        "delay.set" => secs.map(Cmd::Set),
+        "delay.add" => key.arg.trim().parse::<i64>().ok().map(Cmd::Add),
+        "censor" => Some(Cmd::Censor(secs)),
+        "replay" => Some(Cmd::Replay(secs)),
+        "clip" => Some(Cmd::Clip(secs)),
+        "panic" => Some(Cmd::Panic),
+        "catchup" => Some(Cmd::CatchUp),
+        _ => None,
+    };
+    if let Some(cmd) = cmd {
+        let _ = s.tx.send(EngineMsg::Cmd(cmd));
+        if key.action == "delay.set" {
+            let _ = s.tx.send(EngineMsg::Cmd(Cmd::On));
+        }
+        return Json(json!({ "ok": true }));
+    }
+    let action = match key.action.as_str() {
+        "obs.scene" if !key.arg.is_empty() => ObsAction::Scene(key.arg.clone()),
+        "obs.mute" if !key.arg.is_empty() => ObsAction::ToggleMute(key.arg.clone()),
+        "obs.stream" => ObsAction::ToggleStream,
+        "obs.record" => ObsAction::ToggleRecord,
+        _ => return Json(json!({ "ok": false, "error": "key not set up" })),
+    };
+    queue_obs_action(&s, action)
+}
+
 /// Address of this PC on the local network.
 fn lan_ip() -> Option<std::net::IpAddr> {
     let s = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
@@ -295,7 +344,7 @@ async fn lan_info(State(s): State<AppState>) -> impl IntoResponse {
     let Some(ip) = lan_ip() else {
         return Json(json!({ "enabled": enabled, "url": null, "qr": null }));
     };
-    let url = format!("http://{ip}:{port}/?token={token}");
+    let url = format!("http://{ip}:{port}/deck?token={token}");
     let qr = qrcode::QrCode::new(url.as_bytes())
         .map(|c| c.render::<qrcode::render::svg::Color>().min_dimensions(180, 180).quiet_zone(true).build())
         .ok();
@@ -342,6 +391,21 @@ pub async fn serve_udp(sock: UdpSocket, tx: UnboundedSender<EngineMsg>, shared: 
             "scenes" => {
                 shared.bridge.lock().unwrap().scenes =
                     rest.split('\t').map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect();
+            }
+            "audio" => {
+                // audio\t<name>=<0|1>\t...
+                shared.bridge.lock().unwrap().audio = rest
+                    .split('\t')
+                    .filter_map(|kv| kv.rsplit_once('='))
+                    .map(|(name, m)| AudioSource { name: name.to_string(), muted: m == "1" })
+                    .collect();
+            }
+            "obsstate" => {
+                // obsstate\t<streaming 0|1>\t<recording 0|1>
+                let mut it = rest.split('\t');
+                let mut b = shared.bridge.lock().unwrap();
+                b.streaming = it.next() == Some("1");
+                b.recording = it.next() == Some("1");
             }
             "program" => {
                 let name = rest.trim().to_string();

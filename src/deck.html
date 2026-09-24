@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#16171b">
+<title>Dynamic Delay Deck</title>
+<style>
+  :root {
+    --bg: #16171b; --key: #26282f; --line: #363943; --text: #eceef3; --muted: #9a9dab;
+    --blue: #5aa7ff; --green: #3ecf6e; --orange: #f0a93b; --red: #ff5d5d; --grey: #7d8190;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.3 system-ui, "Segoe UI", sans-serif;
+    user-select: none; -webkit-user-select: none; touch-action: manipulation; overscroll-behavior: none; }
+  body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  header { display: flex; align-items: center; gap: 10px; padding: 12px 14px 8px; }
+  .pill { font-weight: 800; letter-spacing: .05em; padding: 5px 11px; border-radius: 999px; font-size: 13px; background: #30323a; color: var(--muted); }
+  .pill.live { background: rgba(62,207,110,.18); color: var(--green); }
+  .pill.delayed { background: rgba(240,169,59,.2); color: var(--orange); }
+  .pill.busy { background: rgba(90,167,255,.2); color: var(--blue); }
+  .pill.bad { background: rgba(255,93,93,.22); color: var(--red); }
+  #secs { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  #conn { margin-left: auto; width: 10px; height: 10px; border-radius: 50%; background: var(--red); }
+  #conn.ok { background: var(--green); }
+  #gear { color: var(--muted); text-decoration: none; font-size: 22px; padding: 0 2px 0 8px; }
+  #grid { display: grid; gap: 10px; padding: 8px 14px 18px; }
+  .key { position: relative; aspect-ratio: 1; border-radius: 18px; background: var(--key); border: 2px solid var(--line);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; overflow: hidden;
+    transition: transform .06s, background .15s, border-color .15s; cursor: pointer; }
+  .key:active, .key.down { transform: scale(.94); }
+  .key .icon { font-size: clamp(26px, 9vw, 44px); line-height: 1; }
+  .key .label { font-size: clamp(11px, 3.4vw, 15px); font-weight: 700; text-align: center; padding: 0 6px; overflow-wrap: anywhere; }
+  .key .sub { font-size: clamp(10px, 3vw, 13px); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .key.lit { border-color: var(--c); background: color-mix(in srgb, var(--c) 26%, var(--key)); box-shadow: 0 0 18px -4px var(--c); }
+  .key.lit .sub { color: var(--text); }
+  .key.flash { animation: flash .35s; }
+  .key.fail { animation: shake .35s; border-color: var(--red); }
+  .key .hold { position: absolute; inset: auto 0 0 0; height: 0; background: color-mix(in srgb, var(--c) 45%, transparent); }
+  .key .holdhint { position: absolute; top: 6px; right: 8px; font-size: 11px; color: var(--muted); }
+  @keyframes flash { 0% { background: var(--c); } 100% { } }
+  @keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+  #toast { position: fixed; left: 14px; right: 14px; bottom: calc(14px + env(safe-area-inset-bottom)); padding: 12px 14px; border-radius: 12px;
+    background: #2c2f37; border: 1px solid var(--line); font-weight: 600; display: none; }
+  #toast.show { display: block; }
+  #toast.bad { border-color: var(--red); background: #3a2226; }
+  .msg { padding: 30px 20px; text-align: center; color: var(--muted); font-size: 16px; }
+</style>
+</head>
+<body>
+<header>
+  <span id="pill" class="pill">...</span>
+  <span id="secs"></span>
+  <span id="conn" title=""></span>
+  <a id="gear" href="#" title="Panel">⚙</a>
+</header>
+<div id="grid"></div>
+<div id="toast"></div>
+<script>
+"use strict";
+const TOKEN = new URLSearchParams(location.search).get("token") || "";
+const TEXT = {
+  en: {
+    live: "LIVE", delayed: "DELAY", adjusting: "ADJUSTING", replay: "REPLAY", panic: "PANIC", noLive: "NOT LIVE", offline: "OFFLINE",
+    hold: "hold", holdToConfirm: "Hold the key to confirm", off: "Phone deck is turned off (Features and panel).", noToken: "Open the deck from the QR code in the OBS panel.",
+    keys: {
+      "delay.toggle": "Delay", "delay.on": "Delay on", "delay.off": "Go live", "delay.set": (a) => `Delay ${a}s`, "delay.add": (a) => (a.startsWith("-") ? `−${a.slice(1)}s` : `+${a}s`),
+      censor: "Delete", replay: "Replay", clip: "Clip", panic: "Panic", catchup: "Catch up",
+      "obs.scene": (a) => a || "Scene", "obs.mute": (a) => a || "Audio", "obs.stream": "Stream", "obs.record": "Record",
+    },
+    on: "ON", offWord: "OFF", muted: "muted", streaming: "on air", recording: "recording",
+  },
+  pt: {
+    live: "AO VIVO", delayed: "DELAY", adjusting: "AJUSTANDO", replay: "REPLAY", panic: "PÂNICO", noLive: "SEM LIVE", offline: "OFFLINE",
+    hold: "segure", holdToConfirm: "Segure o botão para confirmar", off: "O deck no celular está desativado (Recursos e painel).", noToken: "Abra o deck pelo QR code do painel do OBS.",
+    keys: {
+      "delay.toggle": "Delay", "delay.on": "Ligar delay", "delay.off": "Ao vivo", "delay.set": (a) => `Delay ${a}s`, "delay.add": (a) => (a.startsWith("-") ? `−${a.slice(1)}s` : `+${a}s`),
+      censor: "Apagar", replay: "Replay", clip: "Clipe", panic: "Pânico", catchup: "Alcançar",
+      "obs.scene": (a) => a || "Cena", "obs.mute": (a) => a || "Áudio", "obs.stream": "Transmitir", "obs.record": "Gravar",
+    },
+    on: "LIGADO", offWord: "DESLIGADO", muted: "mudo", streaming: "no ar", recording: "gravando",
+  },
+};
+const ICONS = {
+  "delay.toggle": "⏱️", "delay.on": "⏱️", "delay.off": "🟢", "delay.set": "⏱️", "delay.add": "⏲️",
+  censor: "✂️", replay: "⏪", clip: "🎬", panic: "⚠️", catchup: "⏩",
+  "obs.scene": "🖼️", "obs.mute": "🎙️", "obs.stream": "📡", "obs.record": "⏺️",
+};
+const DEFAULT_COLOR = {
+  "delay.toggle": "orange", "delay.on": "orange", "delay.off": "green", "delay.set": "orange", "delay.add": "grey",
+  censor: "red", replay: "blue", clip: "blue", panic: "red", catchup: "blue",
+  "obs.scene": "blue", "obs.mute": "red", "obs.stream": "red", "obs.record": "red",
+};
+// keys that change what the whole audience sees: hold to confirm
+const HOLD = { "obs.stream": 800, "obs.record": 800 };
+
+let lang = /^pt/i.test(navigator.language) ? "pt" : "en";
+const T = () => TEXT[lang] || TEXT.en;
+const $ = (id) => document.getElementById(id);
+let cfg = null, status = null, layoutKey = "";
+
+async function api(path, method) {
+  const r = await fetch(path, { method: method || "GET", headers: { "x-dd-token": TOKEN } });
+  return r.json();
+}
+
+function toast(text, bad) {
+  const t = $("toast");
+  t.textContent = text;
+  t.className = "show" + (bad ? " bad" : "");
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => (t.className = ""), 2600);
+}
+
+function labelOf(k) {
+  if (k.label) return k.label;
+  const l = T().keys[k.action];
+  return typeof l === "function" ? l(k.arg || "") : l || k.action;
+}
+
+// lit state and small text under the label, from the live status
+function stateOf(k, s) {
+  const o = s.obs || {};
+  switch (k.action) {
+    case "delay.toggle": return { lit: s.enabled, sub: s.enabled ? `${s.delay_seconds}s` : T().live };
+    case "delay.on": return { lit: s.enabled };
+    case "delay.off": return { lit: !s.enabled };
+    case "delay.set": return { lit: s.enabled && String(s.delay_seconds) === k.arg };
+    case "panic": return { lit: s.panic, sub: s.panic ? T().on : "" };
+    case "replay": return { lit: !!(s.engine && s.engine.replaying) };
+    case "catchup": {
+      const behind = Math.max(0, ...(s.outputs || []).map((x) => x.behind_ms || 0));
+      return { lit: behind > 2000, sub: behind > 2000 ? `${Math.round(behind / 1000)}s` : "" };
+    }
+    case "obs.scene": return { lit: o.program_scene === k.arg };
+    case "obs.mute": {
+      const a = (o.audio || []).find((x) => x.name === k.arg);
+      return { lit: !!(a && a.muted), sub: a && a.muted ? T().muted : "", icon: a && a.muted ? "🔇" : "🎙️" };
+    }
+    case "obs.stream": return { lit: !!o.streaming, sub: o.streaming ? T().streaming : "" };
+    case "obs.record": return { lit: !!o.recording, sub: o.recording ? T().recording : "" };
+    default: return { lit: false };
+  }
+}
+
+async function press(i, el) {
+  if (navigator.vibrate) navigator.vibrate(25);
+  el.classList.remove("flash", "fail"); void el.offsetWidth; el.classList.add("flash");
+  try {
+    const r = await api("/api/deck/press/" + i, "POST");
+    if (!r.ok) { el.classList.add("fail"); toast(r.error || "error", true); if (navigator.vibrate) navigator.vibrate([40, 60, 40]); }
+    refresh();
+  } catch (e) { el.classList.add("fail"); }
+}
+
+function buildGrid() {
+  const grid = $("grid");
+  grid.style.gridTemplateColumns = `repeat(${cfg.deck.columns}, 1fr)`;
+  grid.replaceChildren(...cfg.deck.keys.map((k, i) => {
+    const el = document.createElement("div");
+    el.className = "key";
+    el.style.setProperty("--c", `var(--${k.color || DEFAULT_COLOR[k.action] || "blue"})`);
+    el.innerHTML = '<span class="icon"></span><span class="label"></span><span class="sub"></span><span class="hold"></span>';
+    el.querySelector(".label").textContent = labelOf(k);
+    el.querySelector(".icon").textContent = ICONS[k.action] || "•";
+    const hold = HOLD[k.action];
+    if (hold) {
+      const hint = document.createElement("span");
+      hint.className = "holdhint"; hint.textContent = T().hold;
+      el.append(hint);
+      let timer = null, started = 0, raf = null;
+      const bar = el.querySelector(".hold");
+      const cancel = () => { clearTimeout(timer); cancelAnimationFrame(raf); timer = null; bar.style.height = "0"; el.classList.remove("down"); };
+      const grow = () => { bar.style.height = Math.min(100, (Date.now() - started) / hold * 100) + "%"; raf = requestAnimationFrame(grow); };
+      el.addEventListener("pointerdown", (e) => {
+        e.preventDefault(); started = Date.now(); el.classList.add("down"); grow();
+        timer = setTimeout(() => { cancel(); press(i, el); }, hold);
+      });
+      ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => el.addEventListener(ev, () => {
+        if (timer) { cancel(); toast(T().holdToConfirm); }
+      }));
+    } else {
+      el.addEventListener("pointerdown", (e) => { e.preventDefault(); press(i, el); });
+    }
+    return el;
+  }));
+}
+
+function render(s) {
+  status = s;
+  const e = s.engine;
+  const pill = $("pill");
+  if (s.panic) { pill.className = "pill bad"; pill.textContent = T().panic; }
+  else if (!e) { pill.className = "pill"; pill.textContent = T().noLive; }
+  else if (e.replaying) { pill.className = "pill busy"; pill.textContent = T().replay; }
+  else if (["filling", "growing", "shrinking"].includes(e.phase)) { pill.className = "pill busy"; pill.textContent = T().adjusting; }
+  else if (e.phase === "live") { pill.className = "pill live"; pill.textContent = T().live; }
+  else { pill.className = "pill delayed"; pill.textContent = T().delayed; }
+  const secs = e ? e.current_ms / 1000 : 0;
+  $("secs").textContent = (lang === "pt" ? secs.toFixed(1).replace(".", ",") : secs.toFixed(1)) + " s";
+  $("conn").className = "ok";
+  const keys = document.querySelectorAll(".key");
+  cfg.deck.keys.forEach((k, i) => {
+    const el = keys[i];
+    if (!el) return;
+    const st = stateOf(k, s);
+    el.classList.toggle("lit", !!st.lit);
+    el.querySelector(".sub").textContent = st.sub || "";
+    if (st.icon) el.querySelector(".icon").textContent = st.icon;
+  });
+}
+
+async function loadConfig() {
+  const c = await api("/api/config");
+  if (c.ok === false) throw new Error(c.error);
+  cfg = c;
+  if (TEXT[c.language]) lang = c.language;
+  document.documentElement.lang = lang === "pt" ? "pt-BR" : "en";
+  if (!c.features.phone) { $("grid").replaceChildren(Object.assign(document.createElement("div"), { className: "msg", textContent: T().off })); layoutKey = ""; return; }
+  const key = JSON.stringify(c.deck) + lang;
+  if (key !== layoutKey) { layoutKey = key; buildGrid(); }
+}
+
+let ticks = 0;
+async function refresh() {
+  try {
+    if (!cfg || ticks++ % 8 === 0) await loadConfig();
+    if (!cfg.features.phone) return;
+    render(await api("/api/status"));
+  } catch (e) {
+    $("conn").className = "";
+    $("pill").className = "pill bad"; $("pill").textContent = T().offline;
+  }
+}
+
+$("gear").href = "/?token=" + encodeURIComponent(TOKEN);
+if (!TOKEN) {
+  $("grid").replaceChildren(Object.assign(document.createElement("div"), { className: "msg", textContent: T().noToken }));
+} else {
+  refresh();
+  setInterval(refresh, 700);
+}
+</script>
+</body>
+</html>

@@ -71,6 +71,8 @@
   .credit a { color: var(--busy); font-size: 11px; text-decoration: none; }
   .credit a:hover { text-decoration: underline; }
   #toast { position: sticky; top: 4px; z-index: 5; }
+  .line > .keylabel { flex: 1 1 60%; min-width: 0; }
+  .line > .keycolor { flex: 0 1 40%; width: auto; }
 </style>
 </head>
 <body>
@@ -100,14 +102,14 @@ const TEXT = {
     alertDown: (n) => `${n}: connection lost, reconnecting...`,
     m: {
       delay: "Delay", censor: "Delete before it airs", replay: "Instant replay", clips: "Clips", panic: "Panic button", health: "Stream health",
-      multistream: "Multistream", rules: "Delay by scene", chat: "Twitch chat commands", phone: "Phone control", streamdeck: "Stream Deck / API",
+      multistream: "Multistream", rules: "Delay by scene", chat: "Twitch chat commands", phone: "Phone deck", streamdeck: "Stream Deck / API",
       outage: "Connection drop protection", update_check: "Update notice",
     },
     mDesc: {
       delay: "turn the delay on/off, presets", censor: "remove the last seconds before viewers see them", replay: "replay the last seconds on air",
       clips: "save the last seconds as MP4", panic: "cover the stream and mute everything", health: "bitrate, connections, alerts",
       multistream: "stream to several platforms at once", rules: "delay switches with the OBS scene", chat: "!delay commands for mods",
-      phone: "control from your phone", streamdeck: "button links for Stream Deck and bots",
+      phone: "your phone becomes a Stream Deck: delay, scenes, audio, stream", streamdeck: "button links for Stream Deck and bots",
       outage: "resend what was missed when a platform connection drops", update_check: "checks GitHub for new versions",
     },
     seconds: "Seconds", censorBtn: (s) => `Delete the last ${s}s`, censorHint: "Only works with the delay on: the part viewers have not seen yet is removed and the stream holds its last frame over the gap.",
@@ -122,6 +124,15 @@ const TEXT = {
     addRule: "+ Add rule", actOn: "turn on", actOff: "turn off", actSet: "turn on with", rulesHint: "When one of these scenes goes on air, the delay changes by itself.",
     chatOn: "Listen to chat commands", channel: "Channel", channelHint: "your channel name, e.g. ragnar_cb", allow: "Who can use them", allowB: "only me", allowM: "me and mods", allowV: "me, mods and VIPs", prefix: "Command",
     chatHint: (p) => `In chat: ${p} on · ${p} off · ${p} 60 · ${p} censor · ${p} replay · ${p} clip · ${p} panic`,
+    openDeck: "Open the deck on this PC (tablet or second monitor)", deckKeys: "Deck keys", deckColumns: "Columns", addKey: "+ Add key",
+    deckDefaults: "Restore the default keys", keyLabel: "Text on the key (empty = automatic)", noAudio: "(open OBS to list the audio sources)",
+    deckActions: {
+      "delay.toggle": "Delay: toggle", "delay.on": "Delay: turn on", "delay.off": "Delay: off (back to live)", "delay.set": "Delay: turn on with N seconds",
+      "delay.add": "Delay: add/remove seconds", censor: "Delete before it airs", replay: "Instant replay", clip: "Save clip", panic: "Panic button",
+      catchup: "Catch up after a drop", "obs.scene": "OBS: switch to scene", "obs.mute": "OBS: mute/unmute audio source",
+      "obs.stream": "OBS: start/stop streaming (hold)", "obs.record": "OBS: start/stop recording (hold)",
+    },
+    colors: { "": "automatic color", blue: "blue", green: "green", orange: "orange", red: "red", grey: "grey" },
     lanHint: "Scan with the phone camera (same Wi-Fi). Windows may ask to allow the connection. Anyone with this link can control the delay: do not share it.",
     sdPlugin: "With the Dynamic Delay Stream Deck plugin (see the releases page), paste this token in its settings:", token: "Access token",
     sdHint: "Without the plugin: use the \"Website\" action with \"Access in background\" and one of these links (they already contain your token).", copy: "Copy", copied: "Copied!",
@@ -146,14 +157,14 @@ const TEXT = {
     alertDown: (n) => `${n}: conexão caiu, reconectando...`,
     m: {
       delay: "Delay", censor: "Apagar antes de ir ao ar", replay: "Replay instantâneo", clips: "Clipes", panic: "Botão de pânico", health: "Saúde da live",
-      multistream: "Multistream", rules: "Delay por cena", chat: "Comandos no chat da Twitch", phone: "Controle pelo celular", streamdeck: "Stream Deck / API",
+      multistream: "Multistream", rules: "Delay por cena", chat: "Comandos no chat da Twitch", phone: "Deck no celular", streamdeck: "Stream Deck / API",
       outage: "Proteção contra queda de conexão", update_check: "Aviso de atualização",
     },
     mDesc: {
       delay: "ligar/desligar o delay, presets", censor: "tirar os últimos segundos antes do público ver", replay: "repetir os últimos segundos no ar",
       clips: "salvar os últimos segundos em MP4", panic: "cobrir a live e mutar tudo", health: "bitrate, conexões, alertas",
       multistream: "transmitir para várias plataformas ao mesmo tempo", rules: "o delay muda sozinho com a cena do OBS", chat: "comandos !delay para os mods",
-      phone: "controlar pelo celular", streamdeck: "links de botão para Stream Deck e bots",
+      phone: "o celular vira um Stream Deck: delay, cenas, áudio, transmissão", streamdeck: "links de botão para Stream Deck e bots",
       outage: "reenviar o que foi perdido quando a conexão com uma plataforma cai", update_check: "consulta o GitHub por versões novas",
     },
     seconds: "Segundos", censorBtn: (s) => `Apagar os últimos ${s}s`, censorHint: "Só funciona com o delay ligado: o trecho que o público ainda não viu é removido e a live segura o último quadro no lugar.",
@@ -168,6 +179,15 @@ const TEXT = {
     addRule: "+ Adicionar regra", actOn: "ligar", actOff: "desligar", actSet: "ligar com", rulesHint: "Quando uma dessas cenas entra no ar, o delay muda sozinho.",
     chatOn: "Ouvir comandos no chat", channel: "Canal", channelHint: "nome do seu canal, ex.: ragnar_cb", allow: "Quem pode usar", allowB: "só eu", allowM: "eu e os mods", allowV: "eu, mods e VIPs", prefix: "Comando",
     chatHint: (p) => `No chat: ${p} on · ${p} off · ${p} 60 · ${p} apagar · ${p} replay · ${p} clipe · ${p} panico`,
+    openDeck: "Abrir o deck neste PC (tablet ou segundo monitor)", deckKeys: "Botões do deck", deckColumns: "Colunas", addKey: "+ Adicionar botão",
+    deckDefaults: "Restaurar os botões padrão", keyLabel: "Texto no botão (vazio = automático)", noAudio: "(abra o OBS para listar as fontes de áudio)",
+    deckActions: {
+      "delay.toggle": "Delay: ligar/desligar", "delay.on": "Delay: ligar", "delay.off": "Delay: desligar (voltar ao vivo)", "delay.set": "Delay: ligar com N segundos",
+      "delay.add": "Delay: somar/tirar segundos", censor: "Apagar antes de ir ao ar", replay: "Replay instantâneo", clip: "Salvar clipe", panic: "Botão de pânico",
+      catchup: "Alcançar depois de uma queda", "obs.scene": "OBS: trocar para a cena", "obs.mute": "OBS: mutar/desmutar fonte de áudio",
+      "obs.stream": "OBS: iniciar/parar transmissão (segurar)", "obs.record": "OBS: iniciar/parar gravação (segurar)",
+    },
+    colors: { "": "cor automática", blue: "azul", green: "verde", orange: "laranja", red: "vermelho", grey: "cinza" },
     lanHint: "Aponte a câmera do celular (mesmo Wi-Fi). O Windows pode pedir para liberar a conexão. Quem tiver este link controla o delay: não compartilhe.",
     sdPlugin: "Com o plugin Delay Dinâmico para Stream Deck (na página de releases), cole este token nas configurações dele:", token: "Token de acesso",
     sdHint: "Sem o plugin: use a ação \"Website\" com \"Acessar em segundo plano\" e um destes links (eles já têm o seu token).", copy: "Copiar", copied: "Copiado!",
@@ -188,6 +208,10 @@ const ALL_MODULES = ["delay", "censor", "replay", "clips", "panic", "health", "m
 const FEATURE_OF = { censor: "censor", replay: "replay", clips: "clips", panic: "panic", multistream: "multistream", rules: "rules", chat: "chat", phone: "phone" };
 // Features without a block of their own.
 const EXTRA_FEATURES = ["outage", "update_check"];
+const DECK_ACTIONS = ["delay.toggle", "delay.on", "delay.off", "delay.set", "delay.add", "censor", "replay", "clip", "panic", "catchup",
+  "obs.scene", "obs.mute", "obs.stream", "obs.record"];
+const DEFAULT_DECK = [["delay.toggle", ""], ["delay.add", "-5"], ["delay.add", "5"], ["censor", ""], ["replay", ""], ["clip", ""],
+  ["panic", ""], ["delay.off", ""], ["obs.stream", ""]].map(([action, arg]) => ({ action, arg, label: "", color: "" }));
 const featureOn = (block) => !FEATURE_OF[block] || cfg.features[FEATURE_OF[block]];
 let lang = /^pt/i.test(navigator.language) ? "pt" : "en";
 const T = () => TEXT[lang] || TEXT.en;
@@ -216,16 +240,18 @@ function numberInput(value, min, max, onchange) {
 let sceneSelects = [];
 function fillSceneSelect(sel) {
   const value = sel.dataset.value || "";
-  const names = [...new Set([...(value ? [value] : []), ...(status?.obs?.scenes || [])])];
+  const list = sel.dataset.kind === "audio" ? (status?.obs?.audio || []).map((a) => a.name) : status?.obs?.scenes || [];
+  const names = [...new Set([...(value ? [value] : []), ...list])];
   sel.replaceChildren();
-  if (sel.dataset.none === "1" || !names.length) sel.append(h("option", { value: "", text: names.length ? T().none : T().noScenes }));
+  if (sel.dataset.none === "1" || !names.length) sel.append(h("option", { value: "", text: names.length ? T().none : sel.dataset.kind === "audio" ? T().noAudio : T().noScenes }));
   for (const n of names) sel.append(h("option", { value: n, text: n }));
   sel.value = value;
 }
-function sceneSelect(value, onchange, allowNone) {
+function sceneSelect(value, onchange, allowNone, kind) {
   const sel = h("select", { onchange: (e) => { sel.dataset.value = e.target.value; onchange(e.target.value); } });
   sel.dataset.value = value || "";
   sel.dataset.none = allowNone ? "1" : "0";
+  sel.dataset.kind = kind || "scene";
   fillSceneSelect(sel);
   sceneSelects.push(sel);
   return sel;
@@ -413,7 +439,47 @@ const MODULES = {
     build() {
       this.qr = h("div");
       this.link = h("div");
-      return [this.qr, this.link, h("p", { class: "muted", text: T().lanHint })];
+      this.msg = h("span", { class: "note" });
+      this.draft = { columns: cfg.deck.columns, keys: cfg.deck.keys.map((k) => Object.assign({}, k)) };
+      this.list = h("div", { class: "list" });
+      const cols = h("select", { onchange: (e) => (this.draft.columns = parseInt(e.target.value)) },
+        ...[2, 3, 4, 5, 6].map((n) => h("option", { value: n, text: `${n}` })));
+      cols.value = String(this.draft.columns);
+      this.render();
+      return [this.qr, this.link, h("p", { class: "muted", text: T().lanHint }),
+        h("div", { class: "line" }, h("a", { text: T().openDeck, onclick: () => api("/api/open/deck", { method: "POST" }) })),
+        h("h3", { style: "margin-top:12px", text: T().deckKeys }),
+        h("div", { class: "line" }, h("span", { class: "grow muted", text: T().deckColumns }), cols),
+        this.list,
+        h("div", { class: "line" },
+          h("button", { text: T().addKey, onclick: () => { this.draft.keys.push({ action: "delay.toggle", arg: "", label: "", color: "" }); this.render(); } }),
+          h("button", { class: "primary", text: T().save, onclick: () => saveConfig({ deck: this.draft }, this.msg) })),
+        h("div", { class: "line" }, h("a", { text: T().deckDefaults, onclick: () => saveConfig({ deck: { columns: 3, keys: DEFAULT_DECK } }, this.msg) })),
+        this.msg];
+    },
+    render() {
+      const k2 = this.draft.keys;
+      this.list.replaceChildren(...k2.map((k, i) => {
+        const action = h("select", { onchange: (e) => { k.action = e.target.value; k.arg = ""; this.render(); } },
+          ...DECK_ACTIONS.map((a) => h("option", { value: a, text: T().deckActions[a] })));
+        action.value = k.action;
+        let arg = null;
+        if (k.action === "obs.scene") arg = sceneSelect(k.arg, (v) => (k.arg = v), false, "scene");
+        else if (k.action === "obs.mute") arg = sceneSelect(k.arg, (v) => (k.arg = v), false, "audio");
+        else if (k.action === "delay.set" || k.action === "delay.add" || ["censor", "replay", "clip"].includes(k.action)) {
+          arg = h("input", { type: "number", value: k.arg, placeholder: k.action === "delay.add" ? "5 / -5" : T().seconds, oninput: (e) => (k.arg = e.target.value) });
+        }
+        const color = h("select", { class: "keycolor", onchange: (e) => (k.color = e.target.value) },
+          ...["", "blue", "green", "orange", "red", "grey"].map((c) => h("option", { value: c, text: T().colors[c] })));
+        color.value = k.color || "";
+        return h("div", {},
+          h("div", { class: "line" }, h("b", { text: `${i + 1}` }), h("div", { class: "grow" }, action),
+            h("button", { class: "small", text: "↑", disabled: i === 0, onclick: () => { [k2[i - 1], k2[i]] = [k2[i], k2[i - 1]]; this.render(); } }),
+            h("button", { class: "small", text: "↓", disabled: i === k2.length - 1, onclick: () => { [k2[i + 1], k2[i]] = [k2[i], k2[i + 1]]; this.render(); } }),
+            h("button", { class: "small", text: "✕", title: T().remove, onclick: () => { k2.splice(i, 1); this.render(); } })),
+          arg ? h("div", { class: "line" }, h("div", { class: "grow" }, arg)) : null,
+          h("div", { class: "line" }, h("input", { type: "text", class: "keylabel", placeholder: T().keyLabel, value: k.label, oninput: (e) => (k.label = e.target.value) }), color));
+      }));
     },
     async load() {
       const r = await api("/api/lan");
@@ -575,7 +641,7 @@ const downSince = {};
 let scenesKey = null;
 function render(s) {
   status = s;
-  const key = (s.obs?.scenes || []).join("\n");
+  const key = (s.obs?.scenes || []).join("\n") + "|" + (s.obs?.audio || []).map((a) => a.name).join("\n");
   if (key !== scenesKey) {
     scenesKey = key;
     sceneSelects = sceneSelects.filter((sel) => sel.isConnected);

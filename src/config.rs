@@ -29,6 +29,58 @@ impl Default for Destination {
     }
 }
 
+/// Actions a phone deck key can run. `arg` is seconds, a scene or an audio source.
+pub const DECK_ACTIONS: &[&str] = &[
+    "delay.toggle", "delay.on", "delay.off", "delay.set", "delay.add", "censor", "replay", "clip", "panic", "catchup",
+    "obs.scene", "obs.mute", "obs.stream", "obs.record",
+];
+
+/// One key of the phone deck.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(default)]
+pub struct DeckKey {
+    pub action: String,
+    pub arg: String,
+    /// Empty = the default label of the action.
+    pub label: String,
+    /// "", "blue", "green", "orange", "red" or "grey".
+    pub color: String,
+}
+
+impl Default for DeckKey {
+    fn default() -> Self {
+        DeckKey { action: "delay.toggle".into(), arg: String::new(), label: String::new(), color: String::new() }
+    }
+}
+
+/// The phone deck: a grid of keys, like a Stream Deck.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(default)]
+pub struct Deck {
+    pub columns: u8,
+    pub keys: Vec<DeckKey>,
+}
+
+impl Default for Deck {
+    fn default() -> Self {
+        let key = |action: &str, arg: &str| DeckKey { action: action.into(), arg: arg.into(), ..DeckKey::default() };
+        Deck {
+            columns: 3,
+            keys: vec![
+                key("delay.toggle", ""),
+                key("delay.add", "-5"),
+                key("delay.add", "5"),
+                key("censor", ""),
+                key("replay", ""),
+                key("clip", ""),
+                key("panic", ""),
+                key("delay.off", ""),
+                key("obs.stream", ""),
+            ],
+        }
+    }
+}
+
 /// What happens when an OBS scene goes on air.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct SceneRule {
@@ -150,6 +202,9 @@ pub struct Config {
 
     /// Optional features on/off.
     pub features: Features,
+
+    /// Keys of the phone deck.
+    pub deck: Deck,
 }
 
 impl Default for Config {
@@ -183,6 +238,7 @@ impl Default for Config {
             api_token: String::new(),
             panel_modules: DEFAULT_MODULES.iter().map(|s| s.to_string()).collect(),
             features: Features::default(),
+            deck: Deck::default(),
         }
     }
 }
@@ -235,6 +291,9 @@ impl Config {
         if std::mem::take(&mut self.lan_access) {
             self.features.phone = true;
         }
+        self.deck.columns = self.deck.columns.clamp(2, 6);
+        self.deck.keys.retain(|k| DECK_ACTIONS.contains(&k.action.as_str()));
+        self.deck.keys.truncate(48);
         let mut seen = Vec::new();
         self.panel_modules.retain(|m| ALL_MODULES.contains(&m.as_str()) && !seen.contains(m) && {
             seen.push(m.clone());
@@ -337,6 +396,17 @@ mod tests {
         assert_eq!(c.twitch_chat.channel, "someone");
         let text = toml::to_string_pretty(&c).unwrap();
         assert!(!text.contains("lan_access") && !text.contains("enabled = true\nchannel"), "{text}");
+    }
+
+    #[test]
+    fn deck_is_cleaned() {
+        let mut c = Config::default();
+        assert_eq!(c.deck.keys.len(), 9);
+        c.deck.columns = 12;
+        c.deck.keys.push(DeckKey { action: "rm -rf".into(), ..DeckKey::default() });
+        c.normalize();
+        assert_eq!(c.deck.columns, 6);
+        assert_eq!(c.deck.keys.len(), 9, "unknown actions are dropped");
     }
 
     #[test]

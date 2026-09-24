@@ -2,6 +2,14 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.6.0] - 2026-09-24
+
+### Added
+
+- **Phone deck:** phone control became a Stream Deck on the phone (or a tablet or second monitor). A full-screen grid of keys you design in the panel: delay (toggle, on, off, on with N s, ±N s), delete, replay, clip, panic, catch up, OBS scene switch, mute/unmute an audio source, start/stop streaming and recording (hold to confirm). Keys light up with the live state (delay on, scene on air, source muted, streaming, recording, panic), vibrate when pressed and shake on errors.
+- Deck editor in the panel: actions, targets, text, colors, order, columns, default layout; "Open the deck on this PC".
+- The OBS script reports audio sources with their mute state and whether OBS streams or records, and runs the deck's OBS actions.
+
 ## [0.5.0] - 2026-09-23
 
 ### Added

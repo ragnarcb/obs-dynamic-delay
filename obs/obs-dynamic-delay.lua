@@ -6,6 +6,7 @@
 -- * runs inside OBS what the panel asks for (configure/restore the stream settings)
 -- * switches to the delay scene while the delay builds up (grow mode "scene")
 -- * panic button: cover scene and mute; tells the relay which scene is on air (scene rules)
+-- * phone deck: switch scenes, toggle mute, start/stop streaming and recording
 --
 -- Texts are English or Portuguese, following `language` in config.toml.
 
@@ -441,6 +442,61 @@ local function send_program()
   end
 end
 
+-- Phone deck actions -------------------------------------------------------
+local function deck_scene(name)
+  local src = obs.obs_get_source_by_name(name)
+  if src == nil then
+    report(L("Scene \"", "Cena \"") .. name .. L("\" not found.", "\" não encontrada."))
+    return
+  end
+  set_program(src)
+  obs.obs_source_release(src)
+end
+
+local function deck_mute(name)
+  local src = obs.obs_get_source_by_name(name)
+  if src == nil then
+    report(L("Audio source \"", "Fonte de áudio \"") .. name .. L("\" not found.", "\" não encontrada."))
+    return
+  end
+  obs.obs_source_set_muted(src, not obs.obs_source_muted(src))
+  obs.obs_source_release(src)
+end
+
+local function deck_stream()
+  if obs.obs_frontend_streaming_active() then obs.obs_frontend_streaming_stop() else obs.obs_frontend_streaming_start() end
+end
+
+local function deck_record()
+  if obs.obs_frontend_recording_active() then obs.obs_frontend_recording_stop() else obs.obs_frontend_recording_start() end
+end
+
+-- Audio sources with their mute state, and whether OBS streams/records, for the deck keys.
+local last_audio, last_obsstate = nil, nil
+local function send_obs_state(force)
+  local parts = {}
+  local sources = obs.obs_enum_sources()
+  if sources ~= nil then
+    for _, src in ipairs(sources) do
+      if bit.band(obs.obs_source_get_output_flags(src), obs.OBS_SOURCE_AUDIO) ~= 0 then
+        table.insert(parts, obs.obs_source_get_name(src) .. "=" .. (obs.obs_source_muted(src) and "1" or "0"))
+      end
+    end
+    obs.source_list_release(sources)
+  end
+  local audio = "audio\t" .. table.concat(parts, "\t")
+  if force or audio ~= last_audio then
+    last_audio = audio
+    send(audio)
+  end
+  local state = "obsstate\t" .. (obs.obs_frontend_streaming_active() and "1" or "0") .. "\t"
+    .. (obs.obs_frontend_recording_active() and "1" or "0")
+  if force or state ~= last_obsstate then
+    last_obsstate = state
+    send(state)
+  end
+end
+
 local function send_scene_list()
   local scenes = obs.obs_frontend_get_scenes()
   if scenes == nil then return end
@@ -466,11 +522,16 @@ local function poll_tick()
     elseif reply:sub(1, 6) == "panic\t" then
       local mute, scene = reply:match("^panic\t(%d)\t(.*)$")
       panic_on(mute == "1", scene or "")
-    elseif reply == "unpanic" then panic_off() end
+    elseif reply == "unpanic" then panic_off()
+    elseif reply:sub(1, 6) == "scene\t" then deck_scene(reply:sub(7))
+    elseif reply:sub(1, 5) == "mute\t" then deck_mute(reply:sub(6)); send_obs_state(true)
+    elseif reply == "stream_toggle" then deck_stream()
+    elseif reply == "record_toggle" then deck_record() end
     reply = recv_on(poll_sock, 1)
   end
   send_on(poll_sock, "poll " .. (obs_configured() and "1" or "0"))
   send_program()
+  send_obs_state(polls % 10 == 0)
   if polls % 10 == 0 then
     last_program = nil -- resend now and then, in case the relay restarted
     send_scene_list()
