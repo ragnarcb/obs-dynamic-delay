@@ -16,8 +16,11 @@ use crate::status::{Cmd, Shared};
 /// Keeps a chat connection matching the current settings, reconnecting on changes.
 pub async fn run(shared: Arc<Shared>, tx: UnboundedSender<EngineMsg>) {
     loop {
-        let cfg = shared.config.lock().unwrap().twitch_chat.clone();
-        if !cfg.enabled || channel(&cfg).is_empty() {
+        let (on, cfg) = {
+            let c = shared.config.lock().unwrap();
+            (c.features.chat, c.twitch_chat.clone())
+        };
+        if !on || channel(&cfg).is_empty() {
             tokio::time::sleep(Duration::from_secs(3)).await;
             continue;
         }
@@ -85,7 +88,9 @@ async fn listen(shared: &Shared, tx: &UnboundedSender<EngineMsg>, cfg: &TwitchCh
                 }
             }
             _ = check.tick() => {
-                if shared.config.lock().unwrap().twitch_chat != *cfg {
+                let c = shared.config.lock().unwrap();
+                if !c.features.chat || c.twitch_chat != *cfg {
+                    log::info!("[chat] settings changed, leaving #{chan}");
                     return Ok(());
                 }
             }
@@ -141,7 +146,7 @@ mod tests {
     use super::*;
 
     fn cfg(allow: &str) -> TwitchChat {
-        TwitchChat { enabled: true, channel: "streamer".into(), allow: allow.into(), prefix: "!delay".into() }
+        TwitchChat { enabled: false, channel: "streamer".into(), allow: allow.into(), prefix: "!delay".into() }
     }
 
     fn msg(badges: &str, text: &str) -> String {

@@ -101,12 +101,14 @@ const TEXT = {
     m: {
       delay: "Delay", censor: "Delete before it airs", replay: "Instant replay", clips: "Clips", panic: "Panic button", health: "Stream health",
       multistream: "Multistream", rules: "Delay by scene", chat: "Twitch chat commands", phone: "Phone control", streamdeck: "Stream Deck / API",
+      outage: "Connection drop protection", update_check: "Update notice",
     },
     mDesc: {
       delay: "turn the delay on/off, presets", censor: "remove the last seconds before viewers see them", replay: "replay the last seconds on air",
       clips: "save the last seconds as MP4", panic: "cover the stream and mute everything", health: "bitrate, connections, alerts",
       multistream: "stream to several platforms at once", rules: "delay switches with the OBS scene", chat: "!delay commands for mods",
       phone: "control from your phone", streamdeck: "button links for Stream Deck and bots",
+      outage: "resend what was missed when a platform connection drops", update_check: "checks GitHub for new versions",
     },
     seconds: "Seconds", censorBtn: (s) => `Delete the last ${s}s`, censorHint: "Only works with the delay on: the part viewers have not seen yet is removed and the stream holds its last frame over the gap.",
     replayBtn: (s) => `Replay the last ${s}s`, replayHint: "Viewers see the last seconds again, then the stream returns to the normal delay.",
@@ -120,7 +122,7 @@ const TEXT = {
     addRule: "+ Add rule", actOn: "turn on", actOff: "turn off", actSet: "turn on with", rulesHint: "When one of these scenes goes on air, the delay changes by itself.",
     chatOn: "Listen to chat commands", channel: "Channel", channelHint: "your channel name, e.g. ragnar_cb", allow: "Who can use them", allowB: "only me", allowM: "me and mods", allowV: "me, mods and VIPs", prefix: "Command",
     chatHint: (p) => `In chat: ${p} on · ${p} off · ${p} 60 · ${p} censor · ${p} replay · ${p} clip · ${p} panic`,
-    lanOn: "Allow access from phones on this network", lanHint: "Scan with the phone camera (same Wi-Fi). Windows may ask to allow the connection. Anyone with this link can control the delay: do not share it.",
+    lanHint: "Scan with the phone camera (same Wi-Fi). Windows may ask to allow the connection. Anyone with this link can control the delay: do not share it.",
     sdPlugin: "With the Dynamic Delay Stream Deck plugin (see the releases page), paste this token in its settings:", token: "Access token",
     sdHint: "Without the plugin: use the \"Website\" action with \"Access in background\" and one of these links (they already contain your token).", copy: "Copy", copied: "Copied!",
     toggle: "Toggle delay", on: "Delay on", off: "Delay off",
@@ -130,7 +132,8 @@ const TEXT = {
     sceneLabel: "Scene shown while the delay builds up", sceneTip: "Tip: make a scene with just an image or text. It is shown still and muted.", noScenes: "(open OBS to list the scenes)",
     startEnabled: "Start every stream with the delay on", language: "Language", restoreObs: "Restore OBS' original stream settings",
     confirmRestore: "Click again to confirm: OBS goes back to streaming directly, without the dynamic delay.", applying: "Applying in OBS...", pickScene: "Pick the scene.",
-    customize: "Customize panel", customizeHint: "Choose which blocks show up in this panel and their order. Hidden features keep working through hotkeys.",
+    customize: "Features and panel", customizeHint: "On: the feature works (off = it does nothing at all, its commands are refused and its background work stops). Panel: shows its block here. Arrows: order.",
+    active: "On", inPanel: "Panel", alwaysOn: "always on",
     up: "Move up", down: "Move down", obsStreaming: "OBS streaming", scriptMissing: "OBS script is not running", obsReady: "OBS ready", obsNotConfigured: "OBS not configured",
   },
   pt: {
@@ -144,12 +147,14 @@ const TEXT = {
     m: {
       delay: "Delay", censor: "Apagar antes de ir ao ar", replay: "Replay instantâneo", clips: "Clipes", panic: "Botão de pânico", health: "Saúde da live",
       multistream: "Multistream", rules: "Delay por cena", chat: "Comandos no chat da Twitch", phone: "Controle pelo celular", streamdeck: "Stream Deck / API",
+      outage: "Proteção contra queda de conexão", update_check: "Aviso de atualização",
     },
     mDesc: {
       delay: "ligar/desligar o delay, presets", censor: "tirar os últimos segundos antes do público ver", replay: "repetir os últimos segundos no ar",
       clips: "salvar os últimos segundos em MP4", panic: "cobrir a live e mutar tudo", health: "bitrate, conexões, alertas",
       multistream: "transmitir para várias plataformas ao mesmo tempo", rules: "o delay muda sozinho com a cena do OBS", chat: "comandos !delay para os mods",
       phone: "controlar pelo celular", streamdeck: "links de botão para Stream Deck e bots",
+      outage: "reenviar o que foi perdido quando a conexão com uma plataforma cai", update_check: "consulta o GitHub por versões novas",
     },
     seconds: "Segundos", censorBtn: (s) => `Apagar os últimos ${s}s`, censorHint: "Só funciona com o delay ligado: o trecho que o público ainda não viu é removido e a live segura o último quadro no lugar.",
     replayBtn: (s) => `Replay dos últimos ${s}s`, replayHint: "O público vê os últimos segundos de novo e depois a live volta ao delay normal.",
@@ -163,7 +168,7 @@ const TEXT = {
     addRule: "+ Adicionar regra", actOn: "ligar", actOff: "desligar", actSet: "ligar com", rulesHint: "Quando uma dessas cenas entra no ar, o delay muda sozinho.",
     chatOn: "Ouvir comandos no chat", channel: "Canal", channelHint: "nome do seu canal, ex.: ragnar_cb", allow: "Quem pode usar", allowB: "só eu", allowM: "eu e os mods", allowV: "eu, mods e VIPs", prefix: "Comando",
     chatHint: (p) => `No chat: ${p} on · ${p} off · ${p} 60 · ${p} apagar · ${p} replay · ${p} clipe · ${p} panico`,
-    lanOn: "Permitir acesso pelo celular nesta rede", lanHint: "Aponte a câmera do celular (mesmo Wi-Fi). O Windows pode pedir para liberar a conexão. Quem tiver este link controla o delay: não compartilhe.",
+    lanHint: "Aponte a câmera do celular (mesmo Wi-Fi). O Windows pode pedir para liberar a conexão. Quem tiver este link controla o delay: não compartilhe.",
     sdPlugin: "Com o plugin Delay Dinâmico para Stream Deck (na página de releases), cole este token nas configurações dele:", token: "Token de acesso",
     sdHint: "Sem o plugin: use a ação \"Website\" com \"Acessar em segundo plano\" e um destes links (eles já têm o seu token).", copy: "Copiar", copied: "Copiado!",
     toggle: "Ligar/desligar delay", on: "Ligar delay", off: "Desligar delay",
@@ -173,11 +178,17 @@ const TEXT = {
     sceneLabel: "Cena mostrada enquanto o delay enche", sceneTip: "Dica: crie uma cena só com uma imagem ou texto. Ela aparece parada e sem som.", noScenes: "(abra o OBS para listar as cenas)",
     startEnabled: "Começar toda live já com delay", language: "Idioma", restoreObs: "Restaurar a configuração original de transmissão do OBS",
     confirmRestore: "Clique de novo para confirmar: o OBS volta a transmitir direto, sem o delay dinâmico.", applying: "Aplicando no OBS...", pickScene: "Escolha a cena.",
-    customize: "Personalizar painel", customizeHint: "Escolha quais blocos aparecem neste painel e em que ordem. Os recursos escondidos continuam funcionando pelos atalhos.",
+    customize: "Recursos e painel", customizeHint: "Ativo: o recurso funciona (desligado = não faz nada, os comandos dele são recusados e o trabalho em segundo plano para). Painel: mostra o bloco aqui. Setas: ordem.",
+    active: "Ativo", inPanel: "Painel", alwaysOn: "sempre ativo",
     up: "Subir", down: "Descer", obsStreaming: "OBS transmitindo", scriptMissing: "script do OBS não está rodando", obsReady: "OBS pronto", obsNotConfigured: "OBS não configurado",
   },
 };
 const ALL_MODULES = ["delay", "censor", "replay", "clips", "panic", "health", "multistream", "rules", "chat", "phone", "streamdeck"];
+// Blocks backed by a feature switch (config "features"); the others are always on.
+const FEATURE_OF = { censor: "censor", replay: "replay", clips: "clips", panic: "panic", multistream: "multistream", rules: "rules", chat: "chat", phone: "phone" };
+// Features without a block of their own.
+const EXTRA_FEATURES = ["outage", "update_check"];
+const featureOn = (block) => !FEATURE_OF[block] || cfg.features[FEATURE_OF[block]];
 let lang = /^pt/i.test(navigator.language) ? "pt" : "en";
 const T = () => TEXT[lang] || TEXT.en;
 const num = (x) => (lang === "pt" ? x.toFixed(1).replace(".", ",") : x.toFixed(1));
@@ -319,7 +330,7 @@ const MODULES = {
       this.obs = h("div", { class: "dots" });
       this.outs = h("div");
       return [this.kv, this.obs, this.outs,
-        field(T().outage, numberInput(cfg.outage_buffer_seconds, 0, 300, (v) => saveConfig({ outage_buffer_seconds: v }))),
+        cfg.features.outage ? field(T().outage, numberInput(cfg.outage_buffer_seconds, 0, 300, (v) => saveConfig({ outage_buffer_seconds: v }))) : null,
         h("label", { class: "check" }, h("input", { type: "checkbox", checked: cfg.alert_sound, onchange: (e) => saveConfig({ alert_sound: e.target.checked }) }), T().alertSound)];
     },
     update(s) {
@@ -391,8 +402,7 @@ const MODULES = {
         h("option", { value: "broadcaster", text: T().allowB }), h("option", { value: "mods", text: T().allowM }), h("option", { value: "vips", text: T().allowV }));
       allow.value = c.allow;
       const hint = h("p", { class: "muted", text: T().chatHint(c.prefix) });
-      return [h("label", { class: "check", style: "margin-top:0" }, h("input", { type: "checkbox", checked: c.enabled, onchange: (e) => (c.enabled = e.target.checked) }), T().chatOn),
-        field(T().channel, h("input", { type: "text", placeholder: T().channelHint, value: c.channel, oninput: (e) => (c.channel = e.target.value) })),
+      return [field(T().channel, h("input", { type: "text", placeholder: T().channelHint, value: c.channel, oninput: (e) => (c.channel = e.target.value) })),
         field(T().allow, allow),
         field(T().prefix, h("input", { type: "text", value: c.prefix, oninput: (e) => { c.prefix = e.target.value; hint.textContent = T().chatHint(c.prefix); } })),
         hint, h("div", { class: "actions" }, h("button", { class: "primary", text: T().save, onclick: () => saveConfig({ twitch_chat: c }, this.msg) }), this.msg)];
@@ -403,8 +413,7 @@ const MODULES = {
     build() {
       this.qr = h("div");
       this.link = h("div");
-      return [h("label", { class: "check", style: "margin-top:0" }, h("input", { type: "checkbox", checked: cfg.lan_access, onchange: (e) => saveConfig({ lan_access: e.target.checked }).then(() => setTimeout(() => this.load(), 1500)) }), T().lanOn),
-        this.qr, this.link, h("p", { class: "muted", text: T().lanHint })];
+      return [this.qr, this.link, h("p", { class: "muted", text: T().lanHint })];
     },
     async load() {
       const r = await api("/api/lan");
@@ -417,7 +426,12 @@ const MODULES = {
         this.link.append(h("code", { text: r.url }));
       }
     },
-    update() { if (!this.loaded) { this.loaded = true; this.load(); } },
+    update() {
+      // the LAN port reopens a moment after the feature is switched on
+      if (!this.loaded || (!this.qr.childElementCount && Date.now() - (this.lastTry || 0) > 2000)) {
+        this.loaded = true; this.lastTry = Date.now(); this.load();
+      }
+    },
   },
   streamdeck: {
     build() {
@@ -499,15 +513,28 @@ function buildCustomize() {
   const shown = [...cfg.panel_modules];
   const order = [...shown, ...ALL_MODULES.filter((m) => !shown.includes(m))];
   const commit = () => saveConfig({ panel_modules: order.filter((m) => shown.includes(m)) });
-  const list = h("div", { class: "mods" }, ...order.map((m, i) => h("div", {},
-    h("input", { type: "checkbox", checked: shown.includes(m), onchange: (e) => {
+  const setFeature = (feature, on, block) => {
+    const patch = { features: Object.assign({}, cfg.features, { [feature]: on }) };
+    // switching a feature on also puts its block in the panel
+    if (on && block && !shown.includes(block)) patch.panel_modules = order.filter((m) => shown.includes(m) || m === block);
+    saveConfig(patch);
+  };
+  const switchFor = (feature, block) => feature
+    ? h("label", { class: "check", style: "margin:0" }, h("input", { type: "checkbox", checked: cfg.features[feature], onchange: (e) => setFeature(feature, e.target.checked, block) }), T().active)
+    : h("span", { class: "muted", text: T().alwaysOn });
+  const rows = order.map((m, i) => h("div", {},
+    h("span", {}, h("b", { text: T().m[m] }), h("br"), h("span", { class: "muted", text: T().mDesc[m] })),
+    switchFor(FEATURE_OF[m], m),
+    h("label", { class: "check", style: "margin:0" }, h("input", { type: "checkbox", checked: shown.includes(m), disabled: !featureOn(m), onchange: (e) => {
       if (e.target.checked) shown.push(m); else shown.splice(shown.indexOf(m), 1);
       commit();
-    } }),
-    h("span", {}, h("b", { text: T().m[m] }), h("br"), h("span", { class: "muted", text: T().mDesc[m] })),
+    } }), T().inPanel),
     h("button", { class: "small", title: T().up, text: "↑", disabled: i === 0, onclick: () => { [order[i - 1], order[i]] = [order[i], order[i - 1]]; commit(); } }),
-    h("button", { class: "small", title: T().down, text: "↓", disabled: i === order.length - 1, onclick: () => { [order[i + 1], order[i]] = [order[i], order[i + 1]]; commit(); } }))));
-  card.replaceChildren(h("summary", { text: T().customize }), h("p", { class: "muted", text: T().customizeHint }), list);
+    h("button", { class: "small", title: T().down, text: "↓", disabled: i === order.length - 1, onclick: () => { [order[i + 1], order[i]] = [order[i], order[i + 1]]; commit(); } })));
+  const extras = EXTRA_FEATURES.map((f) => h("div", {},
+    h("span", {}, h("b", { text: T().m[f] }), h("br"), h("span", { class: "muted", text: T().mDesc[f] })),
+    switchFor(f, null)));
+  card.replaceChildren(h("summary", { text: T().customize }), h("p", { class: "muted", text: T().customizeHint }), h("div", { class: "mods" }, ...rows, ...extras));
   card.open = open;
 }
 
@@ -524,7 +551,7 @@ function buildAll() {
   root.replaceChildren();
   for (const id of cfg.panel_modules) {
     const m = MODULES[id];
-    if (!m) continue;
+    if (!m || !featureOn(id)) continue;
     m.loaded = false;
     const title = id === "delay" ? null : h("h3", { text: T().m[id] });
     root.append(h("section", { class: "card", "data-module": id }, title, m.build()));
@@ -554,7 +581,7 @@ function render(s) {
     sceneSelects = sceneSelects.filter((sel) => sel.isConnected);
     sceneSelects.forEach(fillSceneSelect);
   }
-  for (const id of cfg.panel_modules) MODULES[id]?.update(s);
+  for (const id of cfg.panel_modules) if (featureOn(id)) MODULES[id]?.update(s);
   const banners = [];
   const o = s.obs || {};
   if (o.script && !o.configured) banners.push(h("div", { class: "box" }, T().obsNotUsing, h("div", { class: "actions" }, h("button", { class: "primary", text: T().configureObs, onclick: () => obsAction("/api/obs/configure") }))));
@@ -622,7 +649,8 @@ async function refresh() {
     const s = await api("/api/status");
     if (s.ok === false) throw new Error(s.error);
     if (offline || !cfg) { offline = false; await loadConfig(); }
-    if (!checkedUpdate) { checkedUpdate = true; checkUpdate(s.version); }
+    if (!checkedUpdate && cfg.features.update_check) { checkedUpdate = true; checkUpdate(s.version); }
+    if (!cfg.features.update_check) updateVersion = null;
     render(s);
   } catch (e) {
     offline = true;

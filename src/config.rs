@@ -37,9 +37,50 @@ pub struct SceneRule {
     pub action: String,
 }
 
+/// Optional features. A feature that is off does no work at all: its commands are
+/// refused, its background tasks stop and its panel block is hidden.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(default)]
+pub struct Features {
+    pub censor: bool,
+    pub replay: bool,
+    pub clips: bool,
+    pub panic: bool,
+    pub multistream: bool,
+    /// Keep and resend what was missed during a connection drop.
+    pub outage: bool,
+    /// Delay rules per OBS scene.
+    pub rules: bool,
+    /// Twitch chat commands (connects to Twitch chat).
+    pub chat: bool,
+    /// Panel on the local network for phones (opens the port to the LAN).
+    pub phone: bool,
+    /// The panel checks GitHub for new versions.
+    pub update_check: bool,
+}
+
+impl Default for Features {
+    fn default() -> Self {
+        Features {
+            censor: true,
+            replay: true,
+            clips: true,
+            panic: true,
+            multistream: true,
+            outage: true,
+            rules: true,
+            chat: false,
+            phone: false,
+            update_check: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(default)]
 pub struct TwitchChat {
+    /// Replaced by `features.chat`; still read from older configs.
+    #[serde(skip_serializing)]
     pub enabled: bool,
     pub channel: String,
     /// Who may use the commands: "broadcaster", "mods" or "vips" (mods and VIPs).
@@ -96,7 +137,8 @@ pub struct Config {
 
     pub twitch_chat: TwitchChat,
 
-    /// Serve the panel on the local network (for phones), protected by the token.
+    /// Replaced by `features.phone`; still read from older configs.
+    #[serde(skip_serializing)]
     pub lan_access: bool,
     pub http_listen: String,
     pub udp_listen: String,
@@ -105,6 +147,9 @@ pub struct Config {
 
     /// Visible panel modules, in order.
     pub panel_modules: Vec<String>,
+
+    /// Optional features on/off.
+    pub features: Features,
 }
 
 impl Default for Config {
@@ -137,6 +182,7 @@ impl Default for Config {
             udp_listen: "127.0.0.1:8788".into(),
             api_token: String::new(),
             panel_modules: DEFAULT_MODULES.iter().map(|s| s.to_string()).collect(),
+            features: Features::default(),
         }
     }
 }
@@ -182,6 +228,13 @@ impl Config {
             self.twitch_chat.allow = "mods".into();
         }
         self.twitch_chat.channel = crate::chat::channel_name(&self.twitch_chat.channel);
+        // older configs had these switches elsewhere
+        if std::mem::take(&mut self.twitch_chat.enabled) {
+            self.features.chat = true;
+        }
+        if std::mem::take(&mut self.lan_access) {
+            self.features.phone = true;
+        }
         let mut seen = Vec::new();
         self.panel_modules.retain(|m| ALL_MODULES.contains(&m.as_str()) && !seen.contains(m) && {
             seen.push(m.clone());
@@ -201,6 +254,19 @@ impl Config {
 
     pub fn http_port(&self) -> u16 {
         Self::port_of(&self.http_listen)
+    }
+
+    /// Seconds of already sent media the engine must keep (rewind, replay, clips).
+    pub fn history_seconds(&self, delay: u32) -> u64 {
+        let replay = if self.features.replay { self.replay_seconds } else { 0 };
+        let clips = if self.features.clips { self.clip_seconds } else { 0 };
+        let extra = replay.max(clips) as u64;
+        if self.grow_mode == "rewind" || extra > 0 { delay as u64 + extra + 5 } else { 0 }
+    }
+
+    /// Outage buffer, zero when the feature is off.
+    pub fn outage_seconds(&self) -> u64 {
+        if self.features.outage { self.outage_buffer_seconds as u64 } else { 0 }
     }
 
     pub fn clips_path(&self) -> PathBuf {
@@ -260,6 +326,32 @@ mod tests {
         assert_eq!(c.delay_seconds, 45);
         assert_eq!(c.panel_modules, vec!["delay", "censor", "health"]);
         assert_eq!(c.twitch_chat.prefix, "!delay");
+    }
+
+    #[test]
+    fn old_switches_move_to_features() {
+        let old = "lan_access = true\n[twitch_chat]\nenabled = true\nchannel = \"twitch.tv/Someone\"\n";
+        let mut c: Config = toml::from_str(old).unwrap();
+        c.normalize();
+        assert!(c.features.chat && c.features.phone);
+        assert_eq!(c.twitch_chat.channel, "someone");
+        let text = toml::to_string_pretty(&c).unwrap();
+        assert!(!text.contains("lan_access") && !text.contains("enabled = true\nchannel"), "{text}");
+    }
+
+    #[test]
+    fn history_follows_features() {
+        let mut c = Config::default();
+        c.grow_mode = "freeze".into();
+        assert_eq!(c.history_seconds(30), 30 + 30 + 5); // clips (30 s) is the longest
+        c.features.clips = false;
+        assert_eq!(c.history_seconds(30), 30 + 10 + 5); // replay
+        c.features.replay = false;
+        assert_eq!(c.history_seconds(30), 0); // nothing needs history
+        c.grow_mode = "rewind".into();
+        assert_eq!(c.history_seconds(30), 35);
+        c.features.outage = false;
+        assert_eq!(c.outage_seconds(), 0);
     }
 
     #[test]

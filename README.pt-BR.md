@@ -45,6 +45,7 @@ O "Stream Delay" que já vem no OBS só pode ser mudado com a live parada. Com o
 
 **Controle**
 - Um **painel dentro do OBS** feito de blocos: mostre só o que você usa, na ordem que quiser.
+- **Todo recurso pode ser desligado de verdade**, não só escondido: um recurso desligado não faz nada.
 - **Atalhos** do OBS, **plugin do Stream Deck**, **comandos no chat da Twitch** para você e seus mods, e **controle pelo celular** com QR code.
 - **Saúde da live:** bitrate vindo do OBS, estado de cada destino e um apito quando uma conexão cai.
 - **Português e inglês** em tudo.
@@ -73,9 +74,14 @@ Faça antes uma live de teste ou não listada. O passo a passo está em [docs/TE
 
 ## O painel
 
-Cada recurso é um bloco. Em **Personalizar painel** você marca os blocos que quer e define a ordem com as setas. Quem só quer o delay deixa só o bloco **Delay**; os recursos escondidos continuam funcionando pelos atalhos, pelo chat e pelo Stream Deck.
+Cada recurso é um bloco. Em **Recursos e painel** cada um tem dois controles:
 
-![Personalizar painel](docs/img/pt/painel-personalizar.png)
+- **Ativo:** o recurso funciona. Desligado, ele não faz nada: os comandos dele são recusados (painel, atalhos, chat, Stream Deck), o trabalho em segundo plano para e o bloco some. Por exemplo, com o chat desligado o relay nem conecta na Twitch; com o controle pelo celular desligado o painel não fica aberto na rede; com replay e clipes desligados não se usa memória extra.
+- **Painel:** mostra ou esconde o bloco, e as setas definem a ordem. Um recurso ativo mas escondido continua funcionando pelos atalhos, pelo chat e pelo Stream Deck.
+
+Quem só quer o delay desliga todo o resto. O **Delay** é o núcleo e fica sempre ativo. Comandos no chat e controle pelo celular começam desligados.
+
+![Recursos e painel](docs/img/pt/painel-personalizar.png)
 
 Por padrão o painel mostra **Delay**, **Apagar antes de ir ao ar** e **Saúde da live**. Com todos os blocos ligados:
 
@@ -93,6 +99,8 @@ Por padrão o painel mostra **Delay**, **Apagar antes de ir ao ar** e **Saúde d
 | Delay por cena | regras: cena X no ar liga, desliga, ou liga com N segundos |
 | Comandos no chat da Twitch | canal, quem pode usar, nome do comando |
 | Controle pelo celular | QR code para abrir o painel no celular (mesmo Wi-Fi) |
+| Proteção contra queda de conexão (sem bloco) | liga/desliga em Recursos e painel; os segundos guardados ficam em Saúde da live |
+| Aviso de atualização (sem bloco) | liga/desliga em Recursos e painel |
 | Stream Deck / API | token de acesso para o plugin e links prontos |
 | Configuração (sempre aparece) | plataforma, URL, chave, o que o público vê ao ligar o delay, começar toda live com delay, idioma |
 
@@ -159,13 +167,13 @@ Regras como "**Ranqueada** no ar: ligar com 60 s" e "**Conversa**: desligar". As
 
 ### Comandos no chat da Twitch
 
-Ative no bloco **Comandos no chat da Twitch** com o nome do seu canal. O relay lê o chat de forma anônima (sem login, sem token) e só aceita comandos de você, dos seus mods, ou também dos VIPs:
+Ative em **Recursos e painel** e escreva o nome do seu canal no bloco **Comandos no chat da Twitch** (só o nome; um link `twitch.tv/...` também funciona). O relay lê o chat de forma anônima (sem login, sem token) e só aceita comandos de você, dos seus mods, ou também dos VIPs:
 
 `!delay on` · `!delay off` · `!delay 60` (liga com 60 s) · `!delay apagar [s]` · `!delay replay [s]` · `!delay clipe [s]` · `!delay panico` (também em inglês: `on`, `off`, `censor`, `clip`, `panic`).
 
 ### Controle pelo celular
 
-Marque **Permitir acesso pelo celular nesta rede** e aponte a câmera do celular para o QR code (mesmo Wi-Fi). Na primeira vez o Windows pode pedir para liberar a conexão. O link leva o token de acesso: quem tiver ele controla o delay, então não compartilhe.
+Ative o **Controle pelo celular** em **Recursos e painel** e aponte a câmera do celular para o QR code (mesmo Wi-Fi). Na primeira vez o Windows pode pedir para liberar a conexão. O link leva o token de acesso: quem tiver ele controla o delay, então não compartilhe.
 
 ## Atalhos
 
@@ -202,7 +210,7 @@ O plugin foi testado com um Stream Deck simulado, ainda não num aparelho de ver
 | O OBS não consegue conectar ao servidor | O relay não abriu. Veja `%APPDATA%\obs-dynamic-delay\obs-dynamic-delay.log`. |
 | O painel não aparece | **Docks > Delay dinâmico**. Se não estiver lá, rode o instalador de novo com o OBS fechado. |
 | "O Windows protegeu o computador" | O exe não tem assinatura digital. Clique em **Mais informações > Executar assim mesmo**. |
-| Os comandos do chat não fazem nada | No bloco **Comandos no chat da Twitch**, marque "Ouvir comandos no chat" e use só o nome do canal. O log (`obs-dynamic-delay.log`) precisa mostrar `[chat] joined #seucanal`. |
+| Os comandos do chat não fazem nada | Ative **Comandos no chat da Twitch** em **Recursos e painel** e escreva o nome do canal no bloco dele. O log (`obs-dynamic-delay.log`) precisa mostrar `[chat] joined #seucanal`. |
 | O celular não abre o painel | Mesmo Wi-Fi, libere a conexão no aviso do firewall do Windows e use o link do QR code. |
 | Quero voltar a transmitir sem o relay | **Configuração > Restaurar a configuração original de transmissão do OBS** (clique duas vezes para confirmar). |
 
@@ -216,7 +224,8 @@ O painel avisa quando sai uma versão nova. Baixe o instalador de novo e dê doi
 
 - Toda chamada à API precisa do token de acesso criado na primeira vez (`api_token` no `config.toml`). Sites abertos no seu navegador não conseguem controlar o delay nem ler a sua configuração.
 - A API nunca devolve chaves de transmissão nem o token.
-- Por padrão o painel só escuta no seu PC (`127.0.0.1`). O **controle pelo celular** abre para a sua rede local, ainda protegido pelo token.
+- Por padrão o painel só escuta no seu PC (`127.0.0.1`). O **controle pelo celular** (desligado por padrão) abre para a sua rede local, ainda protegido pelo token.
+- Recursos desligados não fazem nada: sem conexão com o chat, sem porta na rede, sem buffers extras.
 - O relay só abre três lugares fixos no seu PC quando pedido (o GitHub do autor, a página de releases e a pasta dos clipes).
 
 ## Como funciona

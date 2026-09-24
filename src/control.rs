@@ -72,7 +72,7 @@ pub async fn serve_http(tx: UnboundedSender<EngineMsg>, shared: Arc<Shared>) -> 
     loop {
         let (lan, port) = {
             let c = shared.config.lock().unwrap();
-            (c.lan_access, c.http_port())
+            (c.features.phone, c.http_port())
         };
         let ip = if lan { Ipv4Addr::UNSPECIFIED } else { Ipv4Addr::LOCALHOST };
         let listener = tokio::net::TcpListener::bind(SocketAddr::from((ip, port))).await?;
@@ -82,7 +82,7 @@ pub async fn serve_http(tx: UnboundedSender<EngineMsg>, shared: Arc<Shared>) -> 
             .with_graceful_shutdown(async move {
                 loop {
                     tokio::time::sleep(Duration::from_secs(1)).await;
-                    if watch.config.lock().unwrap().lan_access != lan {
+                    if watch.config.lock().unwrap().features.phone != lan {
                         break;
                     }
                 }
@@ -290,7 +290,7 @@ fn lan_ip() -> Option<std::net::IpAddr> {
 async fn lan_info(State(s): State<AppState>) -> impl IntoResponse {
     let (enabled, port, token) = {
         let c = s.shared.config.lock().unwrap();
-        (c.lan_access, c.http_port(), c.api_token.clone())
+        (c.features.phone, c.http_port(), c.api_token.clone())
     };
     let Some(ip) = lan_ip() else {
         return Json(json!({ "enabled": enabled, "url": null, "qr": null }));

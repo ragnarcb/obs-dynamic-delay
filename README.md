@@ -45,6 +45,7 @@ OBS' built-in "Stream Delay" can only be changed while the stream is stopped. Wi
 
 **Control**
 - A **panel inside OBS** made of blocks: show only what you use, in the order you want.
+- **Every feature can be switched off for real**, not just hidden: an off feature does no work at all.
 - OBS **hotkeys**, a **Stream Deck plugin**, **Twitch chat commands** for you and your mods, and **phone control** with a QR code.
 - **Stream health:** input bitrate, per destination status, and a beep when a connection drops.
 - **English and Portuguese** everywhere.
@@ -73,9 +74,14 @@ Do an unlisted or test stream first. The step by step checklist is in [docs/TEST
 
 ## The panel
 
-Every feature is a block. In **Customize panel** you tick the blocks you want and set their order with the arrows. Someone who only wants the delay keeps only the **Delay** block; hidden features keep working through hotkeys, chat and Stream Deck.
+Every feature is a block. Under **Features and panel** each one has two switches:
 
-![Customize panel](docs/img/en/panel-customize.png)
+- **On:** the feature works. Off means it does nothing at all: its commands are refused (panel, hotkeys, chat, Stream Deck), its background work stops and its block disappears. For example, with chat off the relay does not even connect to Twitch; with phone control off the panel is not open to the network; with replay and clips off no extra memory is used.
+- **Panel:** shows or hides its block, and the arrows set the order. A feature that is on but hidden keeps working through hotkeys, chat and Stream Deck.
+
+Someone who only wants the delay turns everything else off. **Delay** itself is the core and is always on. Chat commands and phone control start off.
+
+![Features and panel](docs/img/en/panel-customize.png)
 
 By default the panel shows **Delay**, **Delete before it airs** and **Stream health**. With every block turned on:
 
@@ -93,6 +99,8 @@ By default the panel shows **Delay**, **Delete before it airs** and **Stream hea
 | Delay by scene | rules: scene X on air turns the delay on, off, or on with N seconds |
 | Twitch chat commands | channel, who may use them, command name |
 | Phone control | QR code to open the panel on your phone (same Wi-Fi) |
+| Connection drop protection (no block) | switch under Features and panel; the seconds kept are set in Stream health |
+| Update notice (no block) | switch under Features and panel |
 | Stream Deck / API | access token for the plugin and ready-made links |
 | Settings (always there) | platform, URL, key, what viewers see when the delay turns on, start every stream with the delay on, language |
 
@@ -159,13 +167,13 @@ Rules such as "**Ranked** on air: turn on with 60 s" and "**Just chatting**: tur
 
 ### Twitch chat commands
 
-Turn it on in the **Twitch chat commands** block with your channel name. The relay reads the chat anonymously (no login, no token) and only accepts commands from you, your mods, or also VIPs:
+Turn it on under **Features and panel** and type your channel name in the **Twitch chat commands** block (just the name, a `twitch.tv/...` link works too). The relay reads the chat anonymously (no login, no token) and only accepts commands from you, your mods, or also VIPs:
 
 `!delay on` · `!delay off` · `!delay 60` (turns on with 60 s) · `!delay censor [s]` · `!delay replay [s]` · `!delay clip [s]` · `!delay panic` (Portuguese aliases work too: `ligar`, `desligar`, `apagar`, `clipe`, `panico`).
 
 ### Phone control
 
-Tick **Allow access from phones on this network** and scan the QR code with the phone camera (same Wi-Fi). Windows may ask to allow the connection the first time. The link carries the access token: anyone with it can control the delay, so do not share it.
+Turn **Phone control** on under **Features and panel** and scan the QR code with the phone camera (same Wi-Fi). Windows may ask to allow the connection the first time. The link carries the access token: anyone with it can control the delay, so do not share it.
 
 ## Hotkeys
 
@@ -202,7 +210,7 @@ The plugin was tested against a simulated Stream Deck, not on real hardware yet:
 | OBS cannot connect to the server | The relay did not start. See `%APPDATA%\obs-dynamic-delay\obs-dynamic-delay.log`. |
 | The panel does not show up | **Docks > Dynamic Delay**. If it is not there, run the installer again with OBS closed. |
 | "Windows protected your PC" | The exe is not code-signed. Click **More info > Run anyway**. |
-| Chat commands do nothing | In the **Twitch chat commands** block, tick "Listen to chat commands" and use just the channel name. The log (`obs-dynamic-delay.log`) must show `[chat] joined #yourchannel`. |
+| Chat commands do nothing | Turn **Twitch chat commands** on under **Features and panel** and type the channel name in its block. The log (`obs-dynamic-delay.log`) must show `[chat] joined #yourchannel`. |
 | Phone cannot open the panel | Same Wi-Fi, allow the connection in the Windows firewall prompt, and use the link from the QR code. |
 | I want to stream without the relay again | **Settings > Restore OBS' original stream settings** (click twice to confirm). |
 
@@ -216,7 +224,8 @@ The panel tells you when a new version is out. Download the installer again and 
 
 - Every API call needs the access token created on first start (`api_token` in `config.toml`). Websites open in your browser cannot control the delay or read your settings.
 - The API never returns stream keys or the token.
-- By default the panel only listens on your PC (`127.0.0.1`). **Phone control** opens it to your local network, still protected by the token.
+- By default the panel only listens on your PC (`127.0.0.1`). **Phone control** (off by default) opens it to your local network, still protected by the token.
+- Features you switch off do nothing: no chat connection, no LAN port, no extra buffers.
 - The relay only ever opens three fixed places on your PC when asked (the author's GitHub, the releases page, the clips folder).
 
 ## How it works

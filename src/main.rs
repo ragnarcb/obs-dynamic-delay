@@ -141,7 +141,8 @@ async fn relay() -> Result<()> {
 fn destinations(cfg: &Config, obs_key: &str) -> Vec<Dest> {
     let main_key = if cfg.stream_key.is_empty() { obs_key.to_string() } else { cfg.stream_key.clone() };
     let mut v = vec![Dest { name: t!("Main", "Principal"), url: cfg.upstream_url.clone(), key: main_key }];
-    for d in cfg.destinations.iter().filter(|d| d.enabled && !d.url.is_empty()) {
+    let extras = if cfg.features.multistream { cfg.destinations.as_slice() } else { &[] };
+    for d in extras.iter().filter(|d| d.enabled && !d.url.is_empty()) {
         v.push(Dest { name: d.name.clone(), url: d.url.clone(), key: d.key.clone() });
     }
     v
@@ -218,7 +219,7 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
                             let dests = destinations(&c, &key);
                             shared.status.lock().unwrap().outputs =
                                 dests.iter().map(|d| OutputStatus::new(&d.name, &d.url)).collect();
-                            let outage = Duration::from_secs(c.outage_buffer_seconds as u64);
+                            let outage = Duration::from_secs(c.outage_seconds());
                             let o = Outputs(
                                 dests.into_iter().enumerate().map(|(i, d)| upstream::spawn(shared.clone(), i, d, outage)).collect(),
                             );
@@ -249,6 +250,10 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
                 let Some(cmd) = cmd else { continue };
                 let now = Instant::now();
                 let c = shared.config.lock().unwrap().clone();
+                if let Some(name) = disabled_feature(&c, cmd, panic) {
+                    shared.event("warn", t!("\"{name}\" is turned off (Features and panel).", "\"{name}\" está desativado (Recursos e painel)."));
+                    continue;
+                }
                 match cmd {
                     Cmd::On => enabled = true,
                     Cmd::Off => enabled = false,
@@ -331,8 +336,7 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
                 let now = Instant::now();
                 let (mode, scene, history) = {
                     let c = shared.config.lock().unwrap();
-                    let extra = c.replay_seconds.max(c.clip_seconds) as u64;
-                    (GrowMode::parse(&c.grow_mode), c.delay_scene.clone(), Duration::from_secs(delay as u64 + extra + 5))
+                    (GrowMode::parse(&c.grow_mode), c.delay_scene.clone(), Duration::from_secs(c.history_seconds(delay)))
                 };
                 engine.set_grow_mode(mode, history);
                 engine.poll(now, &mut out);
@@ -417,11 +421,32 @@ fn save_clip(engine: &Engine, shared: &Arc<Shared>, now: Instant, secs: u32, dir
     });
 }
 
+/// Name of the feature a command needs, when that feature is turned off.
+/// Ending a running panic is always allowed.
+fn disabled_feature(c: &Config, cmd: Cmd, panic_on: bool) -> Option<String> {
+    let f = &c.features;
+    let off = match cmd {
+        Cmd::Censor(_) => !f.censor,
+        Cmd::Replay(_) => !f.replay,
+        Cmd::Clip(_) => !f.clips,
+        Cmd::Panic => !f.panic && !panic_on,
+        Cmd::CatchUp => !f.outage,
+        _ => false,
+    };
+    off.then(|| match cmd {
+        Cmd::Censor(_) => t!("Delete before it airs", "Apagar antes de ir ao ar"),
+        Cmd::Replay(_) => t!("Instant replay", "Replay instantâneo"),
+        Cmd::Clip(_) => t!("Clips", "Clipes"),
+        Cmd::Panic => t!("Panic button", "Botão de pânico"),
+        _ => t!("Connection drop protection", "Proteção contra queda"),
+    })
+}
+
 /// Command for a scene going on air, from the scene rules. The flag means
 /// "also turn the delay on" (for "set:N").
 fn scene_rule(shared: &Shared, scene: &str) -> Option<(Cmd, bool)> {
     let c = shared.config.lock().unwrap();
-    if scene == c.delay_scene || scene == c.panic_scene {
+    if !c.features.rules || scene == c.delay_scene || scene == c.panic_scene {
         return None; // switched by us
     }
     let rule = c.scene_rules.iter().find(|r| r.scene == scene)?;

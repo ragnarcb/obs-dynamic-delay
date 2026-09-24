@@ -2,6 +2,18 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.5.0] - 2026-09-23
+
+### Added
+
+- **Every optional feature can be switched off for real** (`features` in `config.toml`, and "Features and panel" in the panel): delete before it airs, replay, clips, panic, multistream, connection drop protection, delay by scene, Twitch chat commands, phone control and the update notice. An off feature refuses its commands from every source, stops its background work (no Twitch chat connection, no LAN port, no replay/clip buffer, no extra destinations, no outage buffer, no GitHub check) and hides its block.
+- Switching a feature on also adds its block to the panel.
+
+### Changed
+
+- "Customize panel" became "Features and panel", with an On switch and a Panel switch per feature.
+- The chat and phone on/off moved from their blocks to the feature switches; older configs (`twitch_chat.enabled`, `lan_access`) are migrated.
+
 ## [0.4.1] - 2026-09-23
 
 ### Fixed
