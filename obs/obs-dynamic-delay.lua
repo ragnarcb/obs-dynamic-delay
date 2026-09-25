@@ -575,6 +575,32 @@ local function deck_record()
   if obs.obs_frontend_recording_active() then obs.obs_frontend_recording_stop() else obs.obs_frontend_recording_start() end
 end
 
+-- Output size and frame rate: "<width>\t<height>\t<fps num>\t<fps den>" (zeros if unknown).
+local function video_info()
+  local ok, r = pcall(function()
+    local ovi = obs.obs_video_info()
+    if not obs.obs_get_video_info(ovi) then return nil end
+    return ovi.output_width .. "\t" .. ovi.output_height .. "\t" .. ovi.fps_num .. "\t" .. ovi.fps_den
+  end)
+  return (ok and r) or "0\t0\t0\t0"
+end
+
+-- Clips copy the stream, so their frame rate is the OBS frame rate (Settings > Video).
+local function set_fps(n)
+  local busy = obs.obs_frontend_streaming_active() or obs.obs_frontend_recording_active()
+  pcall(function() busy = busy or obs.obs_frontend_replay_buffer_active() or obs.obs_frontend_virtualcam_active() end)
+  if busy then
+    report(L("Stop the stream and the recording before changing the frame rate.", "Pare a live e a gravação antes de mudar o FPS."))
+    return
+  end
+  local cfg = obs.obs_frontend_get_profile_config()
+  obs.config_set_uint(cfg, "Video", "FPSType", 0) -- "Common FPS values"
+  obs.config_set_string(cfg, "Video", "FPSCommon", tostring(n))
+  pcall(obs.config_save_safe, cfg, "tmp", nil)
+  obs.obs_frontend_reset_video()
+  report(L("OBS now runs at ", "O OBS agora roda a ") .. n .. L(" FPS (Settings > Video).", " FPS (Configurações > Vídeo)."))
+end
+
 -- Audio sources with their mute state, and whether OBS streams/records, for the deck keys.
 local last_audio, last_obsstate = nil, nil
 local function send_obs_state(force)
@@ -594,7 +620,7 @@ local function send_obs_state(force)
     send(audio)
   end
   local state = "obsstate\t" .. (obs.obs_frontend_streaming_active() and "1" or "0") .. "\t"
-    .. (obs.obs_frontend_recording_active() and "1" or "0")
+    .. (obs.obs_frontend_recording_active() and "1" or "0") .. "\t" .. video_info()
   if force or state ~= last_obsstate then
     last_obsstate = state
     send(state)
@@ -630,7 +656,8 @@ local function poll_tick()
     elseif reply:sub(1, 6) == "scene\t" then deck_scene(reply:sub(7))
     elseif reply:sub(1, 5) == "mute\t" then deck_mute(reply:sub(6)); send_obs_state(true)
     elseif reply == "stream_toggle" then deck_stream()
-    elseif reply == "record_toggle" then deck_record() end
+    elseif reply == "record_toggle" then deck_record()
+    elseif reply:sub(1, 4) == "fps\t" then set_fps(tonumber(reply:sub(5)) or 60); send_obs_state(true) end
     reply = recv_on(poll_sock, 1)
   end
   send_on(poll_sock, "poll " .. (obs_configured() and "1" or "0"))

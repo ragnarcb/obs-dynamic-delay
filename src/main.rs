@@ -175,6 +175,7 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
     let mut last_metadata: Option<StreamMetadata> = None;
     let mut stream_started: Option<Instant> = None;
     let mut in_bytes = 0usize;
+    let mut in_frames = 0u32;
     let mut in_meter = Instant::now();
 
     let target = |enabled: bool, delay: u32| Duration::from_secs(if enabled { delay as u64 } else { 0 });
@@ -193,6 +194,9 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
                     EngineMsg::Media { session, kind, ts, data, arrival } => {
                         if publishing == Some(session) {
                             in_bytes += data.len();
+                            if kind == Kind::Video && flv::is_video_frame(&data) {
+                                in_frames += 1;
+                            }
                             engine.push(kind, unwrapper.unwrap(session, ts), data, arrival);
                         }
                     }
@@ -280,7 +284,9 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
                     }
                     Cmd::Clip(secs) => {
                         let secs = secs.unwrap_or(c.clip_seconds).clamp(5, 120);
-                        save_clip(&engine, &shared, now, secs, c.clips_path(), video_size);
+                        let fps = last_metadata.as_ref().and_then(|m| m.video_frame_rate).map(f64::from);
+                        let size = stream_size(&engine, video_size);
+                        save_clip(&engine, &shared, now, secs, c.clip_aired_only, c.clips_path(), size, fps);
                         continue;
                     }
                     Cmd::Panic => {
@@ -385,7 +391,15 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
                     let el = in_meter.elapsed();
                     if el >= Duration::from_secs(1) {
                         st.health.in_kbps = (in_bytes as u128 * 8 / el.as_millis().max(1)) as u32;
+                        st.health.in_fps = if publishing.is_some() {
+                            snap_fps(in_frames as f64 * 1000.0 / el.as_millis().max(1) as f64) as f32
+                        } else {
+                            0.0
+                        };
+                        let (w, h) = stream_size(&engine, video_size);
+                        (st.health.width, st.health.height) = if publishing.is_some() { (w as u32, h as u32) } else { (0, 0) };
                         in_bytes = 0;
+                        in_frames = 0;
                         in_meter = Instant::now();
                     }
                     st.health.uptime_s = stream_started.map_or(0, |t| t.elapsed().as_secs());
@@ -405,13 +419,36 @@ fn censor(engine: &mut Engine, shared: &Shared, now: Instant, secs: u32) {
     }
 }
 
-fn save_clip(engine: &Engine, shared: &Arc<Shared>, now: Instant, secs: u32, dir: PathBuf, size: (u16, u16)) {
-    let Some(clip) = engine.snapshot(now, Duration::from_secs(secs as u64)) else {
+/// A frame count over about a second jitters (29.8, 60.2...): show the usual rate it is close to.
+fn snap_fps(measured: f64) -> f64 {
+    [24.0, 25.0, 30.0, 48.0, 50.0, 60.0, 100.0, 120.0, 144.0]
+        .into_iter()
+        .find(|r| (measured - r).abs() / r < 0.04)
+        .unwrap_or((measured * 10.0).round() / 10.0)
+}
+
+/// Picture size: from the H.264 header when it can be read, else from OBS' metadata.
+fn stream_size(engine: &Engine, metadata: (u16, u16)) -> (u16, u16) {
+    engine.video_header().and_then(|h| clip::avc_size(h)).unwrap_or(metadata)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn save_clip(
+    engine: &Engine,
+    shared: &Arc<Shared>,
+    now: Instant,
+    secs: u32,
+    aired_only: bool,
+    dir: PathBuf,
+    size: (u16, u16),
+    fps: Option<f64>,
+) {
+    let Some(clip) = engine.snapshot(now, Duration::from_secs(secs as u64), aired_only) else {
         shared.event("warn", t!("Nothing to clip yet.", "Ainda não há nada para o clipe."));
         return;
     };
     let shared = shared.clone();
-    tokio::task::spawn_blocking(move || match clip::save(&clip, &dir, size) {
+    tokio::task::spawn_blocking(move || match clip::save(&clip, &dir, size, fps) {
         Ok(path) => {
             let p = path.display().to_string();
             shared.status.lock().unwrap().last_clip = Some(p.clone());

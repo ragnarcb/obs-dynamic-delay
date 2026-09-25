@@ -265,10 +265,16 @@ impl Engine {
         gained
     }
 
-    /// The most recent `secs` of input (aired or not), starting at a keyframe.
-    pub fn snapshot(&self, now: Instant, secs: Duration) -> Option<Clip> {
-        let from = now.checked_sub(secs);
-        let all: Vec<&Queued> = self.history.iter().chain(self.queue.iter()).filter(|q| !q.header).collect();
+    /// The most recent `secs` of input, starting at a keyframe. With `aired_only`
+    /// it ends where the viewers are (the part still in the delay is left out).
+    pub fn snapshot(&self, now: Instant, secs: Duration, aired_only: bool) -> Option<Clip> {
+        let all: Vec<&Queued> = if aired_only {
+            self.history.iter().filter(|q| !q.header).collect()
+        } else {
+            self.history.iter().chain(self.queue.iter()).filter(|q| !q.header).collect()
+        };
+        let end = if aired_only { all.last().map_or(now, |q| q.arrival) } else { now };
+        let from = end.checked_sub(secs);
         let mut start = None;
         for (i, q) in all.iter().enumerate() {
             let starts = if self.has_video { q.kind == Kind::Video && q.key } else { true };
@@ -282,6 +288,11 @@ impl Engine {
             audio_header: self.audio_header.clone(),
             packets: all[start..].iter().map(|q| (q.kind, q.ts, q.data.clone())).collect(),
         })
+    }
+
+    /// The codec header of the stream (AVC sequence header for H.264).
+    pub fn video_header(&self) -> Option<&Bytes> {
+        self.video_header.as_ref()
     }
 
     pub fn take_scene_events(&mut self) -> Vec<SceneEvent> {
@@ -979,7 +990,7 @@ mod tests {
         s.run(20_000);
         s.engine.set_target(Duration::from_secs(10));
         s.run(5_000);
-        let clip = s.engine.snapshot(s.now(), Duration::from_secs(15)).unwrap();
+        let clip = s.engine.snapshot(s.now(), Duration::from_secs(15), false).unwrap();
         assert!(clip.video_header.is_some() && clip.audio_header.is_some());
         let (k, ts, data) = &clip.packets[0];
         assert_eq!(*k, Kind::Video);

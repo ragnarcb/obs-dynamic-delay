@@ -285,7 +285,11 @@ const TEXT = {
     },
     seconds: "Seconds", censorBtn: (s) => `Delete the last ${s}s`, censorHint: "Only works with the delay on: the part viewers have not seen yet is removed and the stream holds its last frame over the gap.",
     replayBtn: (s) => `Replay the last ${s}s`, replayHint: "Viewers see the last seconds again, then the stream returns to the normal delay.",
-    clipBtn: (s) => `Save the last ${s}s`, lastClip: "Last clip", folder: "Folder", openFolder: "Open clips folder", clipHint: "Includes what has not aired yet. MP4 (H.264 + AAC), ready for TikTok and Shorts.",
+    clipSource: "Clips come out at", clipSame: "same size and FPS as the stream: clips copy it frame by frame", clipUnknown: "known once OBS is open",
+    fpsLow: (f) => `OBS runs at ${f} FPS, so clips (and the stream) have ${f} FPS. Switch OBS to 60 FPS for smooth 60 FPS clips; at 1080p60 keep 6000 kbps on Twitch.`,
+    fpsBtn: "Switch OBS to 60 FPS", fpsBusy: "Stop the stream and the recording first.", clipLength: "Length",
+    clipAired: "Only what viewers already saw (leave out the part still in the delay)", clipsFolder: "Clips folder", folderHint: "Empty = Videos\\Dynamic Delay",
+    clipBtn: (s) => `Save the last ${s}s`, lastClip: "Last clip", folder: "Folder", openFolder: "Open clips folder", clipHint: "MP4 (H.264 + AAC) at a constant frame rate, ready for TikTok, Shorts and video editors.",
     panicBtn: "PANIC", panicOff: "End panic mode", panicScene: "Scene to show", panicMute: "Mute all audio", panicCensor: "Also delete the unaired seconds (needs the delay on)",
     none: "(none)", uptime: "Live for", fromObs: "From OBS", reconnects: "reconnects", behind: (s) => `${s}s behind after an outage`, catchUp: "Catch up",
     outage: "Keep what was missed during a connection drop (seconds, 0 = off)", alertSound: "Beep when a connection drops", destinations: "Destinations",
@@ -344,7 +348,11 @@ const TEXT = {
     },
     seconds: "Segundos", censorBtn: (s) => `Apagar os últimos ${s}s`, censorHint: "Só funciona com o delay ligado: o trecho que o público ainda não viu é removido e a live segura o último quadro no lugar.",
     replayBtn: (s) => `Replay dos últimos ${s}s`, replayHint: "O público vê os últimos segundos de novo e depois a live volta ao delay normal.",
-    clipBtn: (s) => `Salvar os últimos ${s}s`, lastClip: "Último clipe", folder: "Pasta", openFolder: "Abrir pasta dos clipes", clipHint: "Inclui o que ainda não foi ao ar. MP4 (H.264 + AAC), pronto para TikTok e Shorts.",
+    clipSource: "Os clipes saem em", clipSame: "mesmo tamanho e FPS da live: o clipe copia quadro a quadro", clipUnknown: "aparece quando o OBS estiver aberto",
+    fpsLow: (f) => `O OBS roda a ${f} FPS, então os clipes (e a live) têm ${f} FPS. Mude o OBS para 60 FPS para clipes lisos em 60 FPS; em 1080p60 mantenha 6000 kbps na Twitch.`,
+    fpsBtn: "Mudar o OBS para 60 FPS", fpsBusy: "Pare a live e a gravação antes.", clipLength: "Duração",
+    clipAired: "Só o que o público já viu (deixa de fora o trecho que ainda está no delay)", clipsFolder: "Pasta dos clipes", folderHint: "Vazio = Vídeos\\Dynamic Delay",
+    clipBtn: (s) => `Salvar os últimos ${s}s`, lastClip: "Último clipe", folder: "Pasta", openFolder: "Abrir pasta dos clipes", clipHint: "MP4 (H.264 + AAC) com FPS constante, pronto para TikTok, Shorts e editores de vídeo.",
     panicBtn: "PÂNICO", panicOff: "Sair do modo pânico", panicScene: "Cena para mostrar", panicMute: "Mutar todo o áudio", panicCensor: "Também apagar o que ainda não foi ao ar (precisa do delay ligado)",
     none: "(nenhuma)", uptime: "No ar há", fromObs: "Vindo do OBS", reconnects: "reconexões", behind: (s) => `${s}s atrás depois de uma queda`, catchUp: "Alcançar",
     outage: "Guardar o que foi perdido numa queda de conexão (segundos, 0 = desligado)", alertSound: "Apitar quando uma conexão cair", destinations: "Destinos",
@@ -424,6 +432,7 @@ const ICON = {
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
   key: '<path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5"/>',
   sparkles: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>',
+  zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
   plug: '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>',
   fastforward: '<polygon points="13 19 22 12 13 5 13 19"/><polygon points="2 19 11 12 2 5 2 19"/>',
 };
@@ -586,16 +595,52 @@ const MODULES = {
   clips: {
     build() {
       this.btn = button("wide primary", "clapper", "", () => cmd("clip/" + cfg.clip_seconds));
+      this.source = h("span", { class: "stat-value", text: "-" });
+      this.sourceNote = h("span", { class: "stat-label" });
+      this.fpsBtn = button("small", "zap", T().fpsBtn, () => obsAction("/api/obs/fps/60"));
+      this.fpsText = h("span");
+      this.fpsTip = callout("info", "info", this.fpsText, h("div", { class: "actions" }, this.fpsBtn));
+      this.lengths = [15, 30, 60, 90, 120].map((n) => {
+        const b = h("button", { class: "btn", type: "button", text: `${n}s`, "aria-label": T().clipBtn(n), onclick: () => saveConfig({ clip_seconds: n }) });
+        b.secs = n;
+        return b;
+      });
       this.lastLabel = h("span", { class: "field-label" });
       this.last = h("code");
-      return [this.btn, inlineField(T().seconds, numberInput(cfg.clip_seconds, 5, 120, (v) => saveConfig({ clip_seconds: v }))),
-        h("div", { class: "group", style: "gap:6px" }, this.lastLabel, this.last),
+      const folder = h("input", { type: "text", value: cfg.clips_dir, placeholder: cfg.clips_path, spellcheck: "false" });
+      const folderMsg = h("span", { class: "note" });
+      return [this.btn,
+        h("div", { class: "stat" }, h("span", { class: "stat-label", text: T().clipSource }), this.source, this.sourceNote),
+        this.fpsTip,
+        h("div", { class: "group", style: "gap:6px" }, h("span", { class: "field-label", text: T().clipLength }),
+          h("div", { class: "presets", style: "grid-template-columns:repeat(5,1fr)" }, ...this.lengths)),
+        inlineField(T().seconds, numberInput(cfg.clip_seconds, 5, 120, (v) => saveConfig({ clip_seconds: v }))),
+        check(cfg.clip_aired_only, T().clipAired, (e) => saveConfig({ clip_aired_only: e.target.checked })),
+        this.lastBox = h("div", { class: "group", style: "gap:6px" }, this.lastLabel, this.last),
+        field(T().clipsFolder, h("div", { class: "item-row" }, h("div", { class: "grow" }, folder),
+          button("small", "check", T().save, () => saveConfig({ clips_dir: folder.value.trim() }, folderMsg))), T().folderHint),
+        folderMsg,
         button("link", "folder", T().openFolder, () => api("/api/open/clips", { method: "POST" })), hint(T().clipHint)];
     },
     update(s) {
       this.btn.lbl.textContent = T().clipBtn(cfg.clip_seconds); this.btn.disabled = !s.engine;
-      this.lastLabel.textContent = s.last_clip ? T().lastClip : T().folder;
-      this.last.textContent = s.last_clip || cfg.clips_path;
+      for (const b of this.lengths) b.setAttribute("aria-pressed", String(cfg.clip_seconds === b.secs));
+      // the OBS settings (known before going live), else what the relay measures
+      const v = s.obs?.video;
+      const fps = v?.fps || (s.health.in_fps || 0);
+      const w = v?.width || s.health.width, hgt = v?.height || s.health.height;
+      this.source.textContent = fps ? `${w && hgt ? `${w}x${hgt} · ` : ""}${fpsText(fps)} FPS` : "-";
+      this.sourceNote.textContent = fps ? T().clipSame : T().clipUnknown;
+      const low = fps > 0 && fps < 50;
+      this.fpsTip.classList.toggle("hidden", !low);
+      if (low) {
+        const busy = !!(s.obs?.streaming || s.obs?.recording);
+        this.fpsText.textContent = T().fpsLow(fpsText(fps)) + (busy ? " " + T().fpsBusy : "");
+        this.fpsBtn.disabled = busy || !s.obs?.script;
+      }
+      this.lastBox.classList.toggle("hidden", !s.last_clip);
+      this.lastLabel.textContent = T().lastClip;
+      this.last.textContent = s.last_clip || "";
     },
   },
   panic: {
@@ -771,6 +816,8 @@ const MODULES = {
     update() {},
   },
 };
+// 59.94 stays 59.94, 60.0 becomes 60
+const fpsText = (f) => (Math.round(f * 100) / 100).toString().replace(".", lang === "pt" ? "," : ".");
 const SWATCH = { blue: "#60a5fa", green: "#34d399", orange: "#fbbf24", red: "#f87171", grey: "#8a8f9c" };
 
 function copyText(text) {

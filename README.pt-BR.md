@@ -148,7 +148,16 @@ Repete os últimos segundos (10 por padrão) no ar e depois corta de volta para 
 
 ### Clipes
 
-Salva os últimos segundos (30 por padrão, até 120) como `clip_<data>.mp4` em `Vídeos\Dynamic Delay` (ou na pasta da configuração). Inclui o que ainda não foi ao ar, então dá para clipar algo que acabou de acontecer. H.264 + AAC vira MP4; outros codecs (HEVC, AV1) são salvos em FLV.
+Salva os últimos segundos (30 por padrão, até 120) como `clip_<data>.mp4` em `Vídeos\Dynamic Delay` ou na pasta que você escolher no bloco. Por padrão inclui o que ainda não foi ao ar, então dá para clipar algo que acabou de acontecer; ligue **Só o que o público já viu** para deixar de fora o trecho que ainda está no delay. H.264 + AAC vira MP4; outros codecs (HEVC, AV1) são salvos em FLV.
+
+O clipe copia a live quadro a quadro, sem recodificar: ele tem **o mesmo tamanho e FPS da live**, mostrados no topo do bloco. Se o OBS roda a 30 FPS, o clipe sai em 30 FPS. Nesse caso o bloco oferece **Mudar o OBS para 60 FPS** (Configurações > Vídeo > Valores comuns de FPS; só com a live e a gravação paradas). O MP4 tem FPS constante (60/1, 30/1, 59,94 exatos), o que editores como CapCut e Premiere tratam bem.
+
+| Opção do clipe | O que faz |
+|---|---|
+| Duração | 15 / 30 / 60 / 90 / 120 s, ou qualquer valor de 5 a 120 |
+| Só o que o público já viu | termina o clipe onde o público está, não no momento ao vivo |
+| Pasta dos clipes | onde os arquivos ficam (vazio = `Vídeos\Dynamic Delay`) |
+| Mudar o OBS para 60 FPS | aparece quando o OBS roda abaixo de 50 FPS |
 
 ### Botão de pânico
 
@@ -280,6 +289,7 @@ OBS ──RTMP──▶ 127.0.0.1:1935 ──▶ motor de delay ──▶ um cli
 | `/api/status` | estado em JSON (delay, motor, destinos, saúde, pânico, último clipe, eventos) |
 | `/api/config` | lê (GET) ou muda (POST JSON, só os campos enviados) a configuração |
 | `/api/obs/configure` · `/api/obs/restore` | pede ao script do OBS para configurar ou restaurar a transmissão |
+| `/api/obs/fps/{n}` | pede ao script do OBS para mudar o FPS do OBS (24, 25, 30, 48, 50 ou 60) |
 | `/api/lan` | link e QR code do deck no celular |
 | `/deck` · `/api/deck/press/{n}` | página do deck · executa o botão número n |
 

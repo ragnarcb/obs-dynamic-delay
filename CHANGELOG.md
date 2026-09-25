@@ -2,6 +2,19 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.8.0] - 2026-09-25
+
+### Added
+
+- **Clip options:** the block shows the size and frame rate clips come out at (they copy the stream), offers **Switch OBS to 60 FPS** when OBS runs below 50 FPS, quick lengths (15/30/60/90/120 s), **Only what viewers already saw** and an editable clips folder.
+- The OBS script reports the OBS output size and frame rate, and can set the frame rate (only with the stream and the recording stopped). New API: `/api/obs/fps/{n}`.
+- Stream health reports the frames per second and picture size received from OBS.
+
+### Changed
+
+- Clips are written with a constant frame rate (exact 60/1, 30/1, 59.94 grid instead of 16/17 ms steps) and the audio at its own sample rate, for video editors and phone apps.
+- The clip size comes from the H.264 header, so it is right even when OBS sends no metadata (it used to fall back to 1280x720).
+
 ## [0.7.0] - 2026-09-24
 
 ### Changed

@@ -148,7 +148,16 @@ Replays the last seconds (10 by default) on air, then cuts back to the normal de
 
 ### Clips
 
-Saves the last seconds (30 by default, up to 120) as `clip_<date>.mp4` in `Videos\Dynamic Delay` (or the folder in the settings). It includes what has not aired yet, so you can clip something that just happened. H.264 + AAC becomes MP4; other codecs (HEVC, AV1) are saved as FLV.
+Saves the last seconds (30 by default, up to 120) as `clip_<date>.mp4` in `Videos\Dynamic Delay` or the folder you choose in the block. By default it includes what has not aired yet, so you can clip something that just happened; turn on **Only what viewers already saw** to leave out the part still in the delay. H.264 + AAC becomes MP4; other codecs (HEVC, AV1) are saved as FLV.
+
+Clips copy the stream frame by frame, with no re-encoding: they have the **same size and frame rate as the stream**, shown at the top of the block. If OBS runs at 30 FPS, clips are 30 FPS. The block then offers **Switch OBS to 60 FPS** (Settings > Video > Common FPS values; only with the stream and the recording stopped). The MP4 has a constant frame rate (exact 60/1, 30/1, 59.94...), which video editors such as CapCut and Premiere handle well.
+
+| Clip option | What it does |
+|---|---|
+| Length | 15 / 30 / 60 / 90 / 120 s, or any value from 5 to 120 |
+| Only what viewers already saw | ends the clip where the viewers are, not at the live moment |
+| Clips folder | where the files go (empty = `Videos\Dynamic Delay`) |
+| Switch OBS to 60 FPS | shown when OBS runs below 50 FPS |
 
 ### Panic button
 
@@ -280,6 +289,7 @@ OBS ──RTMP──▶ 127.0.0.1:1935 ──▶ delay engine ──▶ one RTMP
 | `/api/status` | state as JSON (delay, engine, destinations, health, panic, last clip, events) |
 | `/api/config` | reads (GET) or changes (POST JSON, only the fields you send) the settings |
 | `/api/obs/configure` · `/api/obs/restore` | asks the OBS script to configure or restore the stream settings |
+| `/api/obs/fps/{n}` | asks the OBS script to set the OBS frame rate (24, 25, 30, 48, 50 or 60) |
 | `/api/lan` | phone deck link and QR code |
 | `/deck` · `/api/deck/press/{n}` | phone deck page · runs key number n |
 

@@ -48,6 +48,8 @@ pub enum ObsAction {
     ToggleMute(String),
     ToggleStream,
     ToggleRecord,
+    /// Sets the OBS frame rate (Settings > Video > Common FPS values).
+    SetFps(u32),
 }
 
 impl ObsAction {
@@ -64,6 +66,7 @@ impl ObsAction {
             ObsAction::ToggleMute(name) => format!("mute\t{name}"),
             ObsAction::ToggleStream => "stream_toggle".into(),
             ObsAction::ToggleRecord => "record_toggle".into(),
+            ObsAction::SetFps(n) => format!("fps\t{n}"),
         }
     }
 }
@@ -80,6 +83,15 @@ pub struct Bridge {
     pub audio: Vec<AudioSource>,
     pub streaming: bool,
     pub recording: bool,
+    pub video: Option<ObsVideo>,
+}
+
+/// OBS video settings (output size and frame rate), reported by the script.
+#[derive(Clone, Copy, Debug, Serialize, PartialEq)]
+pub struct ObsVideo {
+    pub width: u32,
+    pub height: u32,
+    pub fps: f64,
 }
 
 /// An OBS audio source and whether it is muted.
@@ -104,6 +116,7 @@ pub struct ObsInfo {
     /// OBS is streaming / recording (OBS itself, not the relay).
     pub streaming: bool,
     pub recording: bool,
+    pub video: Option<ObsVideo>,
 }
 
 impl Bridge {
@@ -122,6 +135,7 @@ impl Bridge {
             audio: self.audio.clone(),
             streaming: self.streaming,
             recording: self.recording,
+            video: self.video,
         }
     }
 }
@@ -167,6 +181,11 @@ impl OutputStatus {
 pub struct Health {
     /// Bitrate received from OBS.
     pub in_kbps: u32,
+    /// Frames per second received from OBS (0 = not streaming).
+    pub in_fps: f32,
+    /// Picture size of the stream (0 = unknown).
+    pub width: u32,
+    pub height: u32,
     pub uptime_s: u64,
 }
 

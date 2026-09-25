@@ -38,6 +38,16 @@ pub fn video_is_keyframe(d: &[u8]) -> bool {
 }
 
 /// Composition time offset (PTS - DTS) in ms of a coded video frame, 0 if absent.
+/// A video tag that carries a picture (not a codec header or end-of-sequence).
+pub fn is_video_frame(d: &[u8]) -> bool {
+    match d.first() {
+        // Enhanced RTMP: PacketType 1 (CodedFrames) or 3 (CodedFramesX)
+        Some(b0) if b0 & 0x80 != 0 => matches!(b0 & 0x0F, 1 | 3),
+        Some(_) => d.get(1) == Some(&1),
+        None => false,
+    }
+}
+
 pub fn video_cts(d: &[u8]) -> i64 {
     let Some(&b0) = d.first() else { return 0 };
     let at = if b0 & 0x80 != 0 {

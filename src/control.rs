@@ -20,7 +20,7 @@ use tower_http::cors::CorsLayer;
 use crate::EngineMsg;
 use crate::config::{Config, destination_from_obs};
 use crate::i18n::{self, Lang};
-use crate::status::{AudioSource, Cmd, ObsAction, ObsInfo, Shared, Status};
+use crate::status::{AudioSource, Cmd, ObsAction, ObsInfo, ObsVideo, Shared, Status};
 use crate::t;
 
 pub const PANEL: &str = include_str!("panel.html");
@@ -60,6 +60,7 @@ pub async fn serve_http(tx: UnboundedSender<EngineMsg>, shared: Arc<Shared>) -> 
         .route("/api/config", get(get_config).post(set_config))
         .route("/api/obs/configure", post(obs_configure))
         .route("/api/obs/restore", post(obs_restore))
+        .route("/api/obs/fps/{fps}", post(obs_fps))
         .route("/api/open/{target}", post(open_target))
         .route("/api/lan", get(lan_info))
         .route("/api/deck/press/{index}", post(deck_press))
@@ -256,6 +257,12 @@ async fn obs_configure(State(s): State<AppState>) -> impl IntoResponse {
 async fn obs_restore(State(s): State<AppState>) -> impl IntoResponse {
     queue_obs_action(&s, ObsAction::Restore)
 }
+async fn obs_fps(State(s): State<AppState>, Path(fps): Path<u32>) -> impl IntoResponse {
+    if ![24, 25, 30, 48, 50, 60].contains(&fps) {
+        return Json(json!({ "ok": false, "error": t!("unsupported frame rate", "taxa de quadros não suportada") }));
+    }
+    queue_obs_action(&s, ObsAction::SetFps(fps))
+}
 
 /// Opens one of a fixed set of places on the streamer's PC (never an arbitrary URL).
 async fn open_target(State(s): State<AppState>, Path(target): Path<String>) -> impl IntoResponse {
@@ -401,11 +408,18 @@ pub async fn serve_udp(sock: UdpSocket, tx: UnboundedSender<EngineMsg>, shared: 
                     .collect();
             }
             "obsstate" => {
-                // obsstate\t<streaming 0|1>\t<recording 0|1>
+                // obsstate\t<streaming 0|1>\t<recording 0|1>[\t<width>\t<height>\t<fps num>\t<fps den>]
                 let mut it = rest.split('\t');
                 let mut b = shared.bridge.lock().unwrap();
                 b.streaming = it.next() == Some("1");
                 b.recording = it.next() == Some("1");
+                let n: Vec<u32> = it.filter_map(|x| x.trim().parse().ok()).collect();
+                b.video = match n[..] {
+                    [width, height, num, den] if width > 0 && num > 0 && den > 0 => {
+                        Some(ObsVideo { width, height, fps: (num as f64 / den as f64 * 100.0).round() / 100.0 })
+                    }
+                    _ => None,
+                };
             }
             "program" => {
                 let name = rest.trim().to_string();

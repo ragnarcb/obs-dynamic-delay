@@ -175,6 +175,8 @@ pub struct Config {
     /// Clip length and folder (empty = Videos\Dynamic Delay).
     pub clip_seconds: u32,
     pub clips_dir: String,
+    /// Clips hold only what viewers already saw (not the part still in the delay).
+    pub clip_aired_only: bool,
 
     /// Keep sending what was missed when the platform connection drops (0 = off).
     pub outage_buffer_seconds: u32,
@@ -224,6 +226,7 @@ impl Default for Config {
             censor_seconds: 10,
             replay_seconds: 10,
             clip_seconds: 30,
+            clip_aired_only: false,
             clips_dir: String::new(),
             outage_buffer_seconds: 60,
             alert_sound: true,
