@@ -20,19 +20,22 @@ pub struct Destination {
     pub name: String,
     pub url: String,
     pub key: String,
+    /// Listed for the stream (off = kept in the list, never used).
     pub enabled: bool,
+    /// Goes live together with the stream; otherwise it is started from the panel.
+    pub auto_start: bool,
 }
 
 impl Default for Destination {
     fn default() -> Self {
-        Destination { name: String::new(), url: String::new(), key: String::new(), enabled: true }
+        Destination { name: String::new(), url: String::new(), key: String::new(), enabled: true, auto_start: true }
     }
 }
 
 /// Actions a phone deck key can run. `arg` is seconds, a scene or an audio source.
 pub const DECK_ACTIONS: &[&str] = &[
     "delay.toggle", "delay.on", "delay.off", "delay.set", "delay.add", "censor", "replay", "clip", "panic", "catchup",
-    "obs.scene", "obs.mute", "obs.stream", "obs.record",
+    "obs.scene", "obs.mute", "obs.stream", "obs.record", "dest.toggle",
 ];
 
 /// One key of the phone deck.
@@ -374,7 +377,7 @@ mod tests {
         let mut c = Config::default();
         c.stream_key = r#"a"b\c"#.into();
         c.start_enabled = true;
-        c.destinations.push(Destination { name: "YT".into(), url: YOUTUBE_URL.into(), key: "k".into(), enabled: false });
+        c.destinations.push(Destination { name: "YT".into(), url: YOUTUBE_URL.into(), key: "k".into(), enabled: false, auto_start: true });
         c.scene_rules.push(SceneRule { scene: "Ranked".into(), action: "set:60".into() });
         let text = format!("{HEADER}{}", toml::to_string_pretty(&c).unwrap());
         let parsed: Config = toml::from_str(&text).unwrap();

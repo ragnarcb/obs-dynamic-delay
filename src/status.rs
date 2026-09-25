@@ -151,10 +151,15 @@ pub enum UpstreamState {
     Reconnecting,
 }
 
-/// One destination (the main one is index 0).
+/// One destination (the main one has id 0).
 #[derive(Clone, Debug, Serialize)]
 pub struct OutputStatus {
+    /// Stable id for start/stop, also across list changes while live.
+    pub id: u64,
     pub name: String,
+    /// Sending (started), as opposed to listed but stopped.
+    pub running: bool,
+    pub auto_start: bool,
     pub host: String,
     pub state: UpstreamState,
     pub error: Option<String>,
@@ -165,10 +170,13 @@ pub struct OutputStatus {
 }
 
 impl OutputStatus {
-    pub fn new(name: &str, url: &str) -> Self {
+    pub fn new(id: u64, name: &str, url: &str) -> Self {
         let host = url::Url::parse(url).ok().and_then(|u| u.host_str().map(String::from)).unwrap_or_default();
         OutputStatus {
+            id,
             name: name.to_string(),
+            running: false,
+            auto_start: true,
             host,
             state: UpstreamState::Idle,
             error: None,
@@ -303,6 +311,10 @@ pub enum Cmd {
     Panic,
     /// Make every destination drop its outage backlog.
     CatchUp,
+    /// Start / stop / toggle one destination of the running stream (by id).
+    OutputStart(u64),
+    OutputStop(u64),
+    OutputToggle(u64),
     /// Exit once no stream is active (a delayed tail is still sent first).
     Quit,
     /// Cancel a pending Quit.

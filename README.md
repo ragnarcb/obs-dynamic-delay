@@ -174,7 +174,11 @@ One press: switches OBS to the panic scene (for example "Be right back"), mutes 
 
 ### Multistream
 
-Add destinations in the **Multistream** block (name, server URL, key). Each one gets the same delayed stream over its own connection, and a problem in one does not affect the others. Your upload has to carry the bitrate once per destination.
+Stream to Twitch, Kick, YouTube, Facebook or any RTMP(S) server at the same time. Add destinations in the **Multistream** block: pick the platform (the server address is filled in), paste the key and choose whether it **starts together with the stream**.
+
+While live, **Destinations now** lists every destination with its state and bitrate and a **Go live** / **Stop** button: each one starts or stops on its own, without touching the others or OBS. Settings changes apply right away: a new destination goes live (if set to start with the stream), a removed one stops, a changed key or address reconnects. A destination started in the middle of the stream begins cleanly at a keyframe. The phone deck has a key for it too (**Multistream: start/stop a destination**, hold to confirm).
+
+Each destination gets the same delayed stream over its own connection, and a problem in one does not affect the others. Your upload has to carry the bitrate once per destination (two at 6000 kbps need about 12 Mbps).
 
 ### Connection drop protection
 
@@ -299,6 +303,7 @@ OBS ──RTMP──▶ 127.0.0.1:1935 ──▶ delay engine ──▶ one RTMP
 | `/api/config` | reads (GET) or changes (POST JSON, only the fields you send) the settings |
 | `/api/obs/configure` · `/api/obs/restore` | asks the OBS script to configure or restore the stream settings |
 | `/api/update/check` | checks GitHub for a new version now |
+| `/api/output/{id}/{start,stop,toggle}` | starts or stops one destination of the running stream (ids in `/api/status` > `outputs`) |
 | `/api/obs/fps/{n}` | asks the OBS script to set the OBS frame rate (24, 25, 30, 48, 50 or 60) |
 | `/api/lan` | phone deck link and QR code |
 | `/deck` · `/api/deck/press/{n}` | phone deck page · runs key number n |

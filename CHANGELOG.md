@@ -2,6 +2,19 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.10.0] - 2026-09-25
+
+### Added
+
+- **Multistream, like the dedicated add-ons:** every destination starts and stops on its own while live (Go live / Stop in the panel, a phone deck key, `/api/output/{id}/{start,stop,toggle}`), can start together with the stream or not, and settings changes apply to the running stream (new destinations go live, removed ones stop, changed keys reconnect). Platform presets fill the server address (Twitch, YouTube, Kick, Facebook).
+- `DD_TRACE=<file>` writes every packet sent to the platforms (wall clock, timestamp), to study pacing.
+
+### Fixed
+
+- **Stalls and "loading" on Kick when changing the delay:** turning the delay back on after it was cut back to live (rewind mode) replayed across the cut part, so the timeline jumped several seconds and keyframes were 10 s apart. Players of low latency platforms such as Kick (Amazon IVS) wait for the missing part. A rewind now never crosses a cut; what the history cannot cover is held on the last frame.
+- RTMPS connections (Kick, YouTube, Facebook) are flushed after every batch of packets.
+- A destination started mid-stream, or reconnecting, starts cleanly: codec headers, keyframe and audio together at timestamp 0, instead of audio running ahead of the picture.
+
 ## [0.9.1] - 2026-09-25
 
 ### Added

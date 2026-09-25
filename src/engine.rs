@@ -155,6 +155,10 @@ pub struct Engine {
     /// Recently sent packets, kept for [`GrowMode::Rewind`].
     history: VecDeque<Queued>,
     history_window: Duration,
+    /// Arrival of the first packet after the last cut (delay shortened, censor):
+    /// a rewind must not replay across a cut, the dropped part would leave a hole
+    /// in the timeline and players stall waiting for it.
+    rewind_floor: Option<Instant>,
     rewound_for: Option<Duration>,
     scene: SceneState,
     scene_events: Vec<SceneEvent>,
@@ -194,6 +198,7 @@ impl Engine {
             grow_mode: GrowMode::Freeze,
             history: VecDeque::new(),
             history_window: Duration::ZERO,
+            rewind_floor: None,
             rewound_for: None,
             scene: SceneState::Idle,
             scene_events: Vec::new(),
@@ -293,6 +298,11 @@ impl Engine {
     /// The codec header of the stream (AVC sequence header for H.264).
     pub fn video_header(&self) -> Option<&Bytes> {
         self.video_header.as_ref()
+    }
+
+    /// The audio codec header (AAC AudioSpecificConfig).
+    pub fn audio_header(&self) -> Option<&Bytes> {
+        self.audio_header.as_ref()
     }
 
     pub fn take_scene_events(&mut self) -> Vec<SceneEvent> {
@@ -462,6 +472,9 @@ impl Engine {
         let ts = if q.header {
             self.last_any
         } else {
+            if q.cut_before {
+                self.rewind_floor = Some(q.arrival);
+            }
             if self.rebase_next || q.cut_before {
                 self.offset = self.cut_base(cts) as i64 - q.ts as i64;
                 self.rebase_next = false;
@@ -567,7 +580,7 @@ impl Engine {
         let want = now.checked_sub(self.target);
         let mut pick = None;
         for (i, h) in self.history.iter().enumerate() {
-            if !h.key {
+            if !h.key || self.rewind_floor.is_some_and(|f| h.arrival < f) {
                 continue;
             }
             if pick.is_none() || want.is_some_and(|w| h.arrival <= w) {
@@ -670,6 +683,9 @@ impl Engine {
                 self.pop();
                 dropped = true;
             }
+            if dropped {
+                self.rewind_floor = self.queue.front().map(|h| h.arrival);
+            }
             self.rebase_next |= dropped;
             self.eff = self.target;
             return;
@@ -703,6 +719,7 @@ impl Engine {
                 self.queued_bytes += h.data.len();
                 self.queue.push_front(h);
             }
+            self.rewind_floor = self.queue.iter().find(|q| !q.header).map(|q| q.arrival);
             self.rebase_next = true;
         }
         self.eff = self.target;
@@ -853,6 +870,37 @@ mod tests {
         assert!((120..=180).contains(&f), "replayed frame {f}");
         s.run(3000);
         s.assert_monotonic();
+    }
+
+    /// Largest step between consecutive output timestamps of a track.
+    fn max_step(out: &[OutPacket], kind: Kind) -> u32 {
+        let ts: Vec<u32> = out.iter().filter(|p| p.kind == kind).map(|p| p.ts).collect();
+        ts.windows(2).map(|w| w[1] - w[0]).max().unwrap_or(0)
+    }
+
+    #[test]
+    fn rewind_never_replays_across_a_cut() {
+        // delay on, off (cut back to live), on again: the second rewind must not
+        // reach into the part that was cut, or the timeline jumps by the cut
+        let mut s = Sim::new();
+        s.engine.set_grow_mode(GrowMode::Rewind, Duration::from_secs(25));
+        s.run(20_000);
+        s.engine.set_target(Duration::from_secs(10));
+        s.run(12_000);
+        s.engine.set_target(Duration::ZERO);
+        s.run(8_000);
+        assert_eq!(s.engine.status(s.now()).phase, Phase::Live);
+        let before = s.out.len();
+        s.engine.set_target(Duration::from_secs(10));
+        s.run(15_000);
+        let st = s.engine.status(s.now());
+        assert_eq!(st.phase, Phase::Delayed, "{st:?}");
+        s.assert_monotonic();
+        let video = max_step(&s.out[before..], Kind::Video);
+        let audio = max_step(&s.out[before..], Kind::Audio);
+        // a freeze step (500 ms at 2 fps) is fine, a hole of seconds is not
+        assert!(video <= 600, "video timeline jumped {video} ms");
+        assert!(audio <= 200, "audio timeline jumped {audio} ms");
     }
 
     #[test]

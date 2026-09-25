@@ -81,8 +81,9 @@ const TEXT = {
       "delay.toggle": "Delay", "delay.on": "Delay on", "delay.off": "Go live", "delay.set": (a) => `Delay ${a}s`, "delay.add": (a) => (a.startsWith("-") ? `−${a.slice(1)}s` : `+${a}s`),
       censor: "Delete", replay: "Replay", clip: "Clip", panic: "Panic", catchup: "Catch up",
       "obs.scene": (a) => a || "Scene", "obs.mute": (a) => a || "Audio", "obs.stream": "Stream", "obs.record": "Record",
+      "dest.toggle": (a) => (!a || a === "main" ? "Main" : a),
     },
-    on: "ON", offWord: "OFF", muted: "muted", streaming: "on air", recording: "recording",
+    on: "ON", offWord: "OFF", muted: "muted", streaming: "on air", recording: "recording", destOff: "stopped",
   },
   pt: {
     live: "AO VIVO", delayed: "DELAY", adjusting: "AJUSTANDO", replay: "REPLAY", panic: "PÂNICO", noLive: "SEM LIVE", offline: "OFFLINE",
@@ -91,8 +92,9 @@ const TEXT = {
       "delay.toggle": "Delay", "delay.on": "Ligar delay", "delay.off": "Ao vivo", "delay.set": (a) => `Delay ${a}s`, "delay.add": (a) => (a.startsWith("-") ? `−${a.slice(1)}s` : `+${a}s`),
       censor: "Apagar", replay: "Replay", clip: "Clipe", panic: "Pânico", catchup: "Alcançar",
       "obs.scene": (a) => a || "Cena", "obs.mute": (a) => a || "Áudio", "obs.stream": "Transmitir", "obs.record": "Gravar",
+      "dest.toggle": (a) => (!a || a === "main" ? "Principal" : a),
     },
-    on: "LIGADO", offWord: "DESLIGADO", muted: "mudo", streaming: "no ar", recording: "gravando",
+    on: "LIGADO", offWord: "DESLIGADO", muted: "mudo", streaming: "no ar", recording: "gravando", destOff: "parado",
   },
 };
 // Phosphor Icons (MIT, phosphoricons.com), fill weight, viewBox 0 0 256 256
@@ -117,15 +119,15 @@ const svg = (name) => `<svg class="i" viewBox="0 0 256 256" aria-hidden="true">$
 const ICONS = {
   "delay.toggle": "timer", "delay.on": "timer", "delay.off": "live", "delay.set": "timer", "delay.add": "plusminus",
   censor: "scissors", replay: "replay", clip: "clapper", panic: "siren", catchup: "fastforward",
-  "obs.scene": "scene", "obs.mute": "mic", "obs.stream": "stream", "obs.record": "record",
+  "obs.scene": "scene", "obs.mute": "mic", "obs.stream": "stream", "obs.record": "record", "dest.toggle": "live",
 };
 const DEFAULT_COLOR = {
   "delay.toggle": "orange", "delay.on": "orange", "delay.off": "green", "delay.set": "orange", "delay.add": "grey",
   censor: "red", replay: "blue", clip: "blue", panic: "red", catchup: "blue",
-  "obs.scene": "blue", "obs.mute": "red", "obs.stream": "red", "obs.record": "red",
+  "obs.scene": "blue", "obs.mute": "red", "obs.stream": "red", "obs.record": "red", "dest.toggle": "green",
 };
 // keys that change what the whole audience sees: hold to confirm
-const HOLD = { "obs.stream": 800, "obs.record": 800 };
+const HOLD = { "obs.stream": 800, "obs.record": 800, "dest.toggle": 800 };
 
 let lang = /^pt/i.test(navigator.language) ? "pt" : "en";
 const T = () => TEXT[lang] || TEXT.en;
@@ -172,6 +174,11 @@ function stateOf(k, s) {
     }
     case "obs.stream": return { lit: !!o.streaming, sub: o.streaming ? T().streaming : "" };
     case "obs.record": return { lit: !!o.recording, sub: o.recording ? T().recording : "" };
+    case "dest.toggle": {
+      const main = !k.arg || k.arg === "main";
+      const d = (s.outputs || []).find((x) => (main ? x.id === 0 : x.name.toLowerCase() === k.arg.toLowerCase()));
+      return { lit: !!(s.engine && d && d.running), sub: s.engine && d ? (d.running ? T().streaming : T().destOff) : "" };
+    }
     default: return { lit: false };
   }
 }

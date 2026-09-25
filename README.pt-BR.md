@@ -174,7 +174,11 @@ Um toque: o OBS troca para a cena de pânico (por exemplo, "Volto já"), todo o 
 
 ### Multistream
 
-Adicione destinos no bloco **Multistream** (nome, URL do servidor, chave). Cada um recebe a mesma live atrasada numa conexão própria, e um problema em um não afeta os outros. A sua internet precisa aguentar o bitrate uma vez para cada destino.
+Transmita para Twitch, Kick, YouTube, Facebook ou qualquer servidor RTMP(S) ao mesmo tempo. Adicione os destinos no bloco **Multistream**: escolha a plataforma (o endereço do servidor é preenchido), cole a chave e escolha se ele **inicia junto com a live**.
+
+Com a live no ar, **Destinos agora** mostra cada destino com o estado e o bitrate e um botão **Entrar ao vivo** / **Parar**: cada um entra ou para sozinho, sem mexer nos outros nem no OBS. Mudanças na configuração valem na hora: um destino novo entra ao vivo (se estiver para iniciar junto), um removido para, uma chave ou endereço trocado reconecta. Um destino ligado no meio da live começa limpo, num keyframe. O deck no celular também tem um botão para isso (**Multistream: ligar/desligar um destino**, segurar para confirmar).
+
+Cada destino recebe a mesma live atrasada numa conexão própria, e um problema em um não afeta os outros. A sua internet precisa aguentar o bitrate uma vez para cada destino (dois a 6000 kbps precisam de uns 12 Mbps de upload).
 
 ### Proteção contra queda de conexão
 
@@ -299,6 +303,7 @@ OBS ──RTMP──▶ 127.0.0.1:1935 ──▶ motor de delay ──▶ um cli
 | `/api/config` | lê (GET) ou muda (POST JSON, só os campos enviados) a configuração |
 | `/api/obs/configure` · `/api/obs/restore` | pede ao script do OBS para configurar ou restaurar a transmissão |
 | `/api/update/check` | consulta o GitHub por uma versão nova agora |
+| `/api/output/{id}/{start,stop,toggle}` | liga ou desliga um destino da live em andamento (ids em `/api/status` > `outputs`) |
 | `/api/obs/fps/{n}` | pede ao script do OBS para mudar o FPS do OBS (24, 25, 30, 48, 50 ou 60) |
 | `/api/lan` | link e QR code do deck no celular |
 | `/deck` · `/api/deck/press/{n}` | página do deck · executa o botão número n |

@@ -6,7 +6,8 @@
 //! [`UpMsg::CatchUp`]. The same buffer bounds memory on a slow network.
 
 use std::collections::VecDeque;
-use std::sync::Arc;
+use std::io::Write as _;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
@@ -39,10 +40,11 @@ pub struct Dest {
     pub key: String,
 }
 
-/// Starts publishing to `dest`; the session ends on [`UpMsg::Stop`].
-pub fn spawn(shared: Arc<Shared>, index: usize, dest: Dest, outage_buffer: Duration) -> UnboundedSender<UpMsg> {
+/// Starts publishing to `dest`; the session ends on [`UpMsg::Stop`]. `id` is the
+/// destination's entry in the status (0 is the main one).
+pub fn spawn(shared: Arc<Shared>, id: u64, dest: Dest, outage_buffer: Duration) -> UnboundedSender<UpMsg> {
     let (tx, rx) = mpsc::unbounded_channel();
-    tokio::spawn(session(shared, index, dest, rx, outage_buffer));
+    tokio::spawn(session(shared, id, dest, rx, outage_buffer));
     tx
 }
 
@@ -143,6 +145,10 @@ impl Output {
     }
 
     fn out_ts(&mut self, ts: u32) -> u32 {
+        if self.last_ts.is_none() {
+            // a destination started in the middle of the stream still starts at 0
+            self.shift = -(ts as i64);
+        }
         let mut t = (ts as i64 + self.shift).max(0) as u32;
         if let Some(last) = self.last_ts {
             t = t.max(last);
@@ -159,15 +165,16 @@ enum Ended {
 
 type Conn = (ClientSession, ReadHalf<Box<dyn Io>>, WriteHalf<Box<dyn Io>>);
 
-async fn session(shared: Arc<Shared>, index: usize, dest: Dest, mut rx: UnboundedReceiver<UpMsg>, outage: Duration) {
+async fn session(shared: Arc<Shared>, id: u64, dest: Dest, mut rx: UnboundedReceiver<UpMsg>, outage: Duration) {
     let set = |f: &dyn Fn(&mut crate::status::OutputStatus)| {
         let mut st = shared.status.lock().unwrap();
-        if let Some(o) = st.outputs.get_mut(index) {
+        if let Some(o) = st.outputs.iter_mut().find(|o| o.id == id) {
             f(o);
         }
         // the main destination also drives the legacy single-output fields
-        if index == 0 {
-            let (state, err) = st.outputs.first().map(|o| (o.state, o.error.clone())).unwrap_or((UpstreamState::Idle, None));
+        if id == 0 {
+            let (state, err) =
+                st.outputs.iter().find(|o| o.id == 0).map(|o| (o.state, o.error.clone())).unwrap_or((UpstreamState::Idle, None));
             st.upstream = state;
             st.upstream_error = err;
         }
@@ -185,7 +192,7 @@ async fn session(shared: Arc<Shared>, index: usize, dest: Dest, mut rx: Unbounde
                     o.error = None;
                 });
                 out.limit_ms = connected_limit.as_millis() as u32;
-                let r = pump(conn, &mut rx, &mut out, &shared, index, &dest.name).await;
+                let r = pump(conn, &mut rx, &mut out, &shared, id, &dest.name).await;
                 out.limit_ms = outage.as_millis() as u32;
                 match r {
                     Ok(Ended::Stopped) => break,
@@ -331,7 +338,7 @@ async fn pump(
     rx: &mut UnboundedReceiver<UpMsg>,
     out: &mut Output,
     shared: &Shared,
-    index: usize,
+    id: u64,
     name: &str,
 ) -> Result<Ended> {
     let (mut session, mut reader, mut writer) = conn;
@@ -339,10 +346,6 @@ async fn pump(
     if let Some(m) = &out.metadata {
         let r = session.publish_metadata(m)?;
         write_results(&mut writer, vec![r]).await?;
-    }
-    for h in [out.video_header.clone(), out.audio_header.clone()].into_iter().flatten() {
-        let ts = out.last_ts.unwrap_or(h.ts);
-        send_packet(&mut session, &mut writer, &h, ts).await?;
     }
 
     let mut buf = vec![0u8; 16 * 1024];
@@ -353,20 +356,32 @@ async fn pump(
         let wake = loop {
             let (p, wake) = out.next_due(Instant::now());
             let Some(p) = p else { break wake };
-            if p.kind == Kind::Video && out.need_key && !flv::video_is_sequence_header(&p.data) {
-                if !flv::video_is_keyframe(&p.data) {
-                    continue; // after a (re)connect video restarts at a keyframe
+            if out.need_key {
+                // after a (re)connect, or when started mid-stream, everything starts together at a
+                // keyframe: codec headers, then the keyframe, then audio (no audio-only lead)
+                if p.kind != Kind::Video || !flv::video_is_keyframe(&p.data) || flv::video_is_sequence_header(&p.data) {
+                    continue; // headers are kept in `out` and sent with the keyframe
                 }
                 out.need_key = false;
+                let ts = out.out_ts(p.ts);
+                for h in [out.video_header.clone(), out.audio_header.clone()].into_iter().flatten() {
+                    send_packet(&mut session, &mut writer, &h, ts).await?;
+                }
+                sent_bytes += p.data.len();
+                trace(name, &p, ts);
+                send_packet(&mut session, &mut writer, &p, ts).await?;
+                continue;
             }
             let ts = out.out_ts(p.ts);
             sent_bytes += p.data.len();
+            trace(name, &p, ts);
             send_packet(&mut session, &mut writer, &p, ts).await?;
         };
+        writer.flush().await?;
         if meter.elapsed() >= Duration::from_secs(1) {
             let kbps = (sent_bytes * 8 / 1000) as u32 * 1000 / meter.elapsed().as_millis().max(1) as u32;
             let behind = out.span_ms();
-            if let Some(o) = shared.status.lock().unwrap().outputs.get_mut(index) {
+            if let Some(o) = shared.status.lock().unwrap().outputs.iter_mut().find(|o| o.id == id) {
                 o.kbps = kbps;
                 o.behind_ms = if out.pacing.is_some() { behind } else { 0 };
             }
@@ -425,6 +440,20 @@ async fn pump(
             },
             _ = sleep => {}
         }
+    }
+}
+
+/// `DD_TRACE=<file>`: one line per packet sent (destination, wall ms, kind, timestamp,
+/// bytes, keyframe), to study the pacing seen by the platforms.
+fn trace(name: &str, p: &OutPacket, ts: u32) {
+    static T: OnceLock<Option<(Instant, Mutex<std::fs::File>)>> = OnceLock::new();
+    let t = T.get_or_init(|| {
+        let path = std::env::var_os("DD_TRACE")?;
+        Some((Instant::now(), Mutex::new(std::fs::File::create(path).ok()?)))
+    });
+    if let Some((t0, f)) = t {
+        let key = p.kind == Kind::Video && flv::video_is_keyframe(&p.data);
+        let _ = writeln!(f.lock().unwrap(), "{name}\t{}\t{:?}\t{ts}\t{}\t{}", t0.elapsed().as_millis(), p.kind, p.data.len(), key as u8);
     }
 }
 

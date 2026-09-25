@@ -25,9 +25,9 @@ use rml_rtmp::sessions::StreamMetadata;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 use crate::config::Config;
-use crate::engine::{Engine, GrowMode, SceneEvent, TsUnwrapper};
+use crate::engine::{Engine, GrowMode, OutPacket, SceneEvent, TsUnwrapper};
 use crate::flv::Kind;
-use crate::status::{Bridge, Cmd, ObsAction, OutputStatus, Shared, Status};
+use crate::status::{Bridge, Cmd, ObsAction, OutputStatus, Shared, Status, UpstreamState};
 use crate::upstream::{Dest, UpMsg};
 
 pub enum EngineMsg {
@@ -41,6 +41,8 @@ pub enum EngineMsg {
     SceneFailed,
     /// A scene went on air in OBS (for scene rules).
     ProgramScene(String),
+    /// The destinations changed in the settings: apply them to the running stream.
+    DestinationsChanged,
 }
 
 fn config_path() -> PathBuf {
@@ -153,26 +155,173 @@ async fn relay() -> Result<()> {
     Ok(())
 }
 
-/// Destinations of a new stream: the main one plus the enabled extras.
-fn destinations(cfg: &Config, obs_key: &str) -> Vec<Dest> {
+/// Destinations of the stream: the main one plus the enabled extras, each with
+/// whether it goes live together with the stream.
+fn destinations(cfg: &Config, obs_key: &str) -> Vec<(Dest, bool)> {
     let main_key = if cfg.stream_key.is_empty() { obs_key.to_string() } else { cfg.stream_key.clone() };
-    let mut v = vec![Dest { name: t!("Main", "Principal"), url: cfg.upstream_url.clone(), key: main_key }];
+    let mut v = vec![(Dest { name: t!("Main", "Principal"), url: cfg.upstream_url.clone(), key: main_key }, true)];
     let extras = if cfg.features.multistream { cfg.destinations.as_slice() } else { &[] };
     for d in extras.iter().filter(|d| d.enabled && !d.url.is_empty()) {
-        v.push(Dest { name: d.name.clone(), url: d.url.clone(), key: d.key.clone() });
+        let name = if d.name.trim().is_empty() { d.url.clone() } else { d.name.clone() };
+        v.push((Dest { name, url: d.url.clone(), key: d.key.clone() }, d.auto_start));
     }
     v
 }
 
-/// One sender per destination of the running stream.
-struct Outputs(Vec<UnboundedSender<UpMsg>>);
+/// The destinations of the running stream. Each one can be started and stopped
+/// while live, and the list follows the settings (added, removed, changed).
+struct Outputs {
+    slots: Vec<Slot>,
+    next_id: u64,
+    outage: Duration,
+    /// Key OBS used, for a main destination without its own key.
+    obs_key: String,
+}
+
+struct Slot {
+    id: u64,
+    dest: Dest,
+    auto: bool,
+    tx: Option<UnboundedSender<UpMsg>>,
+}
 
 impl Outputs {
+    fn new(cfg: &Config, obs_key: &str) -> Self {
+        let mut o = Outputs { slots: Vec::new(), next_id: 0, outage: Duration::from_secs(cfg.outage_seconds()), obs_key: obs_key.to_string() };
+        for (dest, auto) in destinations(cfg, obs_key) {
+            let id = o.next_id;
+            o.next_id += 1;
+            o.slots.push(Slot { id, dest, auto, tx: None });
+        }
+        o
+    }
+
+    /// Sends to every started destination.
     fn send(&self, msg: impl Fn() -> UpMsg) {
-        for s in &self.0 {
-            let _ = s.send(msg());
+        for s in &self.slots {
+            if let Some(tx) = &s.tx {
+                let _ = tx.send(msg());
+            }
         }
     }
+
+    /// Starts slot `i`; `primer` gives a destination started mid-stream what it needs first.
+    fn start(&mut self, i: usize, shared: &Arc<Shared>, primer: &[UpMsg]) {
+        let s = &mut self.slots[i];
+        if s.tx.is_some() {
+            return;
+        }
+        let tx = upstream::spawn(shared.clone(), s.id, Dest { name: s.dest.name.clone(), url: s.dest.url.clone(), key: s.dest.key.clone() }, self.outage);
+        for m in primer {
+            let _ = tx.send(clone_msg(m));
+        }
+        log::info!("[{}] started", s.dest.name);
+        s.tx = Some(tx);
+    }
+
+    fn stop(&mut self, i: usize) {
+        if let Some(tx) = self.slots[i].tx.take() {
+            let _ = tx.send(UpMsg::Stop);
+            log::info!("[{}] stopped", self.slots[i].dest.name);
+        }
+    }
+
+    fn index(&self, id: u64) -> Option<usize> {
+        self.slots.iter().position(|s| s.id == id)
+    }
+
+    /// Follows the settings while live: new destinations are added (and started
+    /// when they start with the stream), removed ones stop, changed ones reconnect.
+    fn reconcile(&mut self, cfg: &Config, shared: &Arc<Shared>, primer: &[UpMsg]) {
+        self.outage = Duration::from_secs(cfg.outage_seconds());
+        let wanted = destinations(cfg, &self.obs_key);
+        let mut kept = Vec::new();
+        for (dest, auto) in wanted {
+            match self.slots.iter().position(|s| s.dest.name == dest.name) {
+                Some(i) => {
+                    let mut s = self.slots.remove(i);
+                    let changed = s.dest.url != dest.url || s.dest.key != dest.key;
+                    s.dest = dest;
+                    s.auto = auto;
+                    kept.push((s, changed, false));
+                }
+                None => {
+                    let id = self.next_id;
+                    self.next_id += 1;
+                    kept.push((Slot { id, dest, auto, tx: None }, false, true));
+                }
+            }
+        }
+        // what is left was removed from the settings
+        for i in 0..self.slots.len() {
+            self.stop(i);
+        }
+        self.slots.clear();
+        let mut restart = Vec::new();
+        for (s, changed, new) in kept {
+            let was_running = s.tx.is_some();
+            let is_new = new && s.auto;
+            self.slots.push(s);
+            let i = self.slots.len() - 1;
+            if changed && was_running {
+                self.stop(i);
+                restart.push(i);
+            } else if is_new {
+                restart.push(i);
+            }
+        }
+        for i in restart {
+            self.start(i, shared, primer);
+        }
+        self.sync_status(shared);
+    }
+
+    /// Rewrites the status list in slot order, keeping each destination's counters.
+    fn sync_status(&self, shared: &Shared) {
+        let mut st = shared.status.lock().unwrap();
+        let old = std::mem::take(&mut st.outputs);
+        st.outputs = self
+            .slots
+            .iter()
+            .map(|s| {
+                let mut o = old.iter().find(|o| o.id == s.id).cloned().unwrap_or_else(|| OutputStatus::new(s.id, &s.dest.name, &s.dest.url));
+                o.name = s.dest.name.clone();
+                o.running = s.tx.is_some();
+                o.auto_start = s.auto;
+                if !o.running {
+                    o.state = UpstreamState::Idle;
+                    o.kbps = 0;
+                    o.behind_ms = 0;
+                }
+                o
+            })
+            .collect();
+    }
+}
+
+fn clone_msg(m: &UpMsg) -> UpMsg {
+    match m {
+        UpMsg::Metadata(x) => UpMsg::Metadata(x.clone()),
+        UpMsg::Packet(p) => UpMsg::Packet(p.clone()),
+        UpMsg::CatchUp => UpMsg::CatchUp,
+        UpMsg::Stop => UpMsg::Stop,
+    }
+}
+
+/// What a destination started in the middle of the stream needs before the media:
+/// the stream metadata and the current codec headers.
+fn primer(engine: &Engine, metadata: &Option<StreamMetadata>, ts: u32) -> Vec<UpMsg> {
+    let mut v = Vec::new();
+    if let Some(m) = metadata {
+        v.push(UpMsg::Metadata(m.clone()));
+    }
+    if let Some(h) = engine.video_header() {
+        v.push(UpMsg::Packet(OutPacket { kind: Kind::Video, ts, data: h.clone() }));
+    }
+    if let Some(h) = engine.audio_header() {
+        v.push(UpMsg::Packet(OutPacket { kind: Kind::Audio, ts, data: h.clone() }));
+    }
+    v
 }
 
 async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: Arc<Shared>) {
@@ -193,6 +342,8 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
     let mut in_bytes = 0usize;
     let mut in_frames = 0u32;
     let mut in_meter = Instant::now();
+    // newest output timestamp, where a destination started mid-stream begins
+    let mut last_out_ts = 0u32;
 
     let target = |enabled: bool, delay: u32| Duration::from_secs(if enabled { delay as u64 } else { 0 });
     engine.set_target(target(enabled, delay));
@@ -236,16 +387,14 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
                                 enabled = true;
                                 engine.set_target(target(enabled, delay));
                             }
-                            let dests = destinations(&c, &key);
-                            shared.status.lock().unwrap().outputs =
-                                dests.iter().map(|d| OutputStatus::new(&d.name, &d.url)).collect();
-                            let outage = Duration::from_secs(c.outage_seconds());
-                            let o = Outputs(
-                                dests.into_iter().enumerate().map(|(i, d)| upstream::spawn(shared.clone(), i, d, outage)).collect(),
-                            );
-                            if let Some(m) = &last_metadata {
-                                o.send(|| UpMsg::Metadata(m.clone()));
+                            let mut o = Outputs::new(&c, &key);
+                            let first: Vec<UpMsg> = last_metadata.iter().map(|m| UpMsg::Metadata(m.clone())).collect();
+                            for i in 0..o.slots.len() {
+                                if o.slots[i].auto {
+                                    o.start(i, &shared, &first);
+                                }
                             }
+                            o.sync_status(&shared);
                             outputs = Some(o);
                             stream_started = Some(Instant::now());
                         }
@@ -266,6 +415,14 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
                         }
                     }
                     EngineMsg::Cmd(c) => cmd = Some(c),
+                    EngineMsg::DestinationsChanged => {
+                        if let Some(o) = &mut outputs {
+                            let c = shared.config.lock().unwrap().clone();
+                            let p = primer(&engine, &last_metadata, last_out_ts);
+                            o.reconcile(&c, &shared, &p);
+                        }
+                        continue;
+                    }
                 }
                 let Some(cmd) = cmd else { continue };
                 let now = Instant::now();
@@ -329,6 +486,29 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
                         }
                         continue;
                     }
+                    Cmd::OutputStart(id) | Cmd::OutputStop(id) | Cmd::OutputToggle(id) => {
+                        let Some(o) = &mut outputs else {
+                            shared.event("warn", t!("Start the stream in OBS first.", "Inicie a live no OBS primeiro."));
+                            continue;
+                        };
+                        let Some(i) = o.index(id) else { continue };
+                        let start = match cmd {
+                            Cmd::OutputStart(_) => true,
+                            Cmd::OutputStop(_) => false,
+                            _ => o.slots[i].tx.is_none(),
+                        };
+                        let name = o.slots[i].dest.name.clone();
+                        if start {
+                            let p = primer(&engine, &last_metadata, last_out_ts);
+                            o.start(i, &shared, &p);
+                            shared.event("ok", t!("{name}: going live.", "{name}: entrando ao vivo."));
+                        } else {
+                            o.stop(i);
+                            shared.event("ok", t!("{name}: stopped.", "{name}: parado."));
+                        }
+                        o.sync_status(&shared);
+                        continue;
+                    }
                     Cmd::Quit => {
                         log::info!("quit requested, exiting when no stream is active");
                         quit = true;
@@ -378,6 +558,7 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
                 match &outputs {
                     Some(o) => {
                         for p in out.drain(..) {
+                            last_out_ts = last_out_ts.max(p.ts);
                             o.send(|| UpMsg::Packet(p.clone()));
                         }
                     }
@@ -385,9 +566,12 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
                 }
                 if outputs.is_some() && publishing.is_none() && engine.is_idle() {
                     // OBS stopped and the delayed tail has been sent: end the stream.
-                    if let Some(o) = outputs.take() {
-                        o.send(|| UpMsg::Stop);
+                    if let Some(mut o) = outputs.take() {
+                        for i in 0..o.slots.len() {
+                            o.stop(i);
+                        }
                     }
+                    last_out_ts = 0;
                     engine = Engine::new(cfg.filler_fps);
                     engine.set_target(target(enabled, delay));
                     unwrapper = TsUnwrapper::new();

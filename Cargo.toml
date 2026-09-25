@@ -1,6 +1,6 @@
 [package]
 name = "obs-dynamic-delay"
-version = "0.9.1"
+version = "0.10.0"
 edition = "2024"
 description = "Dynamic stream delay for OBS: switch the delay on and off while live"
 readme = "README.md"

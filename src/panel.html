@@ -252,7 +252,10 @@
 "use strict";
 const API = window.DD_API || "";
 const TOKEN = window.DD_TOKEN || new URLSearchParams(location.search).get("token") || "";
-const URLS = { twitch: "rtmp://live.twitch.tv/app", youtube: "rtmp://a.rtmp.youtube.com/live2" };
+const URLS = { twitch: "rtmp://live.twitch.tv/app", youtube: "rtmp://a.rtmp.youtube.com/live2",
+  kick: "rtmps://fa723fc1b171.global-contribute.live-video.net:443/app", facebook: "rtmps://live-api-s.facebook.com:443/rtmp/" };
+const PLATFORM_NAMES = { twitch: "Twitch", youtube: "YouTube", kick: "Kick", facebook: "Facebook" };
+const platformOfUrl = (u) => Object.keys(URLS).find((k) => URLS[k] === u) || (/kick|live-video\.net/.test(u || "") && !/^rtmps?:\/\/ingest\./.test(u) ? "kick" : "custom");
 
 // ---------------------------------------------------------------- texts
 const TEXT = {
@@ -294,7 +297,12 @@ const TEXT = {
     none: "(none)", uptime: "Live for", fromObs: "From OBS", reconnects: "reconnects", behind: (s) => `${s}s behind after an outage`, catchUp: "Catch up",
     outage: "Keep what was missed during a connection drop (seconds, 0 = off)", alertSound: "Beep when a connection drops", destinations: "Destinations",
     states: { idle: "idle", connecting: "connecting...", connected: "connected", reconnecting: "reconnecting..." },
-    mainDest: "The main destination is set under Settings. Add more here:", addDest: "Add destination", name: "Name", url: "Server URL", key: "Stream key", enabled: "On",
+    mainDest: "The main destination is set under Settings. Add more here:", addDest: "Add destination",
+    msNow: "Destinations now", msStart: "Go live", msStop: "Stop", msStopped: "stopped",
+    msLiveHint: "Each destination goes live or stops on its own, without touching the others or OBS.",
+    msIdle: "Start the stream in OBS: the destinations set to start with the stream go live together, the others can be started here.",
+    autoStart: "Start together with the stream", kickUrl: "The address of your Kick dashboard (Settings > Stream URL and Key), if it is different.",
+    msBandwidth: "Every destination sends the whole stream: two at 6000 kbps need about 12 Mbps of upload.", name: "Name", url: "Server URL", key: "Stream key", enabled: "On",
     remove: "Remove", save: "Save", saved: "Saved.", savedNext: "Saved. Destination changes apply to the next stream.",
     addRule: "Add rule", actOn: "turn on", actOff: "turn off", actSet: "turn on with", rulesHint: "When one of these scenes goes on air, the delay changes by itself.",
     chatOn: "Listen to chat commands", channel: "Channel", channelHint: "your channel name, e.g. ragnar_cb", allow: "Who can use them", allowB: "only me", allowM: "me and mods", allowV: "me, mods and VIPs", prefix: "Command",
@@ -306,12 +314,13 @@ const TEXT = {
       "delay.add": "Delay: add/remove seconds", censor: "Delete before it airs", replay: "Instant replay", clip: "Save clip", panic: "Panic button",
       catchup: "Catch up after a drop", "obs.scene": "OBS: switch to scene", "obs.mute": "OBS: mute/unmute audio source",
       "obs.stream": "OBS: start/stop streaming (hold)", "obs.record": "OBS: start/stop recording (hold)",
+      "dest.toggle": "Multistream: start/stop a destination (hold)",
     },
     colors: { "": "automatic color", blue: "blue", green: "green", orange: "orange", red: "red", grey: "grey" },
     lanHint: "Scan with the phone camera (same Wi-Fi). Windows may ask to allow the connection. Anyone with this link can control the delay: do not share it.",
     sdPlugin: "With the Dynamic Delay Stream Deck plugin (see the releases page), paste this token in its settings:", token: "Access token",
     sdHint: "Without the plugin: use the \"Website\" action with \"Access in background\" and one of these links (they already contain your token).", copy: "Copy", copied: "Copied!",
-    toggle: "Toggle delay", on: "Delay on", off: "Delay off",
+    toggle: "Toggle delay", on: "Delay on", off: "Delay off", mainName: "Main",
     settings: "Settings", platform: "Platform", other: "Other", serverUrl: "Server URL (copy it from the platform dashboard)", streamKey: "Stream key",
     keySaved: "saved (type to replace)", keyPaste: "paste the key here", growLabel: "When the delay is switched on or increased",
     growRewind: "Rewind (replays the last seconds, no freeze)", growScene: "Show an OBS scene while the delay builds up", growFreeze: "Freeze the live picture while the delay builds up",
@@ -361,7 +370,12 @@ const TEXT = {
     none: "(nenhuma)", uptime: "No ar há", fromObs: "Vindo do OBS", reconnects: "reconexões", behind: (s) => `${s}s atrás depois de uma queda`, catchUp: "Alcançar",
     outage: "Guardar o que foi perdido numa queda de conexão (segundos, 0 = desligado)", alertSound: "Apitar quando uma conexão cair", destinations: "Destinos",
     states: { idle: "parada", connecting: "conectando...", connected: "conectada", reconnecting: "reconectando..." },
-    mainDest: "O destino principal fica em Configuração. Adicione outros aqui:", addDest: "Adicionar destino", name: "Nome", url: "URL do servidor", key: "Chave de transmissão", enabled: "Ligado",
+    mainDest: "O destino principal fica em Configuração. Adicione outros aqui:", addDest: "Adicionar destino",
+    msNow: "Destinos agora", msStart: "Entrar ao vivo", msStop: "Parar", msStopped: "parado",
+    msLiveHint: "Cada destino entra ao vivo ou para sozinho, sem mexer nos outros nem no OBS.",
+    msIdle: "Inicie a live no OBS: os destinos marcados para iniciar junto entram ao vivo juntos, os outros dá para iniciar aqui.",
+    autoStart: "Iniciar junto com a live", kickUrl: "O endereço do painel da Kick (Configurações > URL e chave da transmissão), se for diferente.",
+    msBandwidth: "Cada destino envia a live inteira: dois a 6000 kbps precisam de uns 12 Mbps de upload.", name: "Nome", url: "URL do servidor", key: "Chave de transmissão", enabled: "Ligado",
     remove: "Remover", save: "Salvar", saved: "Salvo.", savedNext: "Salvo. Mudanças de destino valem na próxima live.",
     addRule: "Adicionar regra", actOn: "ligar", actOff: "desligar", actSet: "ligar com", rulesHint: "Quando uma dessas cenas entra no ar, o delay muda sozinho.",
     chatOn: "Ouvir comandos no chat", channel: "Canal", channelHint: "nome do seu canal, ex.: ragnar_cb", allow: "Quem pode usar", allowB: "só eu", allowM: "eu e os mods", allowV: "eu, mods e VIPs", prefix: "Comando",
@@ -373,12 +387,13 @@ const TEXT = {
       "delay.add": "Delay: somar/tirar segundos", censor: "Apagar antes de ir ao ar", replay: "Replay instantâneo", clip: "Salvar clipe", panic: "Botão de pânico",
       catchup: "Alcançar depois de uma queda", "obs.scene": "OBS: trocar para a cena", "obs.mute": "OBS: mutar/desmutar fonte de áudio",
       "obs.stream": "OBS: iniciar/parar transmissão (segurar)", "obs.record": "OBS: iniciar/parar gravação (segurar)",
+      "dest.toggle": "Multistream: ligar/desligar um destino (segurar)",
     },
     colors: { "": "cor automática", blue: "azul", green: "verde", orange: "laranja", red: "vermelho", grey: "cinza" },
     lanHint: "Aponte a câmera do celular (mesmo Wi-Fi). O Windows pode pedir para liberar a conexão. Quem tiver este link controla o delay: não compartilhe.",
     sdPlugin: "Com o plugin Delay Dinâmico para Stream Deck (na página de releases), cole este token nas configurações dele:", token: "Token de acesso",
     sdHint: "Sem o plugin: use a ação \"Website\" com \"Acessar em segundo plano\" e um destes links (eles já têm o seu token).", copy: "Copiar", copied: "Copiado!",
-    toggle: "Ligar/desligar delay", on: "Ligar delay", off: "Desligar delay",
+    toggle: "Ligar/desligar delay", on: "Ligar delay", off: "Desligar delay", mainName: "Principal",
     settings: "Configuração", platform: "Plataforma", other: "Outra", serverUrl: "URL do servidor (copie do painel da plataforma)", streamKey: "Chave de transmissão",
     keySaved: "salva (digite para trocar)", keyPaste: "cole a chave aqui", growLabel: "Ao ligar ou aumentar o delay",
     growRewind: "Rebobinar (repete os últimos segundos, sem congelar)", growScene: "Mostrar uma cena do OBS enquanto o delay enche", growFreeze: "Congelar a imagem da live enquanto o delay enche",
@@ -397,7 +412,7 @@ const FEATURE_OF = { censor: "censor", replay: "replay", clips: "clips", panic: 
 // Features without a block of their own.
 const EXTRA_FEATURES = ["outage", "update_check"];
 const DECK_ACTIONS = ["delay.toggle", "delay.on", "delay.off", "delay.set", "delay.add", "censor", "replay", "clip", "panic", "catchup",
-  "obs.scene", "obs.mute", "obs.stream", "obs.record"];
+  "obs.scene", "obs.mute", "obs.stream", "obs.record", "dest.toggle"];
 const DEFAULT_DECK = [["delay.toggle", ""], ["delay.add", "-5"], ["delay.add", "5"], ["censor", ""], ["replay", ""], ["clip", ""],
   ["panic", ""], ["delay.off", ""], ["obs.stream", ""]].map(([action, arg]) => ({ action, arg, label: "", color: "" }));
 const featureOn = (block) => !FEATURE_OF[block] || cfg.features[FEATURE_OF[block]];
@@ -690,24 +705,64 @@ const MODULES = {
   },
   multistream: {
     build() {
+      this.now = h("div", { class: "rows" });
+      this.nowHint = hint("");
       this.list = h("div", { class: "items" });
       this.msg = h("span", { class: "note" });
-      this.draft = (cfg.destinations || []).map((d) => Object.assign({}, d));
+      this.draft = (cfg.destinations || []).map((d) => Object.assign({ auto_start: true }, d));
       this.render();
-      return [hint(T().mainDest), this.list,
-        h("div", { class: "actions" }, button("", "plus", T().addDest, () => { this.draft.push({ name: "", url: "", key: "", enabled: true }); this.render(); }),
-          button("primary", "check", T().save, () => saveConfig({ destinations: this.draft }, this.msg))), this.msg];
+      return [h("div", { class: "group", style: "gap:8px" }, h("p", { class: "eyebrow", text: T().msNow }), this.now, this.nowHint),
+        h("div", { class: "group" }, h("p", { class: "eyebrow", text: T().destinations }), hint(T().mainDest), this.list,
+          h("div", { class: "actions" }, button("", "plus", T().addDest, () => {
+            this.draft.push({ name: "Kick", url: URLS.kick, key: "", enabled: true, auto_start: true });
+            this.render();
+          }), button("primary", "check", T().save, () => saveConfig({ destinations: this.draft }, this.msg))), this.msg, hint(T().msBandwidth))];
     },
     render() {
-      this.list.replaceChildren(...this.draft.map((d, i) => h("div", { class: "item" },
-        h("div", { class: "item-row" },
-          h("input", { type: "text", class: "grow", placeholder: T().name, "aria-label": T().name, value: d.name, oninput: (e) => (d.name = e.target.value) }),
-          h("input", { type: "checkbox", checked: d.enabled, title: T().enabled, "aria-label": T().enabled, onchange: (e) => (d.enabled = e.target.checked) }),
-          iconButton("x", T().remove, () => { this.draft.splice(i, 1); this.render(); }, false, "del")),
-        h("input", { type: "text", placeholder: "rtmp(s)://...  " + T().url, "aria-label": T().url, value: d.url, oninput: (e) => (d.url = e.target.value) }),
-        h("input", { type: "password", autocomplete: "off", "aria-label": T().key, placeholder: d.key_set ? T().keySaved : T().key, value: d.key_set ? "" : d.key || "", oninput: (e) => (d.key = e.target.value) }))));
+      this.list.replaceChildren(...this.draft.map((d, i) => {
+        const platform = h("select", { "aria-label": T().platform, onchange: (e) => {
+          const v = e.target.value;
+          if (URLS[v]) d.url = URLS[v];
+          else if (URLS[platformOfUrl(d.url)]) d.url = "";
+          if (!d.name || Object.values(PLATFORM_NAMES).includes(d.name)) d.name = PLATFORM_NAMES[v] || d.name;
+          this.render();
+        } }, ...Object.entries(PLATFORM_NAMES).map(([k, n]) => h("option", { value: k, text: n })), h("option", { value: "custom", text: T().other }));
+        platform.value = platformOfUrl(d.url);
+        const custom = platform.value === "custom";
+        return h("div", { class: "item" },
+          h("div", { class: "item-row" }, h("div", { class: "grow" }, platform),
+            iconButton("x", T().remove, () => { this.draft.splice(i, 1); this.render(); }, false, "del")),
+          h("input", { type: "text", placeholder: T().name, "aria-label": T().name, value: d.name, oninput: (e) => (d.name = e.target.value) }),
+          custom || platform.value === "kick"
+            ? field(T().url, h("input", { type: "text", placeholder: "rtmp(s)://...", value: d.url, oninput: (e) => (d.url = e.target.value) }), platform.value === "kick" ? T().kickUrl : null)
+            : null,
+          h("input", { type: "password", autocomplete: "off", "aria-label": T().key, placeholder: d.key_set ? T().keySaved : T().key, value: d.key_set ? "" : d.key || "", oninput: (e) => (d.key = e.target.value) }),
+          check(d.enabled, T().enabled, (e) => (d.enabled = e.target.checked)),
+          check(d.auto_start !== false, T().autoStart, (e) => (d.auto_start = e.target.checked)));
+      }));
     },
-    update() {},
+    update(s) {
+      const live = !!s.engine;
+      const outs = s.outputs || [];
+      this.nowHint.textContent = live ? T().msLiveHint : T().msIdle;
+      // rebuild only when something structural changes, so the buttons stay clickable
+      const key = live + "|" + outs.map((o) => [o.id, o.name, o.running, o.state].join(",")).join(";") + lang;
+      if (key !== this.key) {
+        this.key = key;
+        this.rows = {};
+        const cls = { connected: "ok", connecting: "warn", reconnecting: "bad", idle: "" };
+        this.now.replaceChildren(...(live ? outs : []).map((o) => {
+          const rate = h("span", { class: "dim" });
+          this.rows[o.id] = rate;
+          const state = o.running ? T().states[o.state] : T().msStopped;
+          const btn = o.running
+            ? button("small", "x", T().msStop, () => api(`/api/output/${o.id}/stop`, { method: "POST" }).then(refresh))
+            : button("small primary", "tower", T().msStart, () => api(`/api/output/${o.id}/start`, { method: "POST" }).then(refresh));
+          return h("div", { class: "link-row" }, h("span", { class: "dot grow " + (o.running ? cls[o.state] : "") }, h("span", {}, h("b", { text: o.name }), ` · ${state}`)), rate, btn);
+        }));
+      }
+      for (const o of outs) if (this.rows?.[o.id]) this.rows[o.id].textContent = o.running && o.state === "connected" ? `${o.kbps} kbps` : "";
+    },
   },
   rules: {
     build() {
@@ -776,6 +831,12 @@ const MODULES = {
         let arg = null;
         if (k.action === "obs.scene") arg = sceneSelect(k.arg, (v) => (k.arg = v), false, "scene");
         else if (k.action === "obs.mute") arg = sceneSelect(k.arg, (v) => (k.arg = v), false, "audio");
+        else if (k.action === "dest.toggle") {
+          const names = [T().mainName, ...(cfg.destinations || []).filter((d) => d.enabled).map((d) => d.name || d.url)];
+          arg = h("select", { onchange: (e) => (k.arg = e.target.value) }, ...names.map((n, j) => h("option", { value: j === 0 ? "main" : n, text: n })));
+          arg.value = k.arg || "main";
+          k.arg = arg.value;
+        }
         else if (k.action === "delay.set" || k.action === "delay.add" || ["censor", "replay", "clip"].includes(k.action)) {
           arg = h("input", { type: "number", style: "width:100%;text-align:left", value: k.arg, placeholder: k.action === "delay.add" ? "5 / -5" : T().seconds, oninput: (e) => (k.arg = e.target.value) });
         }

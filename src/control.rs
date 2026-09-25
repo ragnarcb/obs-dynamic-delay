@@ -62,6 +62,7 @@ pub async fn serve_http(tx: UnboundedSender<EngineMsg>, shared: Arc<Shared>) -> 
         .route("/api/obs/restore", post(obs_restore))
         .route("/api/obs/fps/{fps}", post(obs_fps))
         .route("/api/update/check", post(update_check))
+        .route("/api/output/{id}/{action}", post(output_action))
         .route("/api/open/{target}", post(open_target))
         .route("/api/lan", get(lan_info))
         .route("/api/deck/press/{index}", post(deck_press))
@@ -236,8 +237,11 @@ async fn set_config(State(s): State<AppState>, Json(patch): Json<Value>) -> impl
     if delay_changed {
         let _ = s.tx.send(EngineMsg::Cmd(Cmd::Set(delay)));
     }
-    let live = s.shared.status.lock().unwrap().engine.is_some();
-    Json(json!({ "ok": true, "next_stream": live && dest_changed }))
+    if dest_changed {
+        // applied to the running stream right away
+        let _ = s.tx.send(EngineMsg::DestinationsChanged);
+    }
+    Json(json!({ "ok": true, "next_stream": false }))
 }
 
 fn queue_obs_action(s: &AppState, action: ObsAction) -> Json<Value> {
@@ -258,6 +262,21 @@ async fn obs_configure(State(s): State<AppState>) -> impl IntoResponse {
 async fn obs_restore(State(s): State<AppState>) -> impl IntoResponse {
     queue_obs_action(&s, ObsAction::Restore)
 }
+/// Starts or stops one destination of the running stream (`start`, `stop`, `toggle`).
+async fn output_action(State(s): State<AppState>, Path((id, action)): Path<(u64, String)>) -> Json<Value> {
+    let cmd = match action.as_str() {
+        "start" => Cmd::OutputStart(id),
+        "stop" => Cmd::OutputStop(id),
+        "toggle" => Cmd::OutputToggle(id),
+        _ => return Json(json!({ "ok": false, "error": "use start, stop or toggle" })),
+    };
+    if !s.shared.status.lock().unwrap().outputs.iter().any(|o| o.id == id) {
+        return Json(json!({ "ok": false, "error": t!("no such destination (is the stream running?)", "destino não encontrado (a live está rodando?)") }));
+    }
+    let _ = s.tx.send(EngineMsg::Cmd(cmd));
+    Json(json!({ "ok": true }))
+}
+
 async fn update_check(State(s): State<AppState>) -> impl IntoResponse {
     if !s.shared.config.lock().unwrap().features.update_check {
         return Json(json!({ "ok": false, "error": t!("the update notice is turned off", "o aviso de atualização está desligado") }));
@@ -330,6 +349,22 @@ async fn deck_press(State(s): State<AppState>, Path(index): Path<usize>) -> Json
         "clip" => Some(Cmd::Clip(secs)),
         "panic" => Some(Cmd::Panic),
         "catchup" => Some(Cmd::CatchUp),
+        "dest.toggle" => {
+            // by name; "main"/"principal" (or empty) is the main destination
+            let st = s.shared.status.lock().unwrap();
+            let arg = key.arg.trim().to_lowercase();
+            let id = if arg.is_empty() || arg == "main" || arg == "principal" {
+                st.outputs.iter().find(|o| o.id == 0).map(|o| o.id)
+            } else {
+                st.outputs.iter().find(|o| o.name.to_lowercase() == arg).map(|o| o.id)
+            };
+            match id {
+                Some(id) => Some(Cmd::OutputToggle(id)),
+                None => {
+                    return Json(json!({ "ok": false, "error": t!("start the stream first (or check the destination name)", "inicie a live primeiro (ou confira o nome do destino)") }));
+                }
+            }
+        }
         _ => None,
     };
     if let Some(cmd) = cmd {
@@ -483,7 +518,7 @@ mod tests {
         let mut cur = Config::default();
         cur.stream_key = "main-key".into();
         cur.api_token = "tok".into();
-        cur.destinations.push(Destination { name: "YT".into(), url: "rtmp://yt/live2".into(), key: "yt-key".into(), enabled: true });
+        cur.destinations.push(Destination { name: "YT".into(), url: "rtmp://yt/live2".into(), key: "yt-key".into(), enabled: true, auto_start: true });
         let public = public_config(&cur);
         assert_eq!(public["stream_key"], "");
         assert!(public.get("api_token").is_none());
