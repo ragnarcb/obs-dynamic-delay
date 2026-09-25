@@ -248,7 +248,7 @@ Ao abrir uma issue, anexe o `obs-dynamic-delay.log`. As chaves de transmissão n
 
 ## Atualizar e desinstalar
 
-O painel avisa quando sai uma versão nova. Baixe o instalador de novo e dê dois cliques: **Sim** atualiza (sua configuração e suas chaves ficam), **Não** desinstala (tira o script e o painel e restaura a configuração de transmissão original). Pela linha de comando: `Instalar-Delay-Dinamico.exe --install` ou `--uninstall` (`--console` usa o instalador em texto).
+O relay consulta o GitHub por uma versão nova quando abre, a cada 6 horas e quando você clica em **Verificar agora** (Configuração > Geral > Atualizações, que também mostra "em dia" e o horário da última consulta). Versão nova aparece como faixa no painel, um aviso e uma linha no status do script no OBS (Ferramentas > Scripts). Com o **Aviso de atualização** desligado em Recursos e painel, nenhuma conexão é feita. Baixe o instalador de novo e dê dois cliques: **Sim** atualiza (sua configuração e suas chaves ficam), **Não** desinstala (tira o script e o painel e restaura a configuração de transmissão original). Pela linha de comando: `Instalar-Delay-Dinamico.exe --install` ou `--uninstall` (`--console` usa o instalador em texto).
 
 ## Segurança
 
@@ -289,6 +289,7 @@ OBS ──RTMP──▶ 127.0.0.1:1935 ──▶ motor de delay ──▶ um cli
 | `/api/status` | estado em JSON (delay, motor, destinos, saúde, pânico, último clipe, eventos) |
 | `/api/config` | lê (GET) ou muda (POST JSON, só os campos enviados) a configuração |
 | `/api/obs/configure` · `/api/obs/restore` | pede ao script do OBS para configurar ou restaurar a transmissão |
+| `/api/update/check` | consulta o GitHub por uma versão nova agora |
 | `/api/obs/fps/{n}` | pede ao script do OBS para mudar o FPS do OBS (24, 25, 30, 48, 50 ou 60) |
 | `/api/lan` | link e QR code do deck no celular |
 | `/deck` · `/api/deck/press/{n}` | página do deck · executa o botão número n |

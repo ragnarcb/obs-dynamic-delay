@@ -3,7 +3,7 @@
   "Author": "ragnarcb",
   "URL": "https://github.com/ragnarcb/obs-dynamic-delay",
   "Description": "Control the OBS Dynamic Delay: toggle the delay, delete before it airs, instant replay, clips and panic.",
-  "Version": "0.8.0.0",
+  "Version": "0.8.1.0",
   "SDKVersion": 2,
   "Software": { "MinimumVersion": "5.0" },
   "OS": [{ "Platform": "windows", "MinimumVersion": "10" }],

@@ -9,6 +9,7 @@ mod ingest;
 mod installer;
 mod rtmp_io;
 mod status;
+mod update;
 mod upstream;
 
 use std::fs::File;
@@ -121,12 +122,14 @@ async fn relay() -> Result<()> {
         config: Mutex::new(cfg.clone()),
         config_path: path.clone(),
         bridge: Mutex::new(Bridge::default()),
+        update_now: Default::default(),
     });
     let (tx, rx) = mpsc::unbounded_channel();
 
     tokio::spawn(run_engine(cfg.clone(), rx, shared.clone()));
     tokio::spawn(control::serve_udp(udp, tx.clone(), shared.clone()));
     tokio::spawn(chat::run(shared.clone(), tx.clone()));
+    tokio::spawn(update::run(shared.clone()));
     let http = tokio::spawn(control::serve_http(tx.clone(), shared));
 
     tokio::select! {

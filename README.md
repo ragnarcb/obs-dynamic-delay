@@ -248,7 +248,7 @@ When opening an issue, attach `obs-dynamic-delay.log`. The stream keys are not w
 
 ## Updating and uninstalling
 
-The panel tells you when a new version is out. Download the installer again and double-click it: **Yes** updates (your settings and keys are kept), **No** uninstalls (removes the script and the panel and restores the original stream settings). From the command line: `Dynamic-Delay-Installer.exe --install` or `--uninstall` (`--console` runs the text installer).
+The relay checks GitHub for a new version when it starts, every 6 hours and when you click **Check now** (Settings > General > Updates, which also shows "up to date" and the time of the last check). A new version shows a banner in the panel, a notice, and a line in the script's status in OBS (Tools > Scripts). With **Update notice** off under Features and panel, no connection is made. Download the installer again and double-click it: **Yes** updates (your settings and keys are kept), **No** uninstalls (removes the script and the panel and restores the original stream settings). From the command line: `Dynamic-Delay-Installer.exe --install` or `--uninstall` (`--console` runs the text installer).
 
 ## Security
 
@@ -289,6 +289,7 @@ OBS ──RTMP──▶ 127.0.0.1:1935 ──▶ delay engine ──▶ one RTMP
 | `/api/status` | state as JSON (delay, engine, destinations, health, panic, last clip, events) |
 | `/api/config` | reads (GET) or changes (POST JSON, only the fields you send) the settings |
 | `/api/obs/configure` · `/api/obs/restore` | asks the OBS script to configure or restore the stream settings |
+| `/api/update/check` | checks GitHub for a new version now |
 | `/api/obs/fps/{n}` | asks the OBS script to set the OBS frame rate (24, 25, 30, 48, 50 or 60) |
 | `/api/lan` | phone deck link and QR code |
 | `/deck` · `/api/deck/press/{n}` | phone deck page · runs key number n |

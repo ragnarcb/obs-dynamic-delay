@@ -15,6 +15,8 @@ pub struct Shared {
     pub config: Mutex<Config>,
     pub config_path: PathBuf,
     pub bridge: Mutex<Bridge>,
+    /// The panel asked for an update check now.
+    pub update_now: std::sync::atomic::AtomicBool,
 }
 
 impl Shared {
@@ -213,6 +215,8 @@ pub struct Status {
     pub panic: bool,
     pub last_clip: Option<String>,
     pub event: Option<Event>,
+    /// Update notice (None when the feature is off).
+    pub update: Option<crate::update::UpdateStatus>,
 }
 
 impl Status {
@@ -231,6 +235,7 @@ impl Status {
             panic: false,
             last_clip: None,
             event: None,
+            update: None,
         }
     }
 
@@ -269,6 +274,12 @@ impl Status {
         }
         if self.panic {
             lines.push(t!("PANIC MODE ON", "MODO PÂNICO LIGADO"));
+        }
+        if let Some(v) = self.update.as_ref().filter(|u| u.available).and_then(|u| u.latest.as_deref()) {
+            lines.push(t!(
+                "UPDATE: version {v} is available (github.com/ragnarcb/obs-dynamic-delay/releases)",
+                "ATUALIZAÇÃO: a versão {v} está disponível (github.com/ragnarcb/obs-dynamic-delay/releases)"
+            ));
         }
         lines.join("\n")
     }

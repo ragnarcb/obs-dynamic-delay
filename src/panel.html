@@ -269,6 +269,10 @@ const TEXT = {
     setPreset: (s) => `Set the delay to ${s} seconds`, addPreset: (s) => (s < 0 ? `Remove ${-s} seconds` : `Add ${s} seconds`),
     obsNotUsing: "OBS is not streaming through the dynamic delay yet.", configureObs: "Configure OBS automatically",
     keyMissing: "The stream key is missing. Fill it in under Settings.", update: (v) => `Version ${v} is available.`, download: "Download",
+    updates: "Updates", updCheck: "Check now", updChecking: "Checking GitHub...", updOff: "Update notice is off (Features and panel).",
+    updCurrent: (v, at) => `Up to date: v${v} is the latest version (checked at ${at}).`,
+    updAvailable: (v, cur) => `Version ${v} is available (you have ${cur}). Download it and run the installer.`,
+    updError: (at) => `Could not reach GitHub (last try at ${at}). It tries again in 15 minutes.`,
     alertDown: (n) => `${n}: connection lost, reconnecting...`,
     overLimit: (k, p, m) => `OBS is sending ${k} kbps, above the ${p} limit of ${m} kbps, so viewers may drop to 720p. Stop and start the stream: the OBS script sets the encoder to the ${p} rules.`,
     m: {
@@ -332,6 +336,10 @@ const TEXT = {
     setPreset: (s) => `Colocar o delay em ${s} segundos`, addPreset: (s) => (s < 0 ? `Tirar ${-s} segundos` : `Somar ${s} segundos`),
     obsNotUsing: "O OBS ainda não está transmitindo pelo delay dinâmico.", configureObs: "Configurar o OBS automaticamente",
     keyMissing: "Falta a chave de transmissão. Preencha em Configuração.", update: (v) => `A versão ${v} está disponível.`, download: "Baixar",
+    updates: "Atualizações", updCheck: "Verificar agora", updChecking: "Consultando o GitHub...", updOff: "Aviso de atualização desligado (Recursos e painel).",
+    updCurrent: (v, at) => `Em dia: a v${v} é a versão mais nova (verificado às ${at}).`,
+    updAvailable: (v, cur) => `A versão ${v} está disponível (você tem a ${cur}). Baixe e rode o instalador.`,
+    updError: (at) => `Não deu para falar com o GitHub (última tentativa às ${at}). Tenta de novo em 15 minutos.`,
     alertDown: (n) => `${n}: conexão caiu, reconectando...`,
     overLimit: (k, p, m) => `O OBS está mandando ${k} kbps, acima do limite da ${p} de ${m} kbps, e o público pode cair para 720p. Pare e inicie a live: o script do OBS ajusta o encoder às regras da ${p}.`,
     m: {
@@ -849,6 +857,7 @@ function setChip(cls, text) {
 function summary(look, title) {
   return h("summary", {}, badge(look), h("span", { class: "card-title", text: title }), icon("chevron", "chev"));
 }
+let updateLine = null;
 function buildSettings() {
   const card = $("settingsCard");
   const open = card.open;
@@ -878,6 +887,10 @@ function buildSettings() {
     if (Date.now() - armed < 5000) { armed = 0; obsAction("/api/obs/restore"); return; }
     armed = Date.now(); msg.textContent = T().confirmRestore;
   });
+  const updText = h("span", { class: "hint" });
+  const updCheck = button("small", "replay", T().updCheck, () => api("/api/update/check", { method: "POST" }).then((r) => { if (!r.ok) toast(r.error, "error"); }));
+  const updDownload = button("small", "download", T().download, () => api("/api/open/releases", { method: "POST" }));
+  updateLine = { text: updText, check: updCheck, download: updDownload };
   const save = button("primary", "check", T().save, () => {
     const body = { upstream_url: URLS[platform.value] || url.value.trim(), grow_mode: grow.value, delay_scene: scene.value, start_enabled: start.checked };
     if (key.value.trim()) body.stream_key = key.value.trim();
@@ -889,6 +902,8 @@ function buildSettings() {
     h("div", { class: "group" }, h("p", { class: "eyebrow", text: T().grpDelay }), field(T().growLabel, grow), sceneRow,
       h("label", { class: "check" }, start, h("span", { text: T().startEnabled }))),
     h("div", { class: "group" }, h("p", { class: "eyebrow", text: T().grpGeneral }), field(T().language, language),
+      h("div", { class: "group", style: "gap:6px" }, h("span", { class: "field-label", text: T().updates }), updText,
+        h("div", { class: "actions" }, updCheck, updDownload)),
       h("div", { class: "actions stack" }, save), msg, restore)));
   card.open = open || !cfg.stream_key_set;
 }
@@ -989,6 +1004,7 @@ function render(s) {
   }
   for (const id of cfg.panel_modules) if (featureOn(id)) MODULES[id]?.update(s);
   setChip(...obsState(s));
+  renderUpdate(s);
   $("ver").textContent = s.version ? "v" + s.version : "";
   const o = s.obs || {};
   const want = [];
@@ -1048,32 +1064,32 @@ async function loadConfig() {
   if (rebuild) buildAll();
 }
 
-// update check: once an hour, straight from GitHub
+// update notice: the relay asks GitHub (at start, every 6 hours and on "Check now")
 let updateVersion = null;
-async function checkUpdate(current) {
-  try {
-    let cached = null;
-    try { cached = JSON.parse(localStorage.getItem("dd-update") || "null"); } catch (e) {}
-    if (!cached || Date.now() - cached.at > 3600e3) {
-      const r = await fetch("https://api.github.com/repos/ragnarcb/obs-dynamic-delay/releases/latest");
-      const j = await r.json();
-      cached = { at: Date.now(), tag: (j.tag_name || "").replace(/^v/, "") };
-      try { localStorage.setItem("dd-update", JSON.stringify(cached)); } catch (e) {}
-    }
-    const newer = (a, b) => { const x = a.split(".").map(Number), y = b.split(".").map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
-    updateVersion = cached.tag && newer(cached.tag, current) ? cached.tag : null;
-  } catch (e) { /* offline */ }
+function renderUpdate(s) {
+  const u = s.update;
+  updateVersion = u && u.available ? u.latest : null;
+  const el = updateLine;
+  if (!el || !el.text.isConnected) return;
+  let text;
+  if (!cfg.features.update_check || !u) text = T().updOff;
+  else if (u.checking) text = T().updChecking;
+  else if (u.available) text = T().updAvailable(u.latest, s.version);
+  else if (u.error && !u.latest) text = T().updError(u.checked_at || "");
+  else if (u.latest) text = T().updCurrent(s.version, u.checked_at || "");
+  else text = T().updChecking;
+  el.text.textContent = text;
+  el.text.className = u && u.available ? "note" : u && u.error && !u.latest ? "err" : "hint";
+  el.check.disabled = !cfg.features.update_check || !!(u && u.checking);
+  el.download.classList.toggle("hidden", !(u && u.available));
 }
 
 let offline = false;
-let checkedUpdate = false;
 async function refresh() {
   try {
     const s = await api("/api/status");
     if (s.ok === false) throw new Error(s.error);
     if (offline || !cfg) { offline = false; await loadConfig(); }
-    if (!checkedUpdate && cfg.features.update_check) { checkedUpdate = true; checkUpdate(s.version); }
-    if (!cfg.features.update_check) updateVersion = null;
     render(s);
   } catch (e) {
     offline = true;

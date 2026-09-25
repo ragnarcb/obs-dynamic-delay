@@ -2,6 +2,12 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.8.1] - 2026-09-25
+
+### Fixed
+
+- **Update notice:** it checked only once, when the OBS dock opened (plus a 1 hour cache), so a release published while OBS stayed open was never shown, and nothing told you the check was working. The relay now checks GitHub itself when it starts, every 6 hours (15 minutes after a failure) and on **Check now**. Settings > General > Updates shows "up to date" with the time of the last check, or the new version with a download button; a new version also raises a notice and a line in the script status inside OBS. Off means no connection at all. New API: `/api/update/check`.
+
 ## [0.8.0] - 2026-09-25
 
 ### Added

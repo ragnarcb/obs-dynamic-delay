@@ -61,6 +61,7 @@ pub async fn serve_http(tx: UnboundedSender<EngineMsg>, shared: Arc<Shared>) -> 
         .route("/api/obs/configure", post(obs_configure))
         .route("/api/obs/restore", post(obs_restore))
         .route("/api/obs/fps/{fps}", post(obs_fps))
+        .route("/api/update/check", post(update_check))
         .route("/api/open/{target}", post(open_target))
         .route("/api/lan", get(lan_info))
         .route("/api/deck/press/{index}", post(deck_press))
@@ -257,6 +258,14 @@ async fn obs_configure(State(s): State<AppState>) -> impl IntoResponse {
 async fn obs_restore(State(s): State<AppState>) -> impl IntoResponse {
     queue_obs_action(&s, ObsAction::Restore)
 }
+async fn update_check(State(s): State<AppState>) -> impl IntoResponse {
+    if !s.shared.config.lock().unwrap().features.update_check {
+        return Json(json!({ "ok": false, "error": t!("the update notice is turned off", "o aviso de atualização está desligado") }));
+    }
+    s.shared.update_now.store(true, std::sync::atomic::Ordering::Relaxed);
+    Json(json!({ "ok": true }))
+}
+
 async fn obs_fps(State(s): State<AppState>, Path(fps): Path<u32>) -> impl IntoResponse {
     if ![24, 25, 30, 48, 50, 60].contains(&fps) {
         return Json(json!({ "ok": false, "error": t!("unsupported frame rate", "taxa de quadros não suportada") }));
