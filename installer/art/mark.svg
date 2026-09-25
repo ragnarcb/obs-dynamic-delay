@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="40 40 176 176">
+  <!-- the mark without the tile; currentColor is the play color (white on dark, near black on light) -->
+  <path d="M62 84 Q62 70 74 77 L140 116 Q151 128 140 140 L74 179 Q62 186 62 172 Z" fill="currentColor" fill-opacity=".3"/>
+  <path d="M102 84 Q102 70 114 77 L180 116 Q191 128 180 140 L114 179 Q102 186 102 172 Z" fill="currentColor"/>
+  <path d="M102 84 Q102 70 114 77 L180 116 Q191 128 180 140 L114 179 Q102 186 102 172 Z" fill="none" stroke="var(--cut, #17181c)" stroke-width="16" stroke-linejoin="round" opacity="0"/>
+  <circle cx="196" cy="60" r="15" fill="#e5484d"/>
+</svg>

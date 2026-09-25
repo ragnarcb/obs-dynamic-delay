@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Dynamic Delay: a play mark with its delayed echo, and the red "on air" light -->
+  <rect width="256" height="256" rx="56" fill="#17181c"/>
+  <path d="M62 84 Q62 70 74 77 L140 116 Q151 128 140 140 L74 179 Q62 186 62 172 Z" fill="#f2f2f3" fill-opacity=".3"/>
+  <path d="M102 84 Q102 70 114 77 L180 116 Q191 128 180 140 L114 179 Q102 186 102 172 Z" fill="#f2f2f3" stroke="#17181c" stroke-width="16" stroke-linejoin="round" paint-order="stroke"/>
+  <circle cx="196" cy="60" r="15" fill="#e5484d"/>
+</svg>

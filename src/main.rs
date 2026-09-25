@@ -77,8 +77,21 @@ fn init_logging(config: &Path) {
 }
 
 fn main() -> Result<()> {
-    let arg = std::env::args().nth(1);
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    // `--lang en|pt` picks the language of the installer texts (the Setup passes the one chosen there)
+    if let Some(l) = args.iter().position(|a| a == "--lang").and_then(|i| args.get(i + 1)) {
+        i18n::set(i18n::Lang::parse(l));
+    }
+    // `--quiet`: no questions, errors as exit code (used by Dynamic-Delay-Setup.exe)
+    let quiet = args.iter().any(|a| a == "--quiet");
+    let arg = args.first().cloned();
     match arg.as_deref() {
+        Some("--install") if quiet => std::process::exit(installer::quiet(installer::Mode::Install)),
+        Some("--uninstall") if quiet => std::process::exit(installer::quiet(installer::Mode::Uninstall)),
+        Some("--launch-obs") => {
+            installer::launch_obs();
+            return Ok(());
+        }
         Some("--install") => return installer::wizard(installer::Mode::Install),
         Some("--uninstall") => return installer::wizard(installer::Mode::Uninstall),
         // double-clicked in Explorer: show the installer

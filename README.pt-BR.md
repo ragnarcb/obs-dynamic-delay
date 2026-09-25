@@ -1,4 +1,6 @@
-# Delay Dinâmico para OBS
+<p align="center"><img src="docs/img/logo.svg" width="96" height="96" alt="Dynamic Delay"></p>
+
+<h1 align="center">Delay Dinâmico para OBS</h1>
 
 [English](README.md) · **Português** · Desenvolvido por [ragnarcb](https://github.com/ragnarcb)
 
@@ -57,17 +59,23 @@ O "Stream Delay" que já vem no OBS só pode ser mudado com a live parada. Com o
 
 > Requisitos: Windows 10/11 e OBS Studio 28 ou mais novo, aberto pelo menos uma vez.
 
-1. Na página de [Releases](../../releases/latest), baixe o **`Instalar-Delay-Dinamico.exe`** (português). O `Dynamic-Delay-Installer.exe` é a versão em inglês; o idioma pode ser trocado depois no painel.
-2. Dê dois cliques nele. O Windows pode mostrar "O Windows protegeu o computador", porque o exe não tem assinatura digital: clique em **Mais informações > Executar assim mesmo**.
-3. Clique em **Sim** para instalar. Se o OBS estiver aberto, o instalador pede para fechar (o OBS regrava as configurações ao fechar).
-4. No final, o instalador mostra tudo o que fez e oferece abrir o OBS.
+**[Baixar Dynamic-Delay-Setup.exe](https://github.com/ragnarcb/obs-dynamic-delay/releases/latest/download/Dynamic-Delay-Setup.exe)** (sempre a versão mais nova, português e inglês no mesmo arquivo).
+
+1. Abra e escolha o idioma. O Windows pode mostrar "O Windows protegeu o computador" enquanto o programa é novo e ainda não tem assinatura digital: clique em **Mais informações > Executar assim mesmo**.
+2. Siga o assistente (boas-vindas, licença, instalar). Não precisa de administrador: instala para o seu usuário do Windows. Se o OBS estiver aberto, o instalador pede para fechar (o OBS regrava as configurações ao fechar).
+3. A última tela mostra o que foi feito no OBS e oferece abrir o OBS.
+
+![Instalador](docs/img/pt/instalador.png)
 
 O instalador:
 - copia o relay e o script do OBS para `%APPDATA%\obs-dynamic-delay`;
 - importa o destino e a chave que já estavam no OBS, quando existem;
 - faz o OBS transmitir pelo relay local (`rtmp://127.0.0.1:1935/live`) e desliga o Stream Delay nativo do OBS;
 - adiciona o script e o painel **Delay dinâmico** ao OBS;
-- guarda backup de cada arquivo que altera (`*.dd-backup` e `obs-service-backup.json`).
+- guarda backup de cada arquivo que altera (`*.dd-backup` e `obs-service-backup.json`);
+- aparece em **Configurações > Aplicativos** do Windows como **Dynamic Delay for OBS**, de onde desinstala certinho.
+
+Cada release traz o SHA-256 dos arquivos em `SHA256SUMS.txt`, para você conferir o download (`Get-FileHash Dynamic-Delay-Setup.exe`).
 
 No OBS, o painel fica em **Docks > Delay dinâmico**: arraste para onde quiser, por exemplo ao lado de "Controles". Se faltar a chave de transmissão, o painel pede em **Configuração**.
 
@@ -248,7 +256,7 @@ Ao abrir uma issue, anexe o `obs-dynamic-delay.log`. As chaves de transmissão n
 
 ## Atualizar e desinstalar
 
-O relay consulta o GitHub por uma versão nova quando abre, a cada 6 horas e quando você clica em **Verificar agora** (Configuração > Geral > Atualizações, que também mostra "em dia" e o horário da última consulta). Versão nova aparece como faixa no painel, um aviso e uma linha no status do script no OBS (Ferramentas > Scripts). Com o **Aviso de atualização** desligado em Recursos e painel, nenhuma conexão é feita. Baixe o instalador de novo e dê dois cliques: **Sim** atualiza (sua configuração e suas chaves ficam), **Não** desinstala (tira o script e o painel e restaura a configuração de transmissão original). Pela linha de comando: `Instalar-Delay-Dinamico.exe --install` ou `--uninstall` (`--console` usa o instalador em texto).
+O relay consulta o GitHub por uma versão nova quando abre, a cada 6 horas e quando você clica em **Verificar agora** (Configuração > Geral > Atualizações, que também mostra "em dia" e o horário da última consulta). Versão nova aparece como faixa no painel, um aviso e uma linha no status do script no OBS (Ferramentas > Scripts). Com o **Aviso de atualização** desligado em Recursos e painel, nenhuma conexão é feita. Para atualizar, rode o `Dynamic-Delay-Setup.exe` novo: ele instala por cima e mantém sua configuração e suas chaves. Para desinstalar, use **Configurações > Aplicativos > Dynamic Delay for OBS** do Windows: tira o script e o painel, restaura a configuração de transmissão original e pergunta se apaga também a sua configuração. O instalador aceita as opções comuns do Inno Setup (`/SILENT`, `/VERYSILENT`, `/LANG=en|pt`).
 
 ## Segurança
 
@@ -329,11 +337,12 @@ Rodar só o relay: `obs-dynamic-delay.exe caminho\config.toml`. Testar o instala
 **Publicar uma versão:** atualize `version` no `Cargo.toml` e no `manifest.json` do plugin, atualize o `CHANGELOG.md`, e então:
 
 ```sh
-cargo build --release && cp target/release/obs-dynamic-delay.exe Dynamic-Delay-Installer.exe
-cargo build --release --features pt && cp target/release/obs-dynamic-delay.exe Instalar-Delay-Dinamico.exe
-python scripts/package_streamdeck.py    # Dynamic-Delay-StreamDeck.streamDeckPlugin
-gh release create vX.Y.Z Dynamic-Delay-Installer.exe Instalar-Delay-Dinamico.exe Dynamic-Delay-StreamDeck.streamDeckPlugin --notes-file notes.md
+git tag vX.Y.Z && git push origin vX.Y.Z   # o workflow Release monta e publica tudo
 ```
+
+O workflow (`.github/workflows/release.yml`) roda os testes, gera o `dist/Dynamic-Delay-Setup.exe` com `scripts/build_setup.ps1` (Inno Setup, `installer/setup.iss`), o plugin do Stream Deck e o `SHA256SUMS.txt`, e publica a release com as notas de `release-notes/vX.Y.Z.md`. No PC: `powershell -File scripts/build_setup.ps1` (precisa do Inno Setup 6: `winget install JRSoftware.InnoSetup`).
+
+**Assinatura digital:** o `scripts/sign.ps1` assina o programa, o instalador e o desinstalador (Authenticode) assim que existir um certificado: no PC com `SIGN_PFX` / `SIGN_PFX_PASS`, no workflow com os secrets `SIGN_PFX_BASE64` / `SIGN_PFX_PASS` do repositório. Sem eles o build funciona igual, sem assinatura.
 
 ## Limitações conhecidas
 

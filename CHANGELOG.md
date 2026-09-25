@@ -2,6 +2,20 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.9.0] - 2026-09-25
+
+### Added
+
+- **Professional Windows Setup:** one `Dynamic-Delay-Setup.exe` for English and Portuguese (language picker), built with Inno Setup: welcome, license and progress pages with the app artwork, per-user install without administrator rights, a check that OBS is closed, the list of what was done in OBS and "Open OBS now" on the last page, an entry in Windows Settings > Apps, clean uninstall (restores the stream settings, asks whether to delete the settings) and updates over the old version.
+- The program has an icon, version information (publisher, product, copyright) and a Windows manifest.
+- Releases are built and published by a GitHub workflow on every tag, with `SHA256SUMS.txt`. Code signing is ready: it turns on as soon as a certificate is configured.
+- `--install --quiet --lang en|pt`, `--uninstall --quiet` and `--launch-obs`, used by the Setup.
+
+### Changed
+
+- The Portuguese installer texts have their accents.
+- **New logo and icons:** a flat mark (a play with its delayed echo and the red on-air light) drawn in vector, replacing the gradient stopwatch. The panel, the phone deck and the Stream Deck plugin use Phosphor Icons (MIT) instead of Lucide and Unicode symbols; primary buttons are monochrome, color only marks a state (live, delay, error). All images are rendered from the vector sources by `installer/make_art.py`.
+
 ## [0.8.1] - 2026-09-25
 
 ### Fixed

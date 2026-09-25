@@ -49,9 +49,41 @@ pub fn start() -> Result<()> {
     wizard(Mode::Ask)
 }
 
+/// Install or uninstall without any question, for the Setup program. Returns
+/// the process exit code; the steps and any error also go to `setup.log`.
+pub fn quiet(mode: Mode) -> i32 {
+    let result = (|| -> Result<PathBuf> {
+        let p = Paths::detect()?;
+        if obs_running() {
+            bail!("{}", t!("Close OBS and try again.", "Feche o OBS e tente de novo."));
+        }
+        match mode {
+            Mode::Uninstall => uninstall(&p)?,
+            _ => {
+                install(&p, false)?;
+            }
+        }
+        Ok(p.install_dir)
+    })();
+    let (code, text) = match &result {
+        Ok(_) => (0, STEPS.lock().unwrap().join("\n")),
+        Err(e) => (1, format!("{}\n{} {e:#}", STEPS.lock().unwrap().join("\n"), t!("ERROR:", "ERRO:"))),
+    };
+    println!("{text}");
+    let dir = match &result {
+        Ok(d) => Some(d.clone()),
+        Err(_) => Paths::detect().ok().map(|p| p.install_dir),
+    };
+    if let Some(d) = dir {
+        let _ = std::fs::create_dir_all(&d);
+        let _ = std::fs::write(d.join("setup.log"), &text);
+    }
+    code
+}
+
 pub fn wizard(mode: Mode) -> Result<()> {
     println!("==============================================");
-    println!("{}", t!("  Dynamic Delay for OBS", "  Delay dinamico para OBS"));
+    println!("{}", t!("  Dynamic Delay for OBS", "  Delay dinâmico para OBS"));
     println!("{}", t!("  Developed by ragnarcb", "  Desenvolvido por ragnarcb"));
     println!("  {}", crate::control::AUTHOR_URL);
     println!("==============================================\n");
@@ -70,7 +102,7 @@ fn run(mode: Mode) -> Result<()> {
     let installed = p.is_installed();
     let mode = match mode {
         Mode::Ask if installed => {
-            println!("{}", t!("Already installed in {}.", "Ja esta instalado em {}.", p.install_dir.display()));
+            println!("{}", t!("Already installed in {}.", "Já está instalado em {}.", p.install_dir.display()));
             match ask(&t!(
                 "Type 1 to update/reinstall, 2 to uninstall, or Enter to quit: ",
                 "Digite 1 para atualizar/reinstalar, 2 para desinstalar, ou Enter para sair: "
@@ -84,14 +116,14 @@ fn run(mode: Mode) -> Result<()> {
         }
         Mode::Ask => {
             let dock = dock_title();
-            println!("{}", t!("This installs the dynamic delay into your OBS:", "Isto vai instalar o delay dinamico no seu OBS:"));
+            println!("{}", t!("This installs the dynamic delay into your OBS:", "Isto vai instalar o delay dinâmico no seu OBS:"));
             println!("{}", t!(
                 "  - adds the script and a \"{dock}\" panel to the OBS window",
                 "  - adiciona o script e um painel \"{dock}\" na tela do OBS"
             ));
             println!("{}", t!(
                 "  - makes OBS stream through the relay (your current settings are backed up)",
-                "  - faz o OBS transmitir pelo relay (a configuracao atual fica salva)"
+                "  - faz o OBS transmitir pelo relay (a configuração atual fica salva)"
             ));
             println!("{}", t!("  - turns off OBS' built-in Stream Delay\n", "  - desliga o Stream Delay nativo do OBS\n"));
             if ask(&t!("Install now? [Y/n] ", "Instalar agora? [S/n] ")).to_lowercase().starts_with('n') {
@@ -131,7 +163,7 @@ impl Paths {
                 "{}",
                 t!(
                     "OBS settings not found in {} (open OBS at least once)",
-                    "nao achei a configuracao do OBS em {} (abra o OBS pelo menos uma vez)",
+                    "não achei a configuração do OBS em {} (abra o OBS pelo menos uma vez)",
                     obs_dir.display()
                 )
             );
@@ -281,7 +313,7 @@ fn install(p: &Paths, interactive: bool) -> Result<Config> {
         if removed > 0 {
             backup_once(&c)?;
             write_json(&c, &v)?;
-            step(&t!("old copy of the script removed from OBS", "copia antiga do script removida do OBS"));
+            step(&t!("old copy of the script removed from OBS", "cópia antiga do script removida do OBS"));
         }
         if script_index(&v, &lua).is_none() {
             backup_once(&c)?;
@@ -300,7 +332,7 @@ fn install(p: &Paths, interactive: bool) -> Result<Config> {
     }
     step(&t!(
         "script added to OBS (hotkeys in Settings > Hotkeys > Dynamic Delay)",
-        "script adicionado ao OBS (atalhos em Configuracoes > Atalhos > Delay dinamico)"
+        "script adicionado ao OBS (atalhos em Configurações > Atalhos > Delay dinâmico)"
     ));
 
     // 5. dock with the control panel
@@ -322,7 +354,7 @@ fn install(p: &Paths, interactive: bool) -> Result<Config> {
     if cfg.stream_key.is_empty() {
         println!("{}", t!(
             "Only the stream key is missing: fill it in the \"{dock}\" panel inside OBS.",
-            "Falta so a chave de transmissao: preencha no painel \"{dock}\" dentro do OBS."
+            "Falta só a chave de transmissão: preencha no painel \"{dock}\" dentro do OBS."
         ));
     }
     Ok(cfg)
@@ -350,7 +382,7 @@ fn uninstall(p: &Paths) -> Result<()> {
     }
     if p.service_backup().exists() {
         std::fs::copy(p.service_backup(), p.profile_dir()?.join("service.json"))?;
-        step(&t!("original stream settings restored", "configuracao de transmissao original restaurada"));
+        step(&t!("original stream settings restored", "configuração de transmissão original restaurada"));
     }
     println!(
         "\n{}",
@@ -364,22 +396,22 @@ fn uninstall(p: &Paths) -> Result<()> {
 }
 
 fn ask_destination(cfg: &mut Config) {
-    println!("\n{}", t!("Where do you stream to?", "Para onde voce transmite?"));
+    println!("\n{}", t!("Where do you stream to?", "Para onde você transmite?"));
     println!("{}", t!("  1 = Twitch   2 = YouTube   3 = Kick / other (paste URL)", "  1 = Twitch   2 = YouTube   3 = Kick / outra (colar URL)"));
-    match ask(&t!("Option (Enter = Twitch): ", "Opcao (Enter = Twitch): ")).as_str() {
+    match ask(&t!("Option (Enter = Twitch): ", "Opção (Enter = Twitch): ")).as_str() {
         "2" => cfg.upstream_url = YOUTUBE_URL.into(),
         "3" => {
             let url = ask(&t!("Server URL (rtmp:// or rtmps://): ", "URL do servidor (rtmp:// ou rtmps://): "));
             if url.starts_with("rtmp://") || url.starts_with("rtmps://") {
                 cfg.upstream_url = url;
             } else {
-                println!("{}", t!("Invalid URL, using Twitch. Change it later in the panel.", "URL invalida, usando Twitch. Troque depois no painel."));
+                println!("{}", t!("Invalid URL, using Twitch. Change it later in the panel.", "URL inválida, usando Twitch. Troque depois no painel."));
                 cfg.upstream_url = TWITCH_URL.into();
             }
         }
         _ => cfg.upstream_url = TWITCH_URL.into(),
     }
-    cfg.stream_key = ask(&t!("Stream key (Enter = fill in later in the panel): ", "Chave de transmissao (Enter = preencher depois no painel): "));
+    cfg.stream_key = ask(&t!("Stream key (Enter = fill in later in the panel): ", "Chave de transmissão (Enter = preencher depois no painel): "));
 }
 
 fn step(msg: &str) {
@@ -415,7 +447,7 @@ fn wait_obs_closed() {
     }
     println!("\n{}", t!(
         "Close OBS to continue (it rewrites its settings when it closes).",
-        "Feche o OBS para continuar (ele regrava as configuracoes ao fechar)."
+        "Feche o OBS para continuar (ele regrava as configurações ao fechar)."
     ));
     print!("{}", t!("Waiting for OBS to close", "Aguardando o OBS fechar"));
     while obs_running() {
@@ -427,7 +459,7 @@ fn wait_obs_closed() {
     std::thread::sleep(Duration::from_millis(500));
 }
 
-fn launch_obs() {
+pub fn launch_obs() {
     let candidates: &[&str] = if cfg!(windows) {
         &[r"C:\Program Files\obs-studio\bin\64bit\obs64.exe", r"C:\Program Files (x86)\obs-studio\bin\64bit\obs64.exe"]
     } else if cfg!(target_os = "macos") {
@@ -460,7 +492,7 @@ fn copy_with_retry(from: &Path, to: &Path) -> Result<()> {
             return Ok(());
         }
     }
-    bail!("{}", t!("could not copy to {} (is the relay still running?)", "nao consegui copiar para {} (o relay ainda esta aberto?)", to.display()))
+    bail!("{}", t!("could not copy to {} (is the relay still running?)", "não consegui copiar para {} (o relay ainda está aberto?)", to.display()))
 }
 
 fn same_file(a: &Path, b: &Path) -> bool {
