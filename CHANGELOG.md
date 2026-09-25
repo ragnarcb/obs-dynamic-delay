@@ -2,6 +2,12 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.9.1] - 2026-09-25
+
+### Added
+
+- **Support the project:** crypto donation addresses (BTC, ETH, SOL) with QR codes in the READMEs, and a "Support the project" link in the panel footer.
+
 ## [0.9.0] - 2026-09-25
 
 ### Added

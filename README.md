@@ -26,6 +26,7 @@ OBS' built-in "Stream Delay" can only be changed while the stream is stopped. Wi
 - [API](#api)
 - [Development](#development)
 - [Known limitations](#known-limitations)
+- [Support the project](#support-the-project)
 - [License](#license)
 
 ## Features
@@ -351,6 +352,28 @@ The workflow (`.github/workflows/release.yml`) runs the tests, builds `dist/Dyna
 - The delay changes at keyframes (about 2 s with OBS' default interval).
 - The exe is not code-signed, so Windows SmartScreen warns on first run.
 - The installer configures the OBS profile in use and a standard (non portable) OBS install. It is for Windows; the relay and the script also run on Linux and macOS with a manual setup.
+
+## Support the project
+
+Dynamic Delay is free and stays free. If it helps your streams and you want to support its development, you can send a donation in crypto. Thank you!
+
+<table>
+<tr>
+<td align="center"><img src="docs/img/donate/btc.png" width="140" alt="Bitcoin QR"><br><b>Bitcoin (BTC)</b></td>
+<td align="center"><img src="docs/img/donate/eth.png" width="140" alt="Ethereum QR"><br><b>Ethereum (ETH)</b></td>
+<td align="center"><img src="docs/img/donate/sol.png" width="140" alt="Solana QR"><br><b>Solana (SOL)</b></td>
+</tr>
+</table>
+
+| Network | Address |
+|---|---|
+| Bitcoin (BTC) | `bc1qvqtzjtfsrhucl4dkaj3hlc0x7h8lvm2252jars` |
+| Ethereum (ETH) | `0x59398D8344bb6aB167DA68E1773096560Fab2258` |
+| Solana (SOL) | `4Dn7niMomKZXmQKov8sKkknnCMMwmY4kDp6LejTrrDxJ` |
+
+Send only the coin of each network to its address (BTC to the Bitcoin address, ETH or ERC-20 on Ethereum mainnet to the Ethereum address, SOL to the Solana address). Crypto transfers cannot be undone: copy the address from here or scan the QR code, and check the first and last characters in your wallet before sending.
+
+Starring the repository and telling other streamers about it helps a lot too.
 
 ## License
 

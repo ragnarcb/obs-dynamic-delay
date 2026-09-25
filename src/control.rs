@@ -278,6 +278,10 @@ async fn open_target(State(s): State<AppState>, Path(target): Path<String>) -> i
     let what = match target.as_str() {
         "author" => AUTHOR_URL.to_string(),
         "releases" => RELEASES_URL.to_string(),
+        "support" => match i18n::get() {
+            Lang::Pt => "https://github.com/ragnarcb/obs-dynamic-delay/blob/main/README.pt-BR.md#apoie-o-projeto".to_string(),
+            Lang::En => "https://github.com/ragnarcb/obs-dynamic-delay#support-the-project".to_string(),
+        },
         "deck" => {
             let c = s.shared.config.lock().unwrap();
             format!("http://127.0.0.1:{}/deck?token={}", c.http_port(), c.api_token)

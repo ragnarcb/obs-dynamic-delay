@@ -226,6 +226,8 @@
   .credit a { color: var(--text-2); text-decoration: none; font-weight: 550; }
   .credit a:hover { color: var(--text); text-decoration: underline; }
   #ver:empty { display: none; }
+  .credit .sep { color: var(--text-3); }
+  #support { color: var(--text-2); }
   #ver::after { content: "·"; margin-left: 6px; }
 
   @media (prefers-reduced-motion: reduce) {
@@ -243,7 +245,7 @@
   <div id="modules"></div>
   <details class="card" id="settingsCard"></details>
   <details class="card" id="customizeCard"></details>
-  <footer class="credit"><span id="ver"></span><span><span data-t="developedBy"></span> <a id="author" href="https://github.com/ragnarcb" target="_blank" rel="noopener">ragnarcb</a></span></footer>
+  <footer class="credit"><span id="ver"></span><span><span data-t="developedBy"></span> <a id="author" href="https://github.com/ragnarcb" target="_blank" rel="noopener">ragnarcb</a></span><span class="sep">·</span><a id="support" href="#" data-t="support"></a></footer>
 </main>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script>
@@ -255,7 +257,7 @@ const URLS = { twitch: "rtmp://live.twitch.tv/app", youtube: "rtmp://a.rtmp.yout
 // ---------------------------------------------------------------- texts
 const TEXT = {
   en: {
-    appName: "Dynamic Delay", developedBy: "Developed by", noToken: "Missing access token. Open the panel from OBS (Docks > Dynamic Delay) or the script's \"Open panel\" button.",
+    appName: "Dynamic Delay", developedBy: "Developed by", support: "Support the project", noToken: "Missing access token. Open the panel from OBS (Docks > Dynamic Delay) or the script's \"Open panel\" button.",
     relayOff: "RELAY CLOSED", relayOffHint: "opens together with OBS", relayClosed: "The relay is closed", relayClosedHint: "It opens together with OBS. Start OBS with the Dynamic Delay script loaded.",
     noLive: "NOT LIVE", live: "LIVE", adjusting: "ADJUSTING", delayed: "DELAY", replay: "REPLAY", panicPill: "PANIC",
     phases: { live: "live", delayed: "delayed", growing: "waiting for a keyframe", filling: "holding a frame, applying delay", shrinking: "cutting back to live" },
@@ -322,7 +324,7 @@ const TEXT = {
     up: "Move up", down: "Move down", obsStreaming: "OBS streaming", scriptMissing: "OBS script is not running", obsReady: "OBS ready", obsNotConfigured: "OBS not configured",
   },
   pt: {
-    appName: "Delay dinâmico", developedBy: "Desenvolvido por", noToken: "Falta o token de acesso. Abra o painel pelo OBS (Docks > Delay dinâmico) ou pelo botão \"Abrir painel\" do script.",
+    appName: "Delay dinâmico", developedBy: "Desenvolvido por", support: "Apoiar o projeto", noToken: "Falta o token de acesso. Abra o painel pelo OBS (Docks > Delay dinâmico) ou pelo botão \"Abrir painel\" do script.",
     relayOff: "RELAY FECHADO", relayOffHint: "abre junto com o OBS", relayClosed: "O relay está fechado", relayClosedHint: "Ele abre junto com o OBS. Abra o OBS com o script do Delay dinâmico carregado.",
     noLive: "SEM LIVE", live: "AO VIVO", adjusting: "AJUSTANDO", delayed: "DELAY", replay: "REPLAY", panicPill: "PÂNICO",
     phases: { live: "ao vivo", delayed: "com delay", growing: "aguardando keyframe", filling: "congelado, aplicando delay", shrinking: "cortando para o vivo" },
@@ -1102,6 +1104,10 @@ async function refresh() {
 }
 
 $("logo").innerHTML = LOGO_SVG;
+$("support").onclick = (ev) => {
+  ev.preventDefault();
+  api("/api/open/support", { method: "POST" }).catch(() => {});
+};
 $("author").onclick = (ev) => {
   // inside an OBS dock a plain link would navigate the dock itself: ask the relay to open the browser
   ev.preventDefault();
