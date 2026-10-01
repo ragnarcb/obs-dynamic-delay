@@ -279,7 +279,7 @@ Still stuck? Ask in the [Discord server](https://discord.gg/crctbnQ2f8) (#suport
 
 | Symptom | What to do |
 |---|---|
-| `[obs-dynamic-delay.lua] Error opening file: (null)` | The program was removed with another tool. See [Uninstall the right way](#uninstall-the-right-way). |
+| `[obs-dynamic-delay.lua] Error opening file: (null)` | OBS still references a script file that is missing, for example after an incomplete uninstall. See [Uninstall the right way](#uninstall-the-right-way). |
 | The panel shows **RELAY CLOSED** | Normal while OBS is starting. If it stays, open **Tools > Scripts**, check that `obs-dynamic-delay.lua` is listed and click "Restart relay". |
 | The panel says the access token is missing | Open it from OBS (Docks menu) or the script's "Open panel" button, not by typing the address. |
 | **Platform reconnecting** with an error | Almost always a wrong key or URL. Check **Settings**. |
@@ -302,16 +302,22 @@ The relay checks GitHub for a new version when it starts, every 6 hours and when
 ### Uninstall the right way
 
 > [!WARNING]
-> Uninstall only from **Windows Settings > Apps > Dynamic Delay for OBS** (or Start menu > Dynamic Delay for OBS > Uninstall). **Do not use Geek Uninstaller, Revo, IObit or similar tools**, and do not just delete the folder: they delete the files without running the step that gives OBS its settings back, so OBS keeps streaming to the relay that no longer exists.
+> **Do not use Geek Uninstaller, Revo, IObit or similar tools.** Use **Windows Settings > Apps > Dynamic Delay for OBS** (or Start menu > Dynamic Delay for OBS > Uninstall). Deleting the folder or using forced cleanup that skips the uninstaller can leave OBS pointing at missing files and a relay that no longer exists.
+>
+> If restoration fails, the interactive uninstaller offers **Uninstall anyway and keep the recovery files**. This may leave OBS pointing to the removed relay; restore its streaming service manually using the retained profile backups and application settings. Silent uninstall aborts by default. For the standalone helper, `--uninstall --quiet --force` permits incomplete recovery and keeps backups when restoration fails; successful restoration cleans up recovery files as in a normal uninstall. It does not delete the program files or bypass the OBS-running check.
+
+If OBS is open, uninstall stops before removing the program. If restoration fails, it stops unless you explicitly choose to uninstall anyway. Close OBS and retry; `setup.log` in the install folder explains any restoration error. Keep the recovery files until the retry succeeds.
 
 1. Close OBS.
 2. Windows **Settings > Apps > Installed apps > Dynamic Delay for OBS > Uninstall**.
-3. Open OBS. Everything is back as it was before the install:
+3. After uninstall succeeds, open OBS. The app restores the settings it changed:
    - your stream service (Twitch, Kick, YouTube...) with the connected account;
    - OBS' own Stream Delay;
    - the bitrate and keyframe interval, if the script had capped them for the platform;
    - the script and the panel are gone, in every profile and scene collection.
    A value you changed yourself after installing is kept.
+
+New changes are recorded per field and per profile. For older installs that only saved a whole encoder file, ambiguous bitrate/keyframe values are kept instead of guessed; the `.dd-backup` file stays in the OBS profile for manual recovery.
 
 **Already removed it with another program?** Fix OBS by hand:
 1. **Tools > Scripts:** select `obs-dynamic-delay.lua` (it shows the error `Error opening file: (null)`) and click **−** to remove it.

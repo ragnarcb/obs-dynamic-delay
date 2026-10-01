@@ -139,7 +139,6 @@ end
 ---------------------------------------------------------------------------
 local function dir() return script_path() end
 local function config_path() return dir() .. "config.toml" end
-local function backup_path() return dir() .. "obs-service-backup.json" end
 
 local function exists(path)
   local f = io.open(path, "rb")
@@ -272,9 +271,11 @@ end
 
 local function set_service(type_id, data)
   local svc = obs.obs_service_create(type_id, "default_service", data, nil)
+  if svc == nil then return false end
   obs.obs_frontend_set_streaming_service(svc)
   obs.obs_frontend_save_streaming_service()
   obs.obs_service_release(svc)
+  return true
 end
 
 -- Shows the outcome of an action in the panel (ok = green toast, error = red).
@@ -285,6 +286,81 @@ end
 
 local function report_error(msg)
   report(msg, true)
+end
+
+-- Recovery data lives with the profile, not in the shared relay folder.
+local function profile_path()
+  local ok, path = pcall(obs.obs_frontend_get_current_profile_path)
+  if ok and path and path ~= "" then return path end
+  report_error(L("Could not locate the OBS profile. No settings changed.",
+    "Não foi possível localizar o perfil do OBS. Nenhuma configuração alterada.",
+    "No se pudo localizar el perfil de OBS. No se cambió la configuración."))
+  return nil
+end
+
+local function recovery_error(path)
+  report_error(L("Could not save recovery data: ", "Não foi possível salvar os dados de recuperação: ",
+    "No se pudieron guardar los datos de recuperación: ") .. path)
+end
+
+-- Same format as installer.rs: record exactly what we change before applying it.
+-- If the user edited a field since our last write, their new value becomes the baseline.
+local function record_change(path, key, before, applied, numeric)
+  if before == applied then return true end
+  local journal_path = path .. ".dd-changes.json"
+  local journal = exists(journal_path) and obs.obs_data_create_from_json_file(journal_path) or nil
+  if exists(journal_path) and (journal == nil or obs.obs_data_get_int(journal, "version") ~= 1) then
+    if journal then obs.obs_data_release(journal) end
+    recovery_error(journal_path)
+    return false
+  end
+  if journal == nil then
+    journal = obs.obs_data_create()
+    obs.obs_data_set_int(journal, "version", 1)
+    obs.obs_data_set_bool(journal, "legacy_backup", exists(path .. ".dd-backup"))
+  end
+  local fields = obs.obs_data_get_obj(journal, "fields")
+  if exists(journal_path) and fields == nil then
+    obs.obs_data_release(journal)
+    recovery_error(journal_path)
+    return false
+  end
+  fields = fields or obs.obs_data_create()
+  local previous = obs.obs_data_get_obj(fields, key)
+  if previous and not obs.obs_data_has_user_value(previous, "applied") then
+    obs.obs_data_release(previous)
+    obs.obs_data_release(fields)
+    obs.obs_data_release(journal)
+    recovery_error(journal_path)
+    return false
+  end
+  local get = numeric and obs.obs_data_get_int or obs.obs_data_get_string
+  local set = numeric and obs.obs_data_set_int or obs.obs_data_set_string
+  local change
+  if previous and before == get(previous, "applied") then
+    change = previous
+  else
+    if previous then obs.obs_data_release(previous) end
+    change = obs.obs_data_create()
+    if before ~= nil then set(change, "before", before) end
+  end
+  set(change, "applied", applied)
+  obs.obs_data_set_obj(fields, key, change)
+  obs.obs_data_set_obj(journal, "fields", fields)
+  local ok = obs.obs_data_save_json_safe(journal, journal_path, "tmp", nil)
+  obs.obs_data_release(change)
+  obs.obs_data_release(fields)
+  obs.obs_data_release(journal)
+  if not ok then recovery_error(journal_path) end
+  return ok
+end
+
+local function record_ini(cfg, path, section, key, value)
+  local before = nil
+  if obs.config_has_user_value(cfg, section, key) then
+    before = obs.config_get_string(cfg, section, key)
+  end
+  return record_change(path .. "/basic.ini", section .. "." .. key, before, value, false)
 end
 
 ---------------------------------------------------------------------------
@@ -340,16 +416,29 @@ local function apply_platform_limits(service_name)
   local changes = {}
 
   if advanced then
-    local ok, dir_ = pcall(obs.obs_frontend_get_current_profile_path)
+    local dir_ = profile_path()
     local enc_id = obs.config_get_string(cfg, "AdvOut", "Encoder")
-    if ok and dir_ and dir_ ~= "" and enc_id ~= "" then
+    if dir_ and enc_id ~= "" then
       local path = dir_ .. "/streamEncoder.json"
-      local file = obs.obs_data_create_from_json_file_safe(path, "bak") or obs.obs_data_create()
+      local file = obs.obs_data_create_from_json_file_safe(path, "bak")
+      if file == nil and exists(path) then recovery_error(path); return nil, false end
+      file = file or obs.obs_data_create()
       -- effective values: what is saved, over the encoder's defaults
       local eff = obs.obs_encoder_defaults(enc_id) or obs.obs_data_create()
       obs.obs_data_apply(eff, file)
       local bitrate = obs.obs_data_get_int(eff, "bitrate")
       local keyint = obs.obs_data_get_int(eff, "keyint_sec")
+      local function remember(key, applied)
+        local before = nil
+        if obs.obs_data_has_user_value(file, key) then before = obs.obs_data_get_int(file, key) end
+        return record_change(path, key, before, applied, true)
+      end
+      if (lim.max and bitrate > lim.max and not remember("bitrate", lim.max))
+        or ((keyint == 0 or keyint > 2) and not remember("keyint_sec", 2)) then
+        obs.obs_data_release(eff)
+        obs.obs_data_release(file)
+        return nil, false
+      end
       if lim.max and bitrate > lim.max then
         obs.obs_data_set_int(file, "bitrate", lim.max)
         table.insert(changes, bitrate .. " -> " .. lim.max .. " kbps")
@@ -359,15 +448,12 @@ local function apply_platform_limits(service_name)
         table.insert(changes, L("keyframe every 2 s", "keyframe a cada 2 s", "keyframe cada 2 s"))
       end
       if #changes > 0 then
-        -- the original, once, so uninstalling puts it back ("{}" = the file did not exist)
-        if not exists(path .. ".dd-backup") then
-          local src = io.open(path, "rb")
-          local body = src and src:read("*a") or "{}"
-          if src then src:close() end
-          local dst = io.open(path .. ".dd-backup", "wb")
-          if dst then dst:write(body ~= "" and body or "{}"); dst:close() end
+        if not obs.obs_data_save_json_safe(file, path, "tmp", "bak") then
+          recovery_error(path)
+          obs.obs_data_release(eff)
+          obs.obs_data_release(file)
+          return nil, false
         end
-        obs.obs_data_save_json_safe(file, path, "tmp", "bak")
         -- the encoder OBS already created, for this very stream
         local out = obs.obs_frontend_get_streaming_output()
         if out ~= nil then
@@ -383,8 +469,13 @@ local function apply_platform_limits(service_name)
     -- simple mode always uses 2 s keyframes; only the bitrate needs a cap
     local bitrate = obs.config_get_int(cfg, "SimpleOutput", "VBitrate")
     if bitrate > lim.max then
+      local path = profile_path()
+      if not path or not record_ini(cfg, path, "SimpleOutput", "VBitrate", tostring(lim.max)) then return nil, false end
       obs.config_set_int(cfg, "SimpleOutput", "VBitrate", lim.max)
-      pcall(obs.config_save_safe, cfg, "tmp", nil)
+      if obs.config_save_safe(cfg, "tmp", nil) ~= 0 then
+        recovery_error(path .. "/basic.ini")
+        return nil, false
+      end
       table.insert(changes, bitrate .. " -> " .. lim.max .. " kbps")
     end
   end
@@ -401,6 +492,13 @@ local function configure_obs()
   end
   local notes = {}
   local info, svc = current_service()
+  local path = profile_path()
+  if not path then return end
+  local cfg = obs.obs_frontend_get_profile_config()
+  if not cfg or not info then
+    report_error(L("Could not read the OBS profile.", "Não foi possível ler o perfil do OBS.", "No se pudo leer el perfil de OBS."))
+    return
+  end
   local imported_service = nil
   if info and not obs_configured() then
     -- keep the original settings (same format as service.json) so they can be restored
@@ -408,28 +506,46 @@ local function configure_obs()
     local st = obs.obs_service_get_settings(svc)
     obs.obs_data_set_string(backup, "type", info.type)
     obs.obs_data_set_obj(backup, "settings", st)
-    obs.obs_data_save_json(backup, backup_path())
+    local backup_path = path .. "/service.json.dd-backup"
+    local ok = true
+    if not exists(backup_path) then
+      ok = obs.obs_data_save_json_safe(backup, backup_path, "tmp", nil)
+    else
+      -- Do not silently trust a broken backup or overwrite the first original.
+      local kept = obs.obs_data_create_from_json_file(backup_path)
+      ok = kept ~= nil and obs.obs_data_get_string(kept, "type") ~= ""
+      if kept then obs.obs_data_release(kept) end
+    end
     obs.obs_data_release(st)
     obs.obs_data_release(backup)
-    -- from the poll socket: the relay only takes an import from the address that polls
-    send_on(poll_sock, "import\t" .. (info.server or "") .. "\t" .. (info.key or "") .. "\t" .. (info.service or ""))
+    if not ok then recovery_error(backup_path); return end
     table.insert(notes, L("destination and key imported from OBS", "destino e chave importados do OBS", "destino y clave importados de OBS"))
     imported_service = info.service
+  end
+
+  if not record_ini(cfg, path, "Output", "DelayEnable", "false") then return end
+  if not obs_configured() then
+    -- Import only after the recovery data is safely on disk.
+    send_on(poll_sock, "import\t" .. (info.server or "") .. "\t" .. (info.key or "") .. "\t" .. (info.service or ""))
   end
 
   local data = obs.obs_data_create()
   obs.obs_data_set_string(data, "server", relay_server())
   obs.obs_data_set_string(data, "key", "delay")
   obs.obs_data_set_bool(data, "use_auth", false)
-  set_service("rtmp_custom", data)
+  local service_ok = set_service("rtmp_custom", data)
   obs.obs_data_release(data)
+  if not service_ok then
+    report_error(L("OBS could not create the streaming service.", "O OBS não conseguiu criar o serviço de transmissão.", "OBS no pudo crear el servicio de transmisión."))
+    return
+  end
   table.insert(notes, L("OBS streams to ", "OBS transmite para ", "OBS transmite a ") .. relay_server())
 
-  local ok = pcall(function()
-    obs.config_set_bool(obs.obs_frontend_get_profile_config(), "Output", "DelayEnable", false)
-  end)
-  if ok then table.insert(notes, L("built-in Stream Delay turned off", "Stream Delay nativo desligado", "Retraso de transmisión nativo desactivado")) end
-  local limits = apply_platform_limits(imported_service)
+  obs.config_set_bool(cfg, "Output", "DelayEnable", false)
+  if obs.config_save_safe(cfg, "tmp", nil) ~= 0 then recovery_error(path .. "/basic.ini"); return end
+  table.insert(notes, L("built-in Stream Delay turned off", "Stream Delay nativo desligado", "Retraso de transmisión nativo desactivado"))
+  local limits, limits_ok = apply_platform_limits(imported_service)
+  if limits_ok == false then return end
   if limits then table.insert(notes, limits) end
   report(L("Done! ", "Pronto! ", "¡Listo! ") .. table.concat(notes, "; ") .. ".")
 end
@@ -439,16 +555,27 @@ local function restore_obs()
     report_error(L("Stop the stream before restoring.", "Pare a live antes de restaurar.", "Detén la transmisión antes de restaurar."))
     return
   end
-  if not exists(backup_path()) then
+  local path = profile_path()
+  if not path then return end
+  local backup_path = path .. "/service.json.dd-backup"
+  if not exists(backup_path) then backup_path = dir() .. "obs-service-backup.json" end
+  if not exists(backup_path) then
     report_error(L("No original settings were saved.", "Não há configuração original salva.", "No hay configuración original guardada."))
     return
   end
-  local backup = obs.obs_data_create_from_json_file(backup_path())
+  local backup = obs.obs_data_create_from_json_file(backup_path)
+  if backup == nil then recovery_error(backup_path); return end
   local t = obs.obs_data_get_string(backup, "type")
   local st = obs.obs_data_get_obj(backup, "settings")
   if t ~= "" and st ~= nil then
-    set_service(t, st)
-    report(L("Original stream settings restored.", "Configuração original de transmissão restaurada.", "Configuración de transmisión original restaurada."))
+    if set_service(t, st) then
+      -- OBS' save API returns no status. Keep the backup until uninstall completes.
+      report(L("Original stream settings restored.", "Configuração original de transmissão restaurada.", "Configuración de transmisión original restaurada."))
+    else
+      report_error(L("OBS could not restore the streaming service; backup kept.",
+        "O OBS não conseguiu restaurar o serviço de transmissão; backup mantido.",
+        "OBS no pudo restaurar el servicio de transmisión; copia conservada."))
+    end
   else
     report_error(L("The backup of the original settings is empty.", "O backup da configuração original está vazio.", "La copia de seguridad de la configuración original está vacía."))
   end

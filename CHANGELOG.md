@@ -2,6 +2,19 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Windows uninstall now stops before deleting files if OBS is open, the recovery helper cannot start, or restoration fails. Recovery files and the error log remain available for a retry.
+- Configuring OBS from the panel saves each profile's own original service. A failed backup prevents reconfiguration; restoring a profile cannot load another profile's stream key.
+- The installer and Lua bridge journal each changed setting's previous and applied values. Uninstall restores only those fields that still match the applied values, preserves later manual edits and missing defaults, and writes configuration files atomically. Ambiguous encoder backups from older versions remain available for manual recovery.
+
+### Tests
+
+- CI runs the Lua bridge with multiple OBS profiles and verifies its recovery files with the Rust uninstaller; Windows also exercises the real Inno uninstaller with OBS open, a missing helper, a failed restoration and a successful retry.
+- CI runs the VOD end-to-end test with a pinned FFmpeg 8 build. It checks decoding, timestamps and that a live-only audio tone never reaches the VOD track.
+
 ## [0.13.0] - 2026-09-28
 
 ### Added

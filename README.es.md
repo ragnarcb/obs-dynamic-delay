@@ -281,7 +281,7 @@ El plugin se probó con un Stream Deck simulado, todavía no en hardware real: p
 
 | Síntoma | Qué hacer |
 |---|---|
-| `[obs-dynamic-delay.lua] Error opening file: (null)` | El programa se borró con otra herramienta. Ver [Desinstalar de la forma correcta](#desinstalar-de-la-forma-correcta). |
+| `[obs-dynamic-delay.lua] Error opening file: (null)` | OBS sigue haciendo referencia a un script que falta, por ejemplo tras una desinstalación incompleta. Ver [Desinstalar de la forma correcta](#desinstalar-de-la-forma-correcta). |
 | El panel muestra **RELAY CERRADO** | Es normal mientras OBS está iniciando. Si sigue así, abre **Herramientas > Scripts**, verifica que `obs-dynamic-delay.lua` esté en la lista y haz clic en "Reiniciar relay". |
 | El panel dice que falta el token de acceso | Ábrelo desde OBS (menú Docks) o con el botón "Abrir panel" del script, no escribiendo la dirección. |
 | **Plataforma RECONECTANDO** con un error | Casi siempre es una clave o URL incorrecta. Revisa **Configuración**. |
@@ -304,16 +304,22 @@ El relay busca una versión nueva en GitHub al iniciar, cada 6 horas y cuando ha
 ### Desinstalar de la forma correcta
 
 > [!WARNING]
-> Desinstala solo desde **Configuración > Aplicaciones > Dynamic Delay for OBS** de Windows (o menú Inicio > Dynamic Delay for OBS > Desinstalar). **No uses Geek Uninstaller, Revo, IObit ni similares**, y no borres la carpeta a mano: borran los archivos sin ejecutar el paso que devuelve la configuración de OBS, y OBS sigue transmitiendo al relay que ya no existe.
+> **No uses Geek Uninstaller, Revo, IObit ni herramientas similares.** Usa **Configuración > Aplicaciones > Dynamic Delay for OBS** de Windows (o menú Inicio > Dynamic Delay for OBS > Desinstalar). Borrar la carpeta o usar una limpieza forzada que omita el desinstalador puede dejar OBS apuntando a archivos ausentes y un relay que ya no existe.
+>
+> Si la restauración falla, el desinstalador ofrece **Desinstalar de todos modos y conservar los archivos de recuperación**. OBS puede seguir apuntando al relay eliminado; restaura el servicio manualmente con las copias de los perfiles y la configuración conservada. La desinstalación silenciosa se cancela por defecto. En el auxiliar, `--uninstall --quiet --force` permite recuperación incompleta y conserva las copias cuando falla la restauración; si termina correctamente, limpia los archivos de recuperación como en una desinstalación normal. No elimina el programa ni omite la comprobación de OBS abierto.
+
+Si OBS está abierto, la desinstalación se detiene antes de borrar el programa. Si la restauración falla, se detiene salvo que elijas explícitamente desinstalar de todos modos. Cierra OBS y vuelve a intentarlo; `setup.log` en la carpeta de instalación indica el error. Conserva los archivos de recuperación hasta completar el nuevo intento.
 
 1. Cierra OBS.
 2. **Configuración > Aplicaciones > Aplicaciones instaladas > Dynamic Delay for OBS > Desinstalar** de Windows.
-3. Abre OBS. Todo vuelve a como estaba antes de instalar:
+3. Después de una desinstalación correcta, abre OBS. La aplicación restaura los ajustes que cambió:
    - tu servicio de transmisión (Twitch, Kick, YouTube...) con la cuenta conectada;
    - el retraso de transmisión propio de OBS;
    - el bitrate y el intervalo de keyframe, si el script los había ajustado a la plataforma;
    - el script y el panel salen de todos los perfiles y colecciones de escenas.
    Un valor que cambiaste tú después de instalar se mantiene.
+
+Los cambios nuevos se registran por campo y por perfil. En instalaciones antiguas que solo guardaron el archivo completo del codificador, se conservan los valores ambiguos de bitrate/keyframe sin adivinar su origen; el archivo `.dd-backup` permanece en el perfil de OBS para recuperación manual.
 
 **¿Ya lo borraste con otro programa?** Arregla OBS a mano:
 1. **Herramientas > Scripts:** selecciona `obs-dynamic-delay.lua` (muestra el error `Error opening file: (null)`) y pulsa **−** para quitarlo.

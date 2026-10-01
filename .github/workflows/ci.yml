@@ -8,6 +8,7 @@ on:
 jobs:
   test:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -19,7 +20,57 @@ jobs:
       - run: cargo test
       - run: cargo test --features pt
       - run: cargo build --release
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install lupa==2.6
+      - name: OBS bridge and Rust recovery integration
+        env:
+          DD_TEST_BIN: target/release/obs-dynamic-delay.exe
+        run: python scripts/test_obs_bridge.py
+      - name: Inno uninstall failure and retry tests
+        shell: pwsh
+        run: ./scripts/test_setup.ps1
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: setup-test-logs
+          path: ${{ runner.temp }}/dd-setup-*/**/*.log
       - uses: actions/upload-artifact@v4
         with:
           name: obs-dynamic-delay-windows
           path: target/release/obs-dynamic-delay.exe
+
+  vod:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Media test dependencies
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg pkg-config libssl-dev
+      - uses: actions/cache@v4
+        id: ffmpeg
+        with:
+          path: ${{ runner.temp }}/dd-ffmpeg
+          key: ffmpeg-8.0.1-minimal-v1-${{ runner.os }}-${{ runner.arch }}
+      - name: Build pinned FFmpeg with Enhanced FLV support
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        env:
+          DD_FFMPEG_PREFIX: ${{ runner.temp }}/dd-ffmpeg
+        run: bash scripts/build_test_ffmpeg.sh
+      - run: cargo build --release --locked
+      - name: Two-track VOD end-to-end and audio isolation
+        env:
+          FFMPEG_BIN: ${{ runner.temp }}/dd-ffmpeg/bin/ffmpeg
+          FFPROBE_BIN: ${{ runner.temp }}/dd-ffmpeg/bin/ffprobe
+          DD_E2E_WORKDIR: ${{ runner.temp }}/dd-vod-test
+        run: timeout 90s bash scripts/e2e-vod-track.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vod-test-logs
+          path: |
+            ${{ runner.temp }}/dd-vod-test/*.log
+            ${{ runner.temp }}/dd-vod-test/out.flv

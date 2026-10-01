@@ -58,7 +58,7 @@ pub fn quiet(mode: Mode) -> i32 {
             bail!("{}", t!("Close OBS and try again.", "Feche o OBS e tente de novo.", "Cierra OBS e inténtalo de nuevo."));
         }
         match mode {
-            Mode::Uninstall => uninstall(&p)?,
+            Mode::Uninstall => uninstall_with_force(&p, std::env::args().any(|a| a == "--force"))?,
             _ => {
                 install(&p, false)?;
             }
@@ -138,7 +138,7 @@ fn run(mode: Mode) -> Result<()> {
     };
     wait_obs_closed();
     match mode {
-        Mode::Uninstall => uninstall(&p),
+        Mode::Uninstall => uninstall_with_force(&p, std::env::args().any(|a| a == "--force")),
         _ => {
             install(&p, true)?;
             if ask(&t!("Open OBS now? [Y/n] ", "Abrir o OBS agora? [S/n] ", "¿Abrir OBS ahora? [S/n] ")).to_lowercase().starts_with('n') {
@@ -210,21 +210,31 @@ impl Paths {
             .find(|p| p.is_dir())
             .context(t!("no OBS profile found", "nenhum perfil do OBS encontrado", "no se encontró ningún perfil de OBS"))
     }
-    fn profiles(&self) -> Vec<PathBuf> {
-        let Ok(rd) = std::fs::read_dir(self.obs_dir.join("basic").join("profiles")) else { return vec![] };
-        rd.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.is_dir()).collect()
+    fn profiles(&self) -> Result<Vec<PathBuf>> {
+        let mut paths = Vec::new();
+        for entry in std::fs::read_dir(self.obs_dir.join("basic").join("profiles"))? {
+            let entry = entry?;
+            if entry.metadata()?.is_dir() { paths.push(entry.path()); }
+        }
+        Ok(paths)
     }
-    fn scene_collections(&self) -> Vec<PathBuf> {
+    fn scene_collections(&self) -> Result<Vec<PathBuf>> {
         let dir = self.obs_dir.join("basic").join("scenes");
-        let Ok(rd) = std::fs::read_dir(dir) else { return vec![] };
-        rd.filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|x| x == "json"))
-            .collect()
+        let rd = match std::fs::read_dir(dir) {
+            Ok(rd) => rd,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
+            Err(e) => return Err(e.into()),
+        };
+        let mut paths = Vec::new();
+        for entry in rd {
+            let path = entry?.path();
+            if path.extension().is_some_and(|x| x == "json") { paths.push(path); }
+        }
+        Ok(paths)
     }
     fn is_installed(&self) -> bool {
         self.lua().exists()
-            && self.scene_collections().iter().any(|c| {
+            && self.scene_collections().unwrap_or_default().iter().any(|c| {
                 read_json(c).is_ok_and(|v| script_index(&v, &self.lua()).is_some())
             })
     }
@@ -301,13 +311,13 @@ fn install(p: &Paths, interactive: bool) -> Result<Config> {
     // 3. disable OBS' own stream delay
     let basic_ini = profile.join("basic.ini");
     if basic_ini.exists() {
-        edit_ini(&basic_ini, |t| ini_set(t, "Output", "DelayEnable", "false"))?;
+        set_tracked_ini(&basic_ini, "Output", "DelayEnable", "false")?;
         step(&t!("OBS' built-in Stream Delay turned off", "Stream Delay nativo do OBS desligado", "Retraso de transmisión nativo de OBS desactivado"));
     }
 
     // 4. script in every scene collection
     let lua = p.lua();
-    for c in p.scene_collections() {
+    for c in p.scene_collections()? {
         let mut v = read_json(&c)?;
         // drop copies of this script loaded from other folders (older installs)
         let before = v["modules"]["scripts-tool"].as_array().map_or(0, |a| a.len());
@@ -349,15 +359,15 @@ fn install(p: &Paths, interactive: bool) -> Result<Config> {
     // the relay rewrites this file at every start; write it now so the dock works right away
     std::fs::write(p.dock_html(), crate::control::dock_html(&cfg))?;
     let dock_url = format!("file:///{}", slash(&p.dock_html()).trim_start_matches('/'));
+    // Journal only the flag we change, before writing it. The dock is removed by identity.
+    set_tracked_ini(&p.user_ini(), "General", "EnableCustomServerVodTrack", "true")?;
     edit_ini(&p.user_ini(), |t| {
         let mut docks: Vec<Value> = ini_get(t, "BasicWindow", "ExtraBrowserDocks")
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default();
         docks.retain(|d| !is_our_dock(d));
         docks.push(json!({ "title": dock_title(), "url": dock_url, "uuid": uuid() }));
-        let t = ini_set(t, "BasicWindow", "ExtraBrowserDocks", &Value::Array(docks).to_string());
-        // OBS 30+ hides the Twitch VOD track on a custom server unless this is set
-        ini_set(&t, "General", "EnableCustomServerVodTrack", "true")
+        ini_set(t, "BasicWindow", "ExtraBrowserDocks", &Value::Array(docks).to_string())
     })?;
     let dock = dock_title();
     step(&t!("\"{dock}\" panel added (Docks menu)", "painel \"{dock}\" adicionado (menu Docks)", "panel \"{dock}\" agregado (menú Docks)"));
@@ -373,8 +383,23 @@ fn install(p: &Paths, interactive: bool) -> Result<Config> {
     Ok(cfg)
 }
 
+fn uninstall_with_force(p: &Paths, force: bool) -> Result<()> {
+    // Force only tolerates a failure; successful recovery must consume its backups
+    // so a later install cannot reuse originals from the previous installation.
+    match uninstall(p) {
+        Err(e) if force => {
+            step(&format!("WARNING: incomplete OBS recovery: {e:#}"));
+            step("Forced removal allowed; remaining recovery files kept in OBS profiles and the application folder. Manual OBS recovery may be required.");
+            Ok(())
+        }
+        result => result,
+    }
+}
+
 fn uninstall(p: &Paths) -> Result<()> {
-    for c in p.scene_collections() {
+    // Keep all recovery files until every restoration succeeds. A retry is idempotent.
+    let mut cleanup = Vec::new();
+    for c in p.scene_collections()? {
         let mut v = read_json(&c)?;
         // this script from any folder: also copies left by an old install or a folder moved by hand
         if let Some(arr) = v["modules"]["scripts-tool"].as_array_mut() {
@@ -387,9 +412,13 @@ fn uninstall(p: &Paths) -> Result<()> {
     }
     step(&t!("script removed from OBS", "script removido do OBS", "script eliminado de OBS"));
     // the VOD track switch as it was before the install (not there = removed again)
-    let vod_flag_before = std::fs::read_to_string(backup_of(&p.user_ini()))
-        .ok()
-        .and_then(|t| ini_get(t.trim_start_matches('\u{feff}'), "General", "EnableCustomServerVodTrack"));
+    let user_ini = p.user_ini();
+    let user_backup = backup_of(&user_ini);
+    let legacy_user = if !changes_of(&user_ini).exists() && user_backup.exists() {
+        Some(std::fs::read_to_string(&user_backup)?)
+    } else {
+        None
+    };
     if p.user_ini().exists() {
         edit_ini(&p.user_ini(), |t| {
             let mut docks: Vec<Value> = ini_get(t, "BasicWindow", "ExtraBrowserDocks")
@@ -397,50 +426,79 @@ fn uninstall(p: &Paths) -> Result<()> {
                 .unwrap_or_default();
             docks.retain(|d| !is_our_dock(d));
             let t = ini_set(t, "BasicWindow", "ExtraBrowserDocks", &Value::Array(docks).to_string());
-            match &vod_flag_before {
-                Some(v) => ini_set(&t, "General", "EnableCustomServerVodTrack", v),
-                None => ini_remove(&t, "General", "EnableCustomServerVodTrack"),
+            // Legacy installs always set this flag to true. Without a backup (or after
+            // a previous successful uninstall), leave the user's setting alone.
+            if let Some(before) = &legacy_user
+                && ini_get(&t, "General", "EnableCustomServerVodTrack").as_deref() == Some("true")
+            {
+                match ini_get(before.trim_start_matches('\u{feff}'), "General", "EnableCustomServerVodTrack") {
+                    Some(v) => return ini_set(&t, "General", "EnableCustomServerVodTrack", &v),
+                    None => return ini_remove(&t, "General", "EnableCustomServerVodTrack"),
+                }
             }
+            t
         })?;
+        restore_tracked_ini(&user_ini, &[("General", "EnableCustomServerVodTrack")])?;
+        cleanup.push(changes_of(&user_ini));
         step(&t!("panel removed", "painel removido", "panel eliminado"));
     }
     // every profile that streams to the relay gets its own original settings back
     let saved = std::fs::read_to_string(p.config()).ok().and_then(|t| toml::from_str::<Config>(&t).ok());
     let listen = saved.as_ref().map_or_else(|| Config::default().listen, |c| c.listen.clone());
     let mut restored = 0;
-    for prof in p.profiles() {
+    for prof in p.profiles()? {
         let svc = prof.join("service.json");
         let kept = backup_of(&svc);
-        let to_relay = read_json(&svc).ok().and_then(|v| v["settings"]["server"].as_str().map(|s| s.contains(&listen))).unwrap_or(false);
+        let to_relay = match read_json(&svc) {
+            Ok(v) => v["settings"]["server"].as_str().is_some_and(|s| s.contains(&listen)),
+            Err(e) => {
+                // A damaged unrelated profile must not prevent uninstall. Retain all
+                // its evidence; a readable relay address in malformed JSON is unsafe.
+                let relay_evidence = std::fs::read_to_string(&svc).ok()
+                    .is_some_and(|text| text.contains(&listen));
+                if relay_evidence { return Err(e).context("damaged relay profile; recovery files kept"); }
+                step(&format!("WARNING: skipping unreadable profile {}: {e:#}", prof.display()));
+                continue;
+            }
+        };
         if to_relay {
             let current = p.profile_dir().ok().is_some_and(|c| c == prof);
             if kept.exists() {
-                std::fs::copy(&kept, &svc)?;
+                write_json(&svc, &original_service(&kept, &listen)?)?;
                 restored += 1;
             } else if current && p.service_backup().exists() {
                 // installs made before the copy in the profile existed
-                std::fs::copy(p.service_backup(), &svc)?;
+                write_json(&svc, &original_service(&p.service_backup(), &listen)?)?;
                 restored += 1;
             } else if let Some(c) = &saved {
                 // no copy at all (removed by hand, or an old test install): stream straight to
                 // the relay's own destination instead of a relay that is gone
                 write_json(&svc, &service_for(&c.upstream_url, &c.stream_key))?;
                 restored += 1;
+            } else {
+                bail!("cannot restore {}: no original service or relay configuration; recovery files kept", svc.display());
             }
         }
-        let _ = std::fs::remove_file(&kept);
-        restore_profile(&prof)?;
+        cleanup.push(kept);
+        restore_profile(&prof, &mut cleanup)?;
     }
     if restored > 0 {
         step(&t!("original stream settings restored", "configuração de transmissão original restaurada", "configuración de transmisión original restaurada"));
     }
     step(&t!(
-        "OBS stream delay, bitrate and keyframe settings put back as they were",
-        "Stream Delay do OBS, bitrate e keyframe voltaram a ser como eram",
-        "Retraso de transmisión de OBS, bitrate y keyframe volvieron a ser como eran"
+        "OBS settings restored; later manual changes kept",
+        "Configurações do OBS restauradas; alterações manuais posteriores mantidas",
+        "Configuración de OBS restaurada; cambios manuales posteriores conservados"
     ));
-    for f in p.scene_collections().into_iter().chain([p.user_ini()]) {
-        let _ = std::fs::remove_file(backup_of(&f));
+    for f in p.scene_collections()?.into_iter().chain([p.user_ini()]) {
+        cleanup.push(backup_of(&f));
+    }
+    for f in cleanup {
+        match std::fs::remove_file(&f) {
+            Ok(()) => {},
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {},
+            Err(e) => return Err(e).with_context(|| format!("removing {}", f.display())),
+        }
     }
     println!(
         "\n{}",
@@ -580,7 +638,37 @@ fn read_json(p: &Path) -> Result<Value> {
 }
 
 fn write_json(p: &Path, v: &Value) -> Result<()> {
-    std::fs::write(p, serde_json::to_string_pretty(v)?).with_context(|| format!("writing {}", p.display()))
+    atomic_write(p, serde_json::to_string_pretty(v)?.as_bytes())
+}
+
+fn original_service(p: &Path, listen: &str) -> Result<Value> {
+    let service = read_json(p)?;
+    anyhow::ensure!(service["type"].as_str().is_some_and(|t| !t.is_empty()) && service["settings"].is_object(),
+        "invalid original service: {}", p.display());
+    anyhow::ensure!(!service["settings"]["server"].as_str().is_some_and(|s| s.contains(listen)),
+        "backup still points to relay: {}", p.display());
+    Ok(service)
+}
+
+fn atomic_write(p: &Path, contents: &[u8]) -> Result<()> {
+    let tmp = p.with_file_name(format!("{}.{}.dd-tmp", p.file_name().context("missing file name")?.to_string_lossy(), uuid()));
+    let result = (|| -> Result<()> {
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&tmp).with_context(|| format!("writing {}", tmp.display()))?;
+        if p.exists() { file.set_permissions(std::fs::metadata(p)?.permissions())?; }
+        file.write_all(contents)?;
+        file.sync_all()?;
+        drop(file);
+        std::fs::rename(&tmp, p).with_context(|| format!("replacing {}", p.display()))
+    })();
+    if result.is_err() { let _ = std::fs::remove_file(&tmp); }
+    result
 }
 
 /// OBS stream settings that go straight to `url` (the Twitch service itself for Twitch).
@@ -596,52 +684,125 @@ fn backup_of(p: &Path) -> PathBuf {
     PathBuf::from(format!("{}.dd-backup", p.display()))
 }
 
-/// Bitrate caps the OBS script may have set (Twitch, Kick).
-const PLATFORM_CAPS: &[i64] = &[6000, 8000];
+/// Shared with the Lua bridge. An absent `before` means no explicit user value.
+/// INI values are strings; encoder JSON values retain their JSON type.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct SettingChange {
+    before: Option<Value>,
+    applied: Value,
+}
 
-/// Puts back, from the copies taken before the first change, the settings the installer
-/// and the OBS script changed in a profile. A value the streamer changed later is kept.
-fn restore_profile(prof: &Path) -> Result<()> {
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Changes {
+    version: u32,
+    #[serde(default)]
+    legacy_backup: bool,
+    fields: std::collections::BTreeMap<String, SettingChange>,
+}
+
+fn changes_of(p: &Path) -> PathBuf {
+    PathBuf::from(format!("{}.dd-changes.json", p.display()))
+}
+
+fn read_changes(p: &Path) -> Result<Changes> {
+    let changes: Changes = serde_json::from_value(read_json(&changes_of(p))?)?;
+    anyhow::ensure!(changes.version == 1, "unsupported change journal for {}", p.display());
+    Ok(changes)
+}
+
+fn record_change(p: &Path, key: &str, before: Option<Value>, applied: Value) -> Result<()> {
+    if before.as_ref() == Some(&applied) {
+        return Ok(());
+    }
+    let mut changes = if changes_of(p).exists() {
+        read_changes(p)?
+    } else {
+        Changes { version: 1, legacy_backup: backup_of(p).exists(), fields: Default::default() }
+    };
+    let original = match changes.fields.get(key) {
+        Some(previous) if before.as_ref() == Some(&previous.applied) => previous.before.clone(),
+        _ => before,
+    };
+    changes.fields.insert(key.into(), SettingChange { before: original, applied });
+    write_json(&changes_of(p), &serde_json::to_value(changes)?)
+}
+
+fn set_tracked_ini(p: &Path, section: &str, key: &str, value: &str) -> Result<()> {
+    let text = if p.exists() { std::fs::read_to_string(p)? } else { String::new() };
+    let before = ini_get(text.trim_start_matches('\u{feff}'), section, key);
+    record_change(p, &format!("{section}.{key}"), before.map(Value::String), json!(value))?;
+    edit_ini(p, |t| ini_set(t, section, key, value))
+}
+
+fn restore_tracked_ini(p: &Path, keys: &[(&str, &str)]) -> Result<()> {
+    if !changes_of(p).exists() || !p.exists() { return Ok(()); }
+    let changes = read_changes(p)?;
+    for (section, key) in keys {
+        if let Some(change) = changes.fields.get(&format!("{section}.{key}")) {
+            anyhow::ensure!(change.applied.is_string() && change.before.as_ref().is_none_or(Value::is_string),
+                "invalid INI change journal for {}", p.display());
+        }
+    }
+    edit_ini(p, |text| {
+        let mut text = text.to_string();
+        for (section, key) in keys {
+            if let Some(change) = changes.fields.get(&format!("{section}.{key}"))
+                && ini_get(&text, section, key).map(Value::String).as_ref() == Some(&change.applied)
+            {
+                text = match change.before.as_ref().and_then(Value::as_str) {
+                    Some(value) => ini_set(&text, section, key, value),
+                    None => ini_remove(&text, section, key),
+                };
+            }
+        }
+        text
+    })
+}
+
+fn restore_profile(prof: &Path, cleanup: &mut Vec<PathBuf>) -> Result<()> {
     let ini = prof.join("basic.ini");
     let orig = backup_of(&ini);
-    if let (Ok(before), true) = (std::fs::read_to_string(&orig), ini.exists()) {
-        let before = before.trim_start_matches('\u{feff}').to_string();
+    if changes_of(&ini).exists() {
+        let legacy = read_changes(&ini)?.legacy_backup;
+        restore_tracked_ini(&ini, &[("Output", "DelayEnable"), ("SimpleOutput", "VBitrate")])?;
+        cleanup.push(changes_of(&ini));
+        if !legacy { cleanup.push(orig); }
+    } else if orig.exists() && ini.exists() {
+        // Old installers always disabled DelayEnable, but a bitrate equal to a
+        // platform cap is NOT evidence that the script changed it. Keep that backup.
+        let before = std::fs::read_to_string(&orig)?;
         edit_ini(&ini, |t| {
-            let mut t = t.to_string();
-            if let Some(v) = ini_get(&before, "Output", "DelayEnable") {
-                t = ini_set(&t, "Output", "DelayEnable", &v);
+            if ini_get(t, "Output", "DelayEnable").as_deref() == Some("false") {
+                return match ini_get(before.trim_start_matches('\u{feff}'), "Output", "DelayEnable") {
+                    Some(v) => ini_set(t, "Output", "DelayEnable", &v),
+                    None => ini_remove(t, "Output", "DelayEnable"),
+                };
             }
-            let now = ini_get(&t, "SimpleOutput", "VBitrate").and_then(|v| v.parse::<i64>().ok());
-            let was = ini_get(&before, "SimpleOutput", "VBitrate").and_then(|v| v.parse::<i64>().ok());
-            if let (Some(now), Some(was)) = (now, was)
-                && PLATFORM_CAPS.contains(&now)
-                && was > now
-            {
-                t = ini_set(&t, "SimpleOutput", "VBitrate", &was.to_string());
-            }
-            t
+            t.to_string()
         })?;
-        std::fs::remove_file(&orig)?;
     }
     let enc = prof.join("streamEncoder.json");
     let orig = backup_of(&enc);
-    if let (Ok(before), Ok(mut now)) = (read_json(&orig), read_json(&enc)) {
-        let set_by_script = |k: &str, v: &Value| match k {
-            "bitrate" => v.as_i64().is_some_and(|b| PLATFORM_CAPS.contains(&b)),
-            _ => v.as_i64() == Some(2),
-        };
-        for k in ["bitrate", "keyint_sec"] {
-            if now.get(k).is_some_and(|v| set_by_script(k, v)) {
-                match before.get(k) {
-                    Some(v) => now[k] = v.clone(),
-                    None => {
-                        now.as_object_mut().map(|o| o.remove(k));
+    if changes_of(&enc).exists() {
+        let changes = read_changes(&enc)?;
+        if enc.exists() {
+            let mut now = read_json(&enc)?;
+            for key in ["bitrate", "keyint_sec"] {
+                if let Some(change) = changes.fields.get(key)
+                    && now.get(key) == Some(&change.applied)
+                {
+                    match &change.before {
+                        Some(value) => now[key] = value.clone(),
+                        None => { now.as_object_mut().context("encoder settings are not an object")?.remove(key); },
                     }
                 }
             }
+            write_json(&enc, &now)?;
         }
-        write_json(&enc, &now)?;
-        std::fs::remove_file(&orig)?;
+        cleanup.push(changes_of(&enc));
+        if !changes.legacy_backup { cleanup.push(orig); }
+    } else if orig.exists() {
+        step(&format!("legacy encoder backup kept for manual recovery: {}", orig.display()));
     }
     Ok(())
 }
@@ -655,15 +816,14 @@ fn backup_once(p: &Path) -> Result<()> {
 }
 
 fn edit_ini(p: &Path, f: impl FnOnce(&str) -> String) -> Result<()> {
-    let raw = std::fs::read_to_string(p).unwrap_or_default();
+    let raw = if p.exists() { std::fs::read_to_string(p)? } else { String::new() };
     let bom = raw.starts_with('\u{feff}');
     let text = raw.trim_start_matches('\u{feff}');
     if p.exists() {
         backup_once(p)?;
     }
     let out = f(text);
-    std::fs::write(p, if bom { format!("\u{feff}{out}") } else { out })
-        .with_context(|| format!("writing {}", p.display()))
+    atomic_write(p, if bom { format!("\u{feff}{out}") } else { out }.as_bytes())
 }
 
 pub fn ini_get(text: &str, section: &str, key: &str) -> Option<String> {
@@ -790,10 +950,12 @@ mod tests {
         // OBS shows and sends the Twitch VOD track on the custom server
         let user = std::fs::read_to_string(obs.join("user.ini")).unwrap();
         assert_eq!(ini_get(&user, "General", "EnableCustomServerVodTrack").as_deref(), Some("true"));
-        // what the OBS script does on the first Twitch stream (with its backup of the encoder)
-        std::fs::copy(prof.join("streamEncoder.json"), prof.join("streamEncoder.json.dd-backup")).unwrap();
+        // What the OBS script journals on the first Twitch stream.
+        let encoder = prof.join("streamEncoder.json");
+        record_change(&encoder, "bitrate", Some(json!(9000)), json!(6000)).unwrap();
+        record_change(&encoder, "keyint_sec", None, json!(2)).unwrap();
         std::fs::write(prof.join("streamEncoder.json"), r#"{"bitrate":6000,"rate_control":"CBR","keyint_sec":2}"#).unwrap();
-        edit_ini(&prof.join("basic.ini"), |t| ini_set(t, "SimpleOutput", "VBitrate", "6000")).unwrap();
+        set_tracked_ini(&prof.join("basic.ini"), "SimpleOutput", "VBitrate", "6000").unwrap();
         // the streamer switches to another profile before uninstalling
         std::fs::write(obs.join("user.ini"), std::fs::read_to_string(obs.join("user.ini")).unwrap().replace("ProfileDir=Main", "ProfileDir=Other")).unwrap();
         // simulate the old install layout too: the app-folder copy alone must not touch "Other"
@@ -813,9 +975,173 @@ mod tests {
         assert!(!user.contains(dock_title()) || !user.contains("dock.html"));
         // it was not set before the install: gone again
         assert_eq!(ini_get(&user, "General", "EnableCustomServerVodTrack"), None);
-        let leftovers: Vec<_> = walk(&obs).into_iter().filter(|f| f.to_string_lossy().ends_with(".dd-backup")).collect();
+        let leftovers: Vec<_> = walk(&obs).into_iter().filter(|f| {
+            let name = f.to_string_lossy();
+            name.ends_with(".dd-backup") || name.ends_with(".dd-changes.json")
+        }).collect();
         assert!(leftovers.is_empty(), "backup files left: {leftovers:?}");
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn restore_only_fields_we_changed_and_preserve_later_edits() {
+        let root = std::env::temp_dir().join(format!("dd-fields-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let enc = root.join("streamEncoder.json");
+        // The script changes only keyframes. 8000 is a manual bitrate, even though
+        // it happens to equal Kick's cap (the old heuristic restored it incorrectly).
+        write_json(&enc, &json!({"bitrate": 6000, "keyint_sec": 0})).unwrap();
+        record_change(&enc, "keyint_sec", Some(json!(0)), json!(2)).unwrap();
+        write_json(&enc, &json!({"bitrate": 8000, "keyint_sec": 2})).unwrap();
+        restore_profile(&root, &mut vec![]).unwrap();
+        assert_eq!(read_json(&enc).unwrap(), json!({"bitrate":8000,"keyint_sec":0}));
+
+        record_change(&enc, "bitrate", Some(json!(8000)), json!(6000)).unwrap();
+        write_json(&enc, &json!({"bitrate":7500,"keyint_sec":4})).unwrap();
+        restore_profile(&root, &mut vec![]).unwrap();
+        assert_eq!(read_json(&enc).unwrap(), json!({"bitrate":7500,"keyint_sec":4}));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn repeated_caps_keep_the_original_and_rebase_after_manual_edit() {
+        let root = std::env::temp_dir().join(format!("dd-recap-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let enc = root.join("streamEncoder.json");
+        record_change(&enc, "bitrate", Some(json!(10000)), json!(8000)).unwrap();
+        record_change(&enc, "bitrate", Some(json!(8000)), json!(6000)).unwrap();
+        assert_eq!(read_changes(&enc).unwrap().fields["bitrate"].before, Some(json!(10000)));
+        record_change(&enc, "bitrate", Some(json!(9500)), json!(6000)).unwrap();
+        assert_eq!(read_changes(&enc).unwrap().fields["bitrate"].before, Some(json!(9500)));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn corrupt_journal_prevents_changes_and_legacy_caps_are_not_guessed() {
+        let root = std::env::temp_dir().join(format!("dd-corrupt-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let ini = root.join("basic.ini");
+        std::fs::write(&ini, "[Output]\nDelayEnable=true\n").unwrap();
+        std::fs::write(changes_of(&ini), "broken").unwrap();
+        assert!(set_tracked_ini(&ini, "Output", "DelayEnable", "false").is_err());
+        assert!(std::fs::read_to_string(&ini).unwrap().contains("DelayEnable=true"));
+        std::fs::remove_file(changes_of(&ini)).unwrap();
+        let enc = root.join("streamEncoder.json");
+        write_json(&backup_of(&enc), &json!({"bitrate":6000,"keyint_sec":0})).unwrap();
+        write_json(&enc, &json!({"bitrate":8000,"keyint_sec":2})).unwrap();
+        restore_profile(&root, &mut vec![]).unwrap();
+        assert_eq!(read_json(&enc).unwrap()["bitrate"], 8000);
+        assert!(backup_of(&enc).exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn absent_ini_keys_and_manual_vod_switch_survive_repeated_uninstall() {
+        let root = std::env::temp_dir().join(format!("dd-absent-{}", std::process::id()));
+        let prof = root.join("basic/profiles/Main");
+        std::fs::create_dir_all(&prof).unwrap();
+        std::fs::write(prof.join("basic.ini"), "[Output]\nMode=Simple\n").unwrap();
+        let user = root.join("user.ini");
+        std::fs::write(&user, "[Basic]\nProfileDir=Main\n[General]\nEnableCustomServerVodTrack=true\n").unwrap();
+        let p = Paths { obs_dir: root.clone(), install_dir: root.join("relay") };
+        install(&p, false).unwrap();
+        uninstall(&p).unwrap();
+        uninstall(&p).unwrap();
+        assert_eq!(ini_get(&std::fs::read_to_string(prof.join("basic.ini")).unwrap(), "Output", "DelayEnable"), None);
+        assert_eq!(ini_get(&std::fs::read_to_string(&user).unwrap(), "General", "EnableCustomServerVodTrack").as_deref(), Some("true"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn failed_uninstall_keeps_all_recovery_files_and_can_be_retried() {
+        let root = std::env::temp_dir().join(format!("dd-retry-{}", std::process::id()));
+        let p = Paths { obs_dir: root.join("obs"), install_dir: root.join("relay") };
+        for name in ["A", "B"] {
+            let prof = p.obs_dir.join("basic/profiles").join(name);
+            std::fs::create_dir_all(&prof).unwrap();
+            std::fs::write(p.user_ini(), format!("[Basic]\nProfileDir={name}\n")).unwrap();
+            write_json(&prof.join("service.json"), &service_for(TWITCH_URL, name)).unwrap();
+            std::fs::write(prof.join("basic.ini"), "[Output]\nDelayEnable=true\n").unwrap();
+            install(&p, false).unwrap();
+        }
+        let bad = p.obs_dir.join("basic/profiles/B/service.json.dd-backup");
+        std::fs::write(&bad, "broken").unwrap();
+        assert!(uninstall(&p).is_err());
+        for name in ["A", "B"] {
+            let prof = p.obs_dir.join("basic/profiles").join(name);
+            assert!(prof.join("service.json.dd-backup").exists());
+            assert!(prof.join("basic.ini.dd-changes.json").exists());
+        }
+        assert!(p.lua().exists());
+        write_json(&bad, &service_for(TWITCH_URL, "B")).unwrap();
+        uninstall(&p).unwrap();
+        for name in ["A", "B"] {
+            let prof = p.obs_dir.join("basic/profiles").join(name);
+            assert_eq!(read_json(&prof.join("service.json")).unwrap()["settings"]["key"], name);
+            assert_eq!(ini_get(&std::fs::read_to_string(prof.join("basic.ini")).unwrap(), "Output", "DelayEnable").as_deref(), Some("true"));
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn unreadable_unrelated_profile_does_not_block_uninstall() {
+        let root = std::env::temp_dir().join(format!("dd-unrelated-{}", uuid()));
+        let p = Paths { obs_dir: root.join("obs"), install_dir: root.join("relay") };
+        let prof = p.obs_dir.join("basic/profiles/Unrelated");
+        std::fs::create_dir_all(&prof).unwrap();
+        std::fs::write(prof.join("service.json"), "broken JSON").unwrap();
+        std::fs::write(prof.join("service.json.dd-backup"), "keep me").unwrap();
+        uninstall(&p).unwrap();
+        assert_eq!(std::fs::read_to_string(prof.join("service.json.dd-backup")).unwrap(), "keep me");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn force_preserves_recovery_after_missing_config_and_corrupt_relay() {
+        let root = std::env::temp_dir().join(format!("dd-force-{}", uuid()));
+        let p = Paths { obs_dir: root.join("obs"), install_dir: root.join("relay") };
+        let prof = p.obs_dir.join("basic/profiles/Main");
+        std::fs::create_dir_all(&prof).unwrap();
+        let listen = Config::default().listen;
+        write_json(&prof.join("service.json"), &service_for(&format!("rtmp://{listen}/live"), "test")).unwrap();
+        assert!(uninstall(&p).is_err());
+        uninstall_with_force(&p, true).unwrap();
+        std::fs::write(prof.join("service.json.dd-backup"), "corrupt backup").unwrap();
+        assert!(uninstall(&p).is_err());
+        uninstall_with_force(&p, true).unwrap();
+        assert_eq!(std::fs::read_to_string(prof.join("service.json.dd-backup")).unwrap(), "corrupt backup");
+        std::fs::write(prof.join("service.json"), format!("broken rtmp://{listen}/live")).unwrap();
+        assert!(uninstall(&p).is_err());
+        uninstall_with_force(&p, true).unwrap();
+        assert!(prof.join("service.json.dd-backup").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn forced_success_cleans_backups_and_reinstall_restores_current_service() {
+        let root = std::env::temp_dir().join(format!("dd-force-success-{}", uuid()));
+        let p = Paths { obs_dir: root.join("obs"), install_dir: root.join("relay") };
+        let prof = p.obs_dir.join("basic/profiles/Main");
+        std::fs::create_dir_all(&prof).unwrap();
+        std::fs::write(p.user_ini(), "[Basic]\nProfileDir=Main\n").unwrap();
+        write_json(&prof.join("service.json"), &service_for(TWITCH_URL, "original")).unwrap();
+        std::fs::write(prof.join("basic.ini"), "[Output]\nDelayEnable=true\n").unwrap();
+        install(&p, false).unwrap();
+        uninstall_with_force(&p, true).unwrap();
+        assert!(!prof.join("service.json.dd-backup").exists());
+        assert!(!prof.join("basic.ini.dd-backup").exists());
+        assert!(!prof.join("basic.ini.dd-changes.json").exists());
+        assert_eq!(read_json(&prof.join("service.json")).unwrap()["settings"]["key"], "original");
+        // A new install must capture YouTube, not resurrect Twitch's old backup.
+        let youtube = service_for(YOUTUBE_URL, "youtube-original");
+        write_json(&prof.join("service.json"), &youtube).unwrap();
+        std::fs::write(prof.join("basic.ini"), "[Output]\nDelayEnable=false\n").unwrap();
+        install(&p, false).unwrap();
+        uninstall(&p).unwrap();
+        assert_eq!(read_json(&prof.join("service.json")).unwrap(), youtube);
+        assert_eq!(ini_get(&std::fs::read_to_string(prof.join("basic.ini")).unwrap(),
+            "Output", "DelayEnable").as_deref(), Some("false"));
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     fn walk(dir: &Path) -> Vec<PathBuf> {
