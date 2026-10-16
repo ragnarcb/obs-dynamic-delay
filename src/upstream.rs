@@ -57,6 +57,9 @@ struct Output {
     audio_header: Option<OutPacket>,
     /// Headers of the extra audio tracks (the Twitch VOD track), by track id.
     extra_headers: Vec<(u8, OutPacket)>,
+    /// Whether this destination gets the extra audio tracks. Only Twitch takes Enhanced
+    /// RTMP multitrack audio: Kick and the others drop the connection on it.
+    vod_track: bool,
     /// Longest span kept while disconnected or while the network is too slow.
     limit_ms: u32,
     /// Added to every timestamp after a catch-up, so the timeline stays continuous.
@@ -75,6 +78,7 @@ impl Output {
             video_header: None,
             audio_header: None,
             extra_headers: Vec::new(),
+            vod_track: true,
             limit_ms: limit.as_millis() as u32,
             shift: 0,
             last_ts: None,
@@ -84,6 +88,9 @@ impl Output {
     }
 
     fn push(&mut self, p: OutPacket) {
+        if !self.vod_track && p.kind == Kind::Audio && flv::audio_track(&p.data) > 0 {
+            return;
+        }
         // decoder configs are sent in order and also kept for the next reconnect
         match p.kind {
             Kind::Video if flv::video_is_sequence_header(&p.data) => self.video_header = Some(p.clone()),
@@ -191,6 +198,7 @@ async fn session(shared: Arc<Shared>, id: u64, dest: Dest, mut rx: UnboundedRece
     };
     // while disconnected keep the configured backlog; while connected allow a bit of slack
     let mut out = Output::new(outage);
+    out.vod_track = takes_vod_track(&dest.url);
     let connected_limit = outage.max(Duration::from_secs(20));
     loop {
         set(&|o| o.state = UpstreamState::Connecting);
@@ -257,6 +265,17 @@ async fn session(shared: Arc<Shared>, id: u64, dest: Dest, mut rx: UnboundedRece
     }
     set(&|o| o.state = UpstreamState::Idle);
     log::info!("[{}] stream finished", dest.name);
+}
+
+/// The Twitch VOD track (Enhanced RTMP multitrack audio) only goes to Twitch ingests. Kick
+/// also runs on `*.contribute.live-video.net` (IVS), under a 12 hex digit host, and rejects it.
+fn takes_vod_track(url: &str) -> bool {
+    let Some(host) = Url::parse(url).ok().and_then(|u| u.host_str().map(str::to_ascii_lowercase)) else { return false };
+    let first = host.split('.').next().unwrap_or("");
+    let kick = (host.ends_with(".global-contribute.live-video.net") && first.len() == 12 && first.bytes().all(|b| b.is_ascii_hexdigit()))
+        || host == "kick.com"
+        || host.ends_with(".kick.com");
+    !kick && (host == "twitch.tv" || host.ends_with(".twitch.tv") || host.ends_with("contribute.live-video.net"))
 }
 
 /// A write that makes no progress for this long means the connection is dead even
@@ -565,6 +584,30 @@ mod tests {
             o.trim();
             t += 40;
         }
+    }
+
+    #[test]
+    fn vod_track_only_to_twitch() {
+        for u in ["rtmp://live.twitch.tv/app", "rtmps://ingest.global-contribute.live-video.net/app", "rtmp://sao03.contribute.live-video.net/app"] {
+            assert!(takes_vod_track(u), "{u}");
+        }
+        for u in [
+            "rtmps://fa723fc1b171.global-contribute.live-video.net:443/app",
+            "rtmps://FA723FC1B171.global-contribute.live-video.net/app",
+            "rtmp://a.rtmp.youtube.com/live2",
+            "rtmps://live-api-s.facebook.com:443/rtmp/",
+            "not a url",
+        ] {
+            assert!(!takes_vod_track(u), "{u}");
+        }
+        // Kick never sees a multitrack packet, not even its header
+        let mut o = Output::new(Duration::from_secs(10));
+        o.vod_track = false;
+        o.push(OutPacket { kind: Kind::Audio, ts: 0, data: Bytes::from_static(&[0x95, 0x00, b'm', b'p', b'4', b'a', 1, 0x11, 0x90]) });
+        o.push(OutPacket { kind: Kind::Audio, ts: 0, data: Bytes::from_static(&[0x95, 0x01, b'm', b'p', b'4', b'a', 1, 0x21]) });
+        o.push(OutPacket { kind: Kind::Audio, ts: 0, data: Bytes::from_static(&[0xAF, 0x00, 0x11, 0x90]) });
+        assert!(o.extra_headers.is_empty());
+        assert_eq!(o.pending.len(), 1);
     }
 
     #[test]

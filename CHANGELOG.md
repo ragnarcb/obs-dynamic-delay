@@ -2,10 +2,11 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.13.1] - 2026-10-15
 
 ### Fixed
 
+- **Multistream with the Twitch VOD track on: Kick would not start.** The relay sent the VOD track (Enhanced RTMP multitrack audio) to every destination, and Kick drops the connection on it, so Kick kept reconnecting. The VOD track now goes only to Twitch; Kick, YouTube and the other destinations get the normal stream audio.
 - Windows uninstall now stops before deleting files if OBS is open, the recovery helper cannot start, or restoration fails. Recovery files and the error log remain available for a retry.
 - Configuring OBS from the panel saves each profile's own original service. A failed backup prevents reconfiguration; restoring a profile cannot load another profile's stream key.
 - The installer and Lua bridge journal each changed setting's previous and applied values. Uninstall restores only those fields that still match the applied values, preserves later manual edits and missing defaults, and writes configuration files atomically. Ambiguous encoder backups from older versions remain available for manual recovery.
