@@ -28,12 +28,19 @@ pub struct Destination {
     pub enabled: bool,
     /// Goes live together with the stream; otherwise it is started from the panel.
     pub auto_start: bool,
+    /// Video bitrate of its own in kbps, re-encoded by the relay (0 = what OBS sends).
+    pub video_kbps: u32,
 }
 
 impl Default for Destination {
     fn default() -> Self {
-        Destination { id: 0, name: String::new(), url: String::new(), key: String::new(), enabled: true, auto_start: true }
+        Destination { id: 0, name: String::new(), url: String::new(), key: String::new(), enabled: true, auto_start: true, video_kbps: 0 }
     }
+}
+
+/// Own bitrate of a destination: 0 (what OBS sends) or 500 to 50000 kbps.
+fn video_kbps(v: u32) -> u32 {
+    if v == 0 { 0 } else { v.clamp(500, 50_000) }
 }
 
 /// Actions a phone deck key can run. `arg` is seconds, minutes (`delay.timer`), a scene or an audio source.
@@ -251,6 +258,10 @@ pub struct Config {
     /// Main destination and key (empty key = use the key typed in OBS).
     pub upstream_url: String,
     pub stream_key: String,
+    /// The main destination goes live together with the stream (off = only the extras do).
+    pub main_auto_start: bool,
+    /// Video bitrate of the main destination, re-encoded by the relay (0 = what OBS sends).
+    pub main_video_kbps: u32,
     /// Extra destinations for multistreaming.
     pub destinations: Vec<Destination>,
 
@@ -318,6 +329,8 @@ impl Default for Config {
             listen: "127.0.0.1:1935".into(),
             upstream_url: TWITCH_URL.into(),
             stream_key: String::new(),
+            main_auto_start: true,
+            main_video_kbps: 0,
             destinations: Vec::new(),
             delay_seconds: 30,
             start_enabled: false,
@@ -412,6 +425,10 @@ impl Config {
         self.deck.keys.truncate(48);
         self.overlay.normalize();
         self.number_destinations();
+        self.main_video_kbps = video_kbps(self.main_video_kbps);
+        for d in &mut self.destinations {
+            d.video_kbps = video_kbps(d.video_kbps);
+        }
         self.panel_collapsed.retain(|m| ALL_MODULES.contains(&m.as_str()));
         self.panel_collapsed.dedup();
         let mut seen = Vec::new();
@@ -524,7 +541,7 @@ mod tests {
         let mut c = Config::default();
         c.stream_key = r#"a"b\c"#.into();
         c.start_enabled = true;
-        c.destinations.push(Destination { id: 3, name: "YT".into(), url: YOUTUBE_URL.into(), key: "k".into(), enabled: false, auto_start: true });
+        c.destinations.push(Destination { id: 3, name: "YT".into(), url: YOUTUBE_URL.into(), key: "k".into(), enabled: false, auto_start: true, video_kbps: 0 });
         c.scene_rules.push(SceneRule { scene: "Ranked".into(), action: "set:60".into() });
         let text = format!("{HEADER}{}", toml::to_string_pretty(&c).unwrap());
         let parsed: Config = toml::from_str(&text).unwrap();
@@ -616,6 +633,26 @@ mod tests {
         );
         assert_eq!(destination_from_obs("rtmp://127.0.0.1:1935/live", ""), None);
         assert_eq!(destination_from_obs("", "Some service"), None);
+    }
+
+    #[test]
+    fn own_bitrate_is_off_or_in_range() {
+        let mut c = Config {
+            main_video_kbps: 100,
+            destinations: vec![
+                Destination { video_kbps: 0, ..Destination::default() },
+                Destination { video_kbps: 6000, ..Destination::default() },
+                Destination { video_kbps: 900_000, ..Destination::default() },
+            ],
+            ..Config::default()
+        };
+        c.normalize();
+        assert_eq!(c.main_video_kbps, 500);
+        assert_eq!(c.destinations.iter().map(|d| d.video_kbps).collect::<Vec<_>>(), [0, 6000, 50_000]);
+        // older configs have neither field: the main destination still starts with the stream
+        let old: Config = toml::from_str("upstream_url = \"rtmp://a/b\"\n").unwrap();
+        assert!(old.main_auto_start);
+        assert_eq!(old.main_video_kbps, 0);
     }
 
     #[test]

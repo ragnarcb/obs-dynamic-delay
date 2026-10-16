@@ -25,6 +25,8 @@ local ports = { rtmp = 1935, http = 8787, udp = 8788 }
 local lang = "en"
 local api_token = ""
 local dest_urls = {}
+-- the main destination has a bitrate of its own (the relay re-encodes it)
+local main_own_bitrate = false
 
 -- Picks the text for the configured language (Spanish falls back to English).
 local function L(en, pt, es)
@@ -165,10 +167,31 @@ local function read_ports()
   ports.udp = port("udp_listen") or ports.udp
   lang = text:match("\n%s*language%s*=%s*\"(%a+)\"") or lang
   api_token = text:match("\n%s*api_token%s*=%s*\"(%w+)\"") or api_token
-  -- main destination plus every multistream destination
+  -- main destination plus every multistream destination, except those with a bitrate
+  -- of their own: the relay re-encodes their video, so OBS may send more than they take
   dest_urls = {}
-  for u in text:gmatch("\n%s*upstream_url%s*=%s*\"([^\"]*)\"") do table.insert(dest_urls, u) end
-  for u in text:gmatch("\n%s*url%s*=%s*\"([^\"]*)\"") do table.insert(dest_urls, u) end
+  local section, cur, main_url, main_kbps = "", nil, nil, 0
+  local function close()
+    if cur and cur.url and (cur.kbps or 0) == 0 then table.insert(dest_urls, cur.url) end
+    cur = nil
+  end
+  for line in text:gmatch("[^\n]+") do
+    local hdr = line:match("^%s*%[%[?([%w_%.]+)%]%]?%s*$")
+    if hdr then
+      close()
+      section = hdr
+      if hdr == "destinations" then cur = {} end
+    elseif section == "" then
+      main_url = line:match("^%s*upstream_url%s*=%s*\"([^\"]*)\"") or main_url
+      main_kbps = tonumber(line:match("^%s*main_video_kbps%s*=%s*(%d+)")) or main_kbps
+    elseif cur then
+      cur.url = line:match("^%s*url%s*=%s*\"([^\"]*)\"") or cur.url
+      cur.kbps = tonumber(line:match("^%s*video_kbps%s*=%s*(%d+)")) or cur.kbps
+    end
+  end
+  close()
+  main_own_bitrate = main_kbps > 0
+  if main_url and not main_own_bitrate then table.insert(dest_urls, 1, main_url) end
 end
 
 local function relay_server()
@@ -388,7 +411,7 @@ local function platform_limits(service_name)
     if p.max and (max == nil or p.max < max) then max = p.max end
   end
   for _, p in ipairs(PLATFORMS) do
-    if service_name and service_name:lower():find(p.name:lower(), 1, true) == 1 then add(p) end
+    if service_name and not main_own_bitrate and service_name:lower():find(p.name:lower(), 1, true) == 1 then add(p) end
   end
   for _, u in ipairs(dest_urls) do
     local host = (u:match("^%a+://([^/:]+)") or ""):lower()

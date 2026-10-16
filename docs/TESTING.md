@@ -21,7 +21,7 @@ Use an unlisted or test stream (YouTube "unlisted", Twitch with a test title) an
 6. With the delay on, press **Delete before it airs**. The panel shows *Deleted the last ...s*; on the phone, about 30 s later, the stream holds a frame and skips that part.
 7. **Instant replay** and **Save clip**: the clip appears in `Videos\Dynamic Delay` and plays in any player.
 8. If you use them: **panic button** (scene + mute and back), a **scene rule**, a **chat command** from a mod, the **phone QR code**, the **Stream Deck**.
-9. **Multistream:** add a second destination, start a new stream, check both show *connected*.
+9. **Multistream:** add a second destination, start the stream with **Start the stream** in the panel, check both show *connected*. Give one a **bitrate of its own** below OBS's: it shows *re-encoded at ... kbps* and its kbps follows it. `scripts/e2e-bitrate.sh` checks the re-encoding end to end.
 10. **Stop streaming** with the delay on: the platform ends the stream about 30 s later, after the delayed tail.
 
 Something off? Open an issue with `%APPDATA%\obs-dynamic-delay\obs-dynamic-delay.log` and what the panel showed.
@@ -40,7 +40,7 @@ Use uma live de teste ou não listada (YouTube "não listado", Twitch com títul
 6. Com o delay ligado, aperte **Apagar antes de ir ao ar**. O painel mostra *Apagados os últimos ...s*; no celular, uns 30 s depois, a live segura um quadro e pula aquele trecho.
 7. **Replay instantâneo** e **Salvar clipe**: o clipe aparece em `Vídeos\Dynamic Delay` e abre em qualquer player.
 8. Se for usar: **botão de pânico** (cena + mudo e volta), uma **regra por cena**, um **comando no chat** vindo de um mod, o **QR code do celular**, o **Stream Deck**.
-9. **Multistream:** adicione um segundo destino, comece uma live nova e confira os dois *conectados*.
+9. **Multistream:** adicione um segundo destino, ligue a live com **Ligar a live** no painel e confira os dois *conectados*. Dê a um deles um **bitrate próprio** abaixo do OBS: ele mostra *recodificado a ... kbps* e o kbps dele acompanha. `scripts/e2e-bitrate.sh` testa a recodificação de ponta a ponta.
 10. **Pare a transmissão** com o delay ligado: a plataforma encerra uns 30 s depois, após o trecho atrasado.
 
 Algo estranho? Abra uma issue com o `%APPDATA%\obs-dynamic-delay\obs-dynamic-delay.log` e o que o painel mostrou.

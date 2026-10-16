@@ -331,7 +331,12 @@ const TEXT = {
     mainDest: "The main destination is set under Settings. Add more here:", addDest: "Add destination",
     msNow: "Destinations now", msStart: "Go live", msStop: "Stop", msStopped: "stopped",
     msLiveHint: "Each destination goes live or stops on its own, without touching the others or OBS.",
-    msIdle: "Start the stream in OBS: the destinations set to start with the stream go live together, the others can be started here.",
+    goLiveHint: "Tick where to go live and press Start the stream: OBS goes live and only the ticked platforms get the stream. The choice is kept for the next streams.",
+    goLive: "Start the stream", endLive: "End the stream", confirmEnd: "Click again to end the stream on every platform.", onlyThis: "Only this", mainTag: "main",
+    pickOne: "Pick at least one platform to go live on.", obsScriptNeeded: "The OBS script must be running to start the stream from here (Tools > Scripts).",
+    ownKbps: "Bitrate of its own (kbps)", ownKbpsPh: "same as OBS",
+    ownKbpsHint: "Only for this platform: the relay re-encodes the video at this bitrate on the graphics card (NVENC, AMF or Quick Sync). Set OBS to the highest bitrate you use, e.g. OBS at 15000 for YouTube and 6000 here for Twitch.",
+    reencoded: (kbps, enc) => `re-encoded at ${kbps} kbps${enc ? " (" + enc + ")" : ""}`,
     autoStart: "Start together with the stream", kickUrl: "The address of your Kick dashboard (Settings > Stream URL and Key), if it is different.",
     msBandwidth: "Every destination sends the whole stream: two at 6000 kbps need about 12 Mbps of upload.", name: "Name", url: "Server URL", key: "Stream key", enabled: "On",
     remove: "Remove", save: "Save", saved: "Saved.", savedNext: "Saved. Destination changes apply to the next stream.",
@@ -417,7 +422,12 @@ const TEXT = {
     mainDest: "O destino principal fica em Configuração. Adicione outros aqui:", addDest: "Adicionar destino",
     msNow: "Destinos agora", msStart: "Entrar ao vivo", msStop: "Parar", msStopped: "parado",
     msLiveHint: "Cada destino entra ao vivo ou para sozinho, sem mexer nos outros nem no OBS.",
-    msIdle: "Inicie a live no OBS: os destinos marcados para iniciar junto entram ao vivo juntos, os outros dá para iniciar aqui.",
+    goLiveHint: "Marque onde quer entrar ao vivo e aperte Ligar a live: o OBS entra ao vivo e só as plataformas marcadas recebem a live. A escolha fica salva para as próximas lives.",
+    goLive: "Ligar a live", endLive: "Encerrar a live", confirmEnd: "Clique de novo para encerrar a live em todas as plataformas.", onlyThis: "Só esta", mainTag: "principal",
+    pickOne: "Escolha pelo menos uma plataforma para entrar ao vivo.", obsScriptNeeded: "O script do OBS precisa estar rodando para ligar a live por aqui (Ferramentas > Scripts).",
+    ownKbps: "Bitrate próprio (kbps)", ownKbpsPh: "igual ao OBS",
+    ownKbpsHint: "Só para esta plataforma: o relay recodifica o vídeo neste bitrate pela placa de vídeo (NVENC, AMF ou Quick Sync). Deixe o OBS no maior bitrate que você usa, por exemplo o OBS em 15000 para o YouTube e 6000 aqui para a Twitch.",
+    reencoded: (kbps, enc) => `recodificado a ${kbps} kbps${enc ? " (" + enc + ")" : ""}`,
     autoStart: "Iniciar junto com a live", kickUrl: "O endereço do painel da Kick (Configurações > URL e chave da transmissão), se for diferente.",
     msBandwidth: "Cada destino envia a live inteira: dois a 6000 kbps precisam de uns 12 Mbps de upload.", name: "Nome", url: "URL do servidor", key: "Chave de transmissão", enabled: "Ligado",
     remove: "Remover", save: "Salvar", saved: "Salvo.", savedNext: "Salvo. Mudanças de destino valem na próxima live.",
@@ -504,7 +514,12 @@ const TEXT = {
     mainDest: "El destino principal está en Configuración. Agrega otros aquí:", addDest: "Agregar destino",
     msNow: "Destinos ahora", msStart: "Entrar en directo", msStop: "Detener", msStopped: "detenido",
     msLiveHint: "Cada destino entra en directo o se detiene por su cuenta, sin tocar los demás ni OBS.",
-    msIdle: "Inicia la transmisión en OBS: los destinos marcados para iniciar con la transmisión entran en directo juntos, los demás se pueden iniciar aquí.",
+    goLiveHint: "Marca dónde quieres entrar en directo y pulsa Iniciar la transmisión: OBS entra en directo y solo las plataformas marcadas reciben la transmisión. La elección se guarda para las próximas.",
+    goLive: "Iniciar la transmisión", endLive: "Terminar la transmisión", confirmEnd: "Haz clic otra vez para terminar la transmisión en todas las plataformas.", onlyThis: "Solo esta", mainTag: "principal",
+    pickOne: "Elige al menos una plataforma para entrar en directo.", obsScriptNeeded: "El script de OBS debe estar en ejecución para iniciar la transmisión desde aquí (Herramientas > Scripts).",
+    ownKbps: "Bitrate propio (kbps)", ownKbpsPh: "igual que OBS",
+    ownKbpsHint: "Solo para esta plataforma: el relay recodifica el video a este bitrate con la tarjeta gráfica (NVENC, AMF o Quick Sync). Deja OBS en el bitrate más alto que uses, por ejemplo OBS a 15000 para YouTube y 6000 aquí para Twitch.",
+    reencoded: (kbps, enc) => `recodificado a ${kbps} kbps${enc ? " (" + enc + ")" : ""}`,
     autoStart: "Iniciar junto con la transmisión", kickUrl: "La dirección de tu panel de Kick (Configuración > URL y clave de transmisión), si es diferente.",
     msBandwidth: "Cada destino envía la transmisión completa: dos a 6000 kbps necesitan unos 12 Mbps de subida.", name: "Nombre", url: "URL del servidor", key: "Clave de transmisión", enabled: "Activo",
     remove: "Quitar", save: "Guardar", saved: "Guardado.", savedNext: "Guardado. Los cambios de destino se aplican en la próxima transmisión.",
@@ -652,6 +667,11 @@ function copyButton(getText) {
 }
 function numberInput(value, min, max, onchange) {
   return h("input", { type: "number", min, max, value, inputmode: "numeric", onchange: (e) => onchange(Math.max(min, Math.min(max, parseInt(e.target.value) || min))) });
+}
+// Own bitrate of a destination: empty = what OBS sends (0).
+function ownKbpsInput(value, onchange) {
+  return h("input", { type: "number", min: 500, max: 50000, step: 100, value: value || "", placeholder: T().ownKbpsPh, inputmode: "numeric", style: "width:100%;max-width:14rem",
+    onchange: (e) => { const v = parseInt(e.target.value) || 0; onchange(v ? Math.max(500, Math.min(50000, v)) : 0); } });
 }
 const callout = (kind, iconName, ...content) => h("div", { class: "callout " + kind }, icon(iconName), h("div", { class: "callout-body" }, ...content));
 // Scene pickers refresh their options when OBS reports its scenes.
@@ -889,7 +909,8 @@ const MODULES = {
       const cls = { connected: "ok", connecting: "warn", reconnecting: "bad", idle: "" };
       this.outs.replaceChildren(...(s.outputs || []).map((o) => h("div", { class: "out" },
         h("span", { class: "dot " + cls[o.state] }, h("span", {}, h("b", { text: o.name }), ` · ${T().states[o.state]}`)),
-        h("span", { class: "dim", text: o.state === "connected" ? `${o.kbps} kbps` : "" }),
+        h("span", { class: "dim", text: o.state === "connected" ? `${o.kbps} kbps` + (o.video_kbps && o.encoder ? ` · ${T().reencoded(o.video_kbps, o.encoder)}` : "") : "" }),
+        o.running && o.transcode_error ? h("span", { class: "err full", text: o.transcode_error }) : null,
         o.behind_ms > 2000 ? h("span", { class: "note", text: T().behind(Math.round(o.behind_ms / 1000)) }) : null,
         o.behind_ms > 2000 ? button("small", "fastforward", T().catchUp, () => cmd("catchup")) : null,
         o.state !== "connected" && o.error ? h("span", { class: "err full", text: o.error }) : null,
@@ -904,7 +925,12 @@ const MODULES = {
       this.msg = h("span", { class: "note" });
       this.draft = (cfg.destinations || []).map((d) => Object.assign({ auto_start: true }, d));
       this.render();
-      return [h("div", { class: "group", style: "gap:8px" }, h("p", { class: "eyebrow", text: T().msNow }), this.now, this.nowHint),
+      this.goMsg = h("span", { class: "note" });
+      this.armed = 0;
+      this.key = null; // a rebuilt block fills its rows again
+      this.go = button("primary wide", "tower", T().goLive, () => this.goLive());
+      return [h("div", { class: "group", style: "gap:8px" }, h("p", { class: "eyebrow", text: T().msNow }), this.now, this.nowHint,
+          h("div", { class: "actions stack" }, this.go), this.goMsg),
         h("div", { class: "group" }, h("p", { class: "eyebrow", text: T().destinations }), hint(T().mainDest), this.list,
           h("div", { class: "actions" }, button("", "plus", T().addDest, () => {
             this.draft.push({ name: "Kick", url: URLS.kick, key: "", enabled: true, auto_start: true });
@@ -930,31 +956,75 @@ const MODULES = {
             ? field(T().url, h("input", { type: "text", placeholder: "rtmp(s)://...", value: d.url, oninput: (e) => (d.url = e.target.value) }), platform.value === "kick" ? T().kickUrl : null)
             : null,
           h("input", { type: "password", autocomplete: "off", "aria-label": T().key, placeholder: d.key_set ? T().keySaved : T().key, value: d.key_set ? "" : d.key || "", oninput: (e) => (d.key = e.target.value) }),
+          field(T().ownKbps, ownKbpsInput(d.video_kbps, (v) => (d.video_kbps = v)), T().ownKbpsHint),
           check(d.enabled, T().enabled, (e) => (d.enabled = e.target.checked)),
           check(d.auto_start !== false, T().autoStart, (e) => (d.auto_start = e.target.checked)));
       }));
     },
+    // Where the stream goes when OBS starts: the main destination and the extras that are on.
+    picks() {
+      const main = { id: "main", name: PLATFORM_NAMES[platformOfUrl(cfg.upstream_url)] || hostOf(cfg.upstream_url) || T().mainTag, tag: T().mainTag, on: cfg.main_auto_start !== false };
+      const extras = (cfg.destinations || []).filter((d) => d.enabled && d.url).map((d) => ({ id: d.id, name: d.name || hostOf(d.url), on: d.auto_start !== false }));
+      return [main, ...extras];
+    },
+    // Saves which destinations start with the stream (`on`: id -> bool).
+    savePicks(on) {
+      const patch = { main_auto_start: on.main };
+      patch.destinations = (cfg.destinations || []).map((d) => (d.id in on ? Object.assign({}, d, { auto_start: on[d.id] }) : d));
+      saveConfig(patch);
+    },
+    goLive() {
+      const obsLive = !!status?.obs?.streaming || !!status?.engine;
+      this.goMsg.textContent = "";
+      if (obsLive) {
+        if (Date.now() - this.armed > 5000) { this.armed = Date.now(); this.goMsg.textContent = T().confirmEnd; return; }
+        this.armed = 0;
+      } else {
+        if (!this.picks().some((p) => p.on)) { this.goMsg.textContent = T().pickOne; return; }
+        if (!status?.obs?.script) { this.goMsg.textContent = T().obsScriptNeeded; return; }
+      }
+      api("/api/obs/stream/" + (obsLive ? "stop" : "start"), { method: "POST" }).then((r) => { if (!r.ok) toast(r.error, "error"); refresh(); });
+    },
     update(s) {
       const live = !!s.engine;
       const outs = s.outputs || [];
-      this.nowHint.textContent = live ? T().msLiveHint : T().msIdle;
+      const obsLive = !!s.obs?.streaming || live;
+      this.nowHint.textContent = live ? T().msLiveHint : T().goLiveHint;
+      this.go.lbl.textContent = obsLive ? T().endLive : T().goLive;
+      this.go.className = "btn wide " + (obsLive ? "danger" : "primary");
       // rebuild only when something structural changes, so the buttons stay clickable
-      const key = live + "|" + outs.map((o) => [o.id, o.name, o.running, o.state].join(",")).join(";") + lang;
+      const key = live + "|" + outs.map((o) => [o.id, o.name, o.running, o.state, o.transcode_error].join(",")).join(";") + lang;
       if (key !== this.key) {
         this.key = key;
         this.rows = {};
         const cls = { connected: "ok", connecting: "warn", reconnecting: "bad", idle: "" };
-        this.now.replaceChildren(...(live ? outs : []).map((o) => {
+        if (!live) {
+          // before going live: tick where the stream goes
+          const picks = this.picks();
+          const only = (id) => this.savePicks(Object.fromEntries(picks.map((p) => [p.id, p.id === id])));
+          this.now.replaceChildren(...picks.map((p) => h("div", { class: "link-row" },
+            h("label", { class: "check grow" }, h("input", { type: "checkbox", checked: p.on,
+              onchange: (e) => this.savePicks(Object.fromEntries(picks.map((q) => [q.id, q.id === p.id ? e.target.checked : q.on]))) }),
+              h("span", {}, h("b", { text: p.name }), p.tag ? ` · ${p.tag}` : "")),
+            picks.length > 1 ? button("small", null, T().onlyThis, () => only(p.id), { "aria-label": `${T().onlyThis}: ${p.name}` }) : null)));
+          return;
+        }
+        this.now.replaceChildren(...outs.map((o) => {
           const rate = h("span", { class: "dim" });
           this.rows[o.id] = rate;
           const state = o.running ? T().states[o.state] : T().msStopped;
           const btn = o.running
             ? button("small", "x", T().msStop, () => outputAction(o.id, "stop"), { "aria-label": `${T().msStop}: ${o.name}` })
             : button("small primary", "tower", T().msStart, () => outputAction(o.id, "start"), { "aria-label": `${T().msStart}: ${o.name}` });
-          return h("div", { class: "link-row" }, h("span", { class: "dot grow " + (o.running ? cls[o.state] : "") }, h("span", {}, h("b", { text: o.name }), ` · ${state}`)), rate, btn);
+          return h("div", { class: "link-row" }, h("span", { class: "dot grow " + (o.running ? cls[o.state] : "") }, h("span", {}, h("b", { text: o.name }), ` · ${state}`)), rate, btn,
+            o.running && o.transcode_error ? h("span", { class: "err full", text: o.transcode_error }) : null);
         }));
       }
-      for (const o of outs) if (this.rows?.[o.id]) this.rows[o.id].textContent = o.running && o.state === "connected" ? `${o.kbps} kbps` : "";
+      for (const o of outs) {
+        if (!this.rows?.[o.id]) continue;
+        const own = o.video_kbps && o.encoder ? ` · ${T().reencoded(o.video_kbps, o.encoder)}` : "";
+        this.rows[o.id].textContent = o.running && o.state === "connected" ? `${o.kbps} kbps${own}` : "";
+      }
     },
   },
   rules: {
@@ -1172,6 +1242,8 @@ function buildSettings() {
   const urlRow = field(T().serverUrl, url, T().kickUrl);
   const urlHint = urlRow.lastChild;
   const key = h("input", { type: "password", autocomplete: "off", placeholder: cfg.stream_key_set ? T().keySaved : T().keyPaste });
+  let mainKbps = cfg.main_video_kbps || 0;
+  const ownKbps = cfg.features.multistream ? field(T().ownKbps, ownKbpsInput(mainKbps, (v) => (mainKbps = v)), T().ownKbpsHint) : null;
   const grow = h("select", {}, h("option", { value: "rewind", text: T().growRewind }), h("option", { value: "scene", text: T().growScene }),
     h("option", { value: "freeze", text: T().growFreeze }));
   grow.value = cfg.grow_mode;
@@ -1206,13 +1278,13 @@ function buildSettings() {
   const updDownload = button("small", "download", T().download, () => openTarget("releases"));
   updateLine = { text: updText, check: updCheck, download: updDownload };
   const save = button("primary", "check", T().save, () => {
-    const body = { upstream_url: fixedUrl() ? URLS[platform.value] : url.value.trim() || URLS[platform.value] || "", grow_mode: grow.value, delay_scene: scene.value, start_enabled: start.checked };
+    const body = { upstream_url: fixedUrl() ? URLS[platform.value] : url.value.trim() || URLS[platform.value] || "", grow_mode: grow.value, delay_scene: scene.value, start_enabled: start.checked, main_video_kbps: mainKbps };
     if (key.value.trim()) body.stream_key = key.value.trim();
     if (body.grow_mode === "scene" && !body.delay_scene) { msg.textContent = T().pickScene; return; }
     saveConfig(body, msg);
   });
   card.replaceChildren(summary("settings", T().settings), h("div", { class: "card-body" },
-    h("div", { class: "group" }, h("p", { class: "eyebrow", text: T().grpStream }), field(T().platform, platform), urlRow, field(T().streamKey, key)),
+    h("div", { class: "group" }, h("p", { class: "eyebrow", text: T().grpStream }), field(T().platform, platform), urlRow, field(T().streamKey, key), ownKbps),
     h("div", { class: "group" }, h("p", { class: "eyebrow", text: T().grpDelay }), field(T().growLabel, grow), sceneRow,
       h("label", { class: "check" }, start, h("span", { text: T().startEnabled }))),
     h("div", { class: "group" }, h("p", { class: "eyebrow", text: T().grpGeneral }), field(T().language, language),
@@ -1328,11 +1400,13 @@ const downSince = {};
 let scenesKey = null;
 let bannersKey = null;
 let overSince = 0;
-// Strictest bitrate cap among the destinations (same rules as the OBS script).
+// Strictest bitrate cap among the destinations (same rules as the OBS script). A destination
+// with a bitrate of its own gets the video re-encoded, so OBS can send more than its cap.
 function platformLimit() {
   const caps = { Twitch: 6000, Kick: 8000 };
   let best = null;
-  for (const u of [cfg.upstream_url, ...(cfg.destinations || []).filter((d) => d.enabled).map((d) => d.url)]) {
+  const own = (cfg.destinations || []).filter((d) => d.enabled && !d.video_kbps).map((d) => d.url);
+  for (const u of [...(cfg.main_video_kbps ? [] : [cfg.upstream_url]), ...own]) {
     const host = hostOf(u);
     const name = isKickHost(host) ? "Kick" : isTwitchHost(host) ? "Twitch" : null;
     if (name && (!best || caps[name] < best.max)) best = { name, max: caps[name] };

@@ -13,6 +13,11 @@
 #ifndef Exe
   #define Exe "..\target\release\obs-dynamic-delay.exe"
 #endif
+; ffmpeg.exe and its license, fetched by scripts\build_setup.ps1. Skipped when absent (the
+; automated Setup test): then only a destination with a bitrate of its own is affected.
+#ifndef FFmpegDir
+  #define FFmpegDir "..\target\ffmpeg-8.0.1"
+#endif
 #define AppName "Dynamic Delay for OBS"
 ; TestRoot: build a Setup that installs into a test folder (used by the automated test)
 #ifdef TestRoot
@@ -130,6 +135,9 @@ es.Guide=Cómo usar
 [Files]
 Source: "{#Exe}"; DestDir: "{app}"; DestName: "obs-dynamic-delay.exe"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
+Source: "{#FFmpegDir}\ffmpeg.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "{#FFmpegDir}\LICENSE"; DestDir: "{app}"; DestName: "FFMPEG-LICENSE.txt"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "ffmpeg-notice.txt"; DestDir: "{app}"; DestName: "FFMPEG-NOTICE.txt"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#AppName}\{cm:Guide}"; Filename: "{#Repo}#readme"

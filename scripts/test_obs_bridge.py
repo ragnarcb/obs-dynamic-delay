@@ -83,7 +83,7 @@ class BridgeTest(unittest.TestCase):
         obs.LOG_INFO = 200
         # Expose locals only inside this test chunk; no test hooks in shipped code.
         source = (ROOT / "obs/obs-dynamic-delay.lua").read_text(encoding="utf-8")
-        self.bridge = self.lua.execute(source + "\nreturn {configure=configure_obs, restore=restore_obs, limits=apply_platform_limits}")
+        self.bridge = self.lua.execute(source + "\nreturn {configure=configure_obs, restore=restore_obs, limits=apply_platform_limits, read_config=read_ports}")
 
     @property
     def profile(self):
@@ -197,6 +197,39 @@ class BridgeTest(unittest.TestCase):
         self.denied = "streamEncoder.json.dd-changes.json"
         self.bridge.limits("Twitch")
         self.assertEqual(self.read_json(encoder), {"bitrate": 10000, "keyint_sec": 4})
+
+    def multistream(self, twitch_kbps):
+        # what the relay writes: YouTube as the main destination, Twitch as an extra one
+        (self.app / "config.toml").write_text(f"""upstream_url = "rtmp://a.rtmp.youtube.com/live2"
+main_video_kbps = 0
+
+[features]
+multistream = true
+
+[[destinations]]
+id = 1
+name = "Twitch"
+url = "rtmp://live.twitch.tv/app"
+key = "k"
+enabled = true
+auto_start = true
+video_kbps = {twitch_kbps}
+
+[overlay]
+position = "top-left"
+""", encoding="utf-8")
+        self.bridge.read_config()
+
+    def test_destination_with_its_own_bitrate_does_not_cap_obs(self):
+        self.select("Advanced", advanced=True)
+        encoder = self.path / "streamEncoder.json"
+        self.save_json({"bitrate": 15000, "keyint_sec": 2}, encoder)
+        self.multistream(6000)  # Twitch re-encoded by the relay: YouTube keeps 15000
+        self.bridge.limits()
+        self.assertEqual(self.read_json(encoder)["bitrate"], 15000)
+        self.multistream(0)  # Twitch gets what OBS sends: capped
+        self.bridge.limits()
+        self.assertEqual(self.read_json(encoder)["bitrate"], 6000)
 
     def test_repeated_caps_rebase_after_manual_edit(self):
         self.select("Advanced", advanced=True)

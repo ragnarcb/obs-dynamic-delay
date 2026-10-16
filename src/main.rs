@@ -9,6 +9,7 @@ mod ingest;
 mod installer;
 mod rtmp_io;
 mod status;
+mod transcode;
 mod update;
 mod upstream;
 
@@ -161,11 +162,12 @@ async fn relay() -> Result<()> {
 /// whether it goes live together with the stream.
 fn destinations(cfg: &Config, obs_key: &str) -> Vec<(Dest, bool)> {
     let main_key = if cfg.stream_key.is_empty() { obs_key.to_string() } else { cfg.stream_key.clone() };
-    let mut v = vec![(Dest { name: t!("Main", "Principal", "Principal"), url: cfg.upstream_url.clone(), key: main_key }, true)];
+    let main = Dest { name: t!("Main", "Principal", "Principal"), url: cfg.upstream_url.clone(), key: main_key, video_kbps: cfg.main_video_kbps };
+    let mut v = vec![(main, cfg.main_auto_start)];
     let extras = if cfg.features.multistream { cfg.destinations.as_slice() } else { &[] };
     for d in extras.iter().filter(|d| d.enabled && !d.url.is_empty()) {
         let name = if d.name.trim().is_empty() { d.url.clone() } else { d.name.clone() };
-        v.push((Dest { name, url: d.url.clone(), key: d.key.clone() }, d.auto_start));
+        v.push((Dest { name, url: d.url.clone(), key: d.key.clone(), video_kbps: d.video_kbps }, d.auto_start));
     }
     v
 }
@@ -213,7 +215,11 @@ impl Outputs {
         if s.tx.is_some() {
             return;
         }
-        let tx = upstream::spawn(shared.clone(), s.id, Dest { name: s.dest.name.clone(), url: s.dest.url.clone(), key: s.dest.key.clone() }, self.outage);
+        let d = &s.dest;
+        let mut tx = upstream::spawn(shared.clone(), s.id, Dest { name: d.name.clone(), url: d.url.clone(), key: d.key.clone(), video_kbps: d.video_kbps }, self.outage);
+        if d.video_kbps > 0 {
+            tx = transcode::spawn(shared.clone(), s.id, d.name.clone(), d.video_kbps, tx);
+        }
         for m in primer {
             let _ = tx.send(clone_msg(m));
         }
@@ -242,7 +248,7 @@ impl Outputs {
             match self.slots.iter().position(|s| s.dest.name == dest.name) {
                 Some(i) => {
                     let mut s = self.slots.remove(i);
-                    let changed = s.dest.url != dest.url || s.dest.key != dest.key;
+                    let changed = s.dest.url != dest.url || s.dest.key != dest.key || s.dest.video_kbps != dest.video_kbps;
                     s.dest = dest;
                     s.auto = auto;
                     kept.push((s, changed, false));
@@ -290,7 +296,10 @@ impl Outputs {
                 o.name = s.dest.name.clone();
                 o.running = s.tx.is_some();
                 o.auto_start = s.auto;
+                o.video_kbps = s.dest.video_kbps;
                 if !o.running {
+                    o.encoder.clear();
+                    o.transcode_error = None;
                     o.state = UpstreamState::Idle;
                     o.kbps = 0;
                     o.behind_ms = 0;

@@ -44,7 +44,7 @@ OBS' built-in "Stream Delay" can only be changed while the stream is stopped. Wi
 **Content and reach**
 - **Instant replay** of the last seconds on air, like a sports replay.
 - **Clips:** saves the last seconds as MP4, ready for TikTok and Shorts.
-- **Multistream:** Twitch, YouTube, Kick and any RTMP/RTMPS destination at the same time, from a single OBS output.
+- **Multistream:** Twitch, YouTube, Kick and any RTMP/RTMPS destination at the same time, from a single OBS output. Pick where to go live with one button, and give each platform a bitrate of its own.
 - **Connection drop protection:** if a platform connection drops, what could not be sent is kept and sent after it reconnects, so viewers miss nothing.
 
 **Control**
@@ -180,7 +180,11 @@ Stream to Twitch, Kick, YouTube, Facebook or any RTMP(S) server at the same time
 
 While live, **Destinations now** lists every destination with its state and bitrate and a **Go live** / **Stop** button: each one starts or stops on its own, without touching the others or OBS. Settings changes apply right away: a new destination goes live (if set to start with the stream), a removed one stops, a changed key or address reconnects. A destination started in the middle of the stream begins cleanly at a keyframe. The phone deck has a key for it too (**Multistream: start/stop a destination**, hold to confirm).
 
-Each destination gets the same delayed stream over its own connection, and a problem in one does not affect the others. Your upload has to carry the bitrate once per destination (two at 6000 kbps need about 12 Mbps).
+**Pick where to go live.** Before the stream, **Destinations now** lists the main destination and the extras with a tick box each: tick where to go live (or press **Only this** next to one) and press **Start the stream**. OBS goes live and only the ticked platforms get the stream, without changing the main destination or the multistream settings. The choice is kept for the next streams. The same button ends the stream (click twice). It needs the OBS script running.
+
+**A bitrate of its own per platform.** Each destination, the main one included (under Settings), has a **Bitrate of its own (kbps)** field. Empty, the platform gets what OBS sends. With a value, the relay re-encodes the video for that platform only, on the graphics card (NVENC, AMF or Quick Sync, x264 if none of them works), after the delay, so delete, replay and the rest work the same; the audio and the Twitch VOD track are not touched. Set OBS to the highest bitrate you use and lower the others: OBS at 15000 for YouTube and 6000 on Twitch, for example. The stream status shows *re-encoded at 6000 kbps (NVENC)*. A destination with a bitrate of its own does not hold OBS to its platform's cap (Twitch 6000, Kick 8000) anymore. The Setup includes ffmpeg for this (GPLv3, see `FFMPEG-NOTICE.txt`).
+
+Each destination gets the delayed stream over its own connection, and a problem in one does not affect the others. Your upload has to carry the bitrate once per destination (two at 6000 kbps need about 12 Mbps).
 
 ### Connection drop protection
 

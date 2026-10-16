@@ -39,6 +39,8 @@ pub struct Dest {
     pub name: String,
     pub url: String,
     pub key: String,
+    /// Video bitrate of its own, re-encoded by [`crate::transcode`] (0 = what OBS sends).
+    pub video_kbps: u32,
 }
 
 /// Starts publishing to `dest`; the session ends on [`UpMsg::Stop`]. `id` is the
@@ -269,7 +271,11 @@ async fn session(shared: Arc<Shared>, id: u64, dest: Dest, mut rx: UnboundedRece
 
 /// The Twitch VOD track (Enhanced RTMP multitrack audio) only goes to Twitch ingests. Kick
 /// also runs on `*.contribute.live-video.net` (IVS), under a 12 hex digit host, and rejects it.
+/// `DD_VOD_TRACK_ANY_HOST` sends it everywhere (end-to-end tests with a local receiver).
 fn takes_vod_track(url: &str) -> bool {
+    if std::env::var_os("DD_VOD_TRACK_ANY_HOST").is_some() {
+        return true;
+    }
     let Some(host) = Url::parse(url).ok().and_then(|u| u.host_str().map(str::to_ascii_lowercase)) else { return false };
     let first = host.split('.').next().unwrap_or("");
     let kick = (host.ends_with(".global-contribute.live-video.net") && first.len() == 12 && first.bytes().all(|b| b.is_ascii_hexdigit()))

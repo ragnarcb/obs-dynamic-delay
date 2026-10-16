@@ -1,0 +1,16 @@
+ffmpeg.exe
+==========
+
+Dynamic Delay uses ffmpeg.exe only to re-encode the video of a destination that
+has a bitrate of its own (for example Twitch at 6000 kbps while OBS sends 15000
+to YouTube). It runs as a separate program; Dynamic Delay talks to it through
+pipes.
+
+Build:   FFmpeg 8.0.1, "essentials" build by gyan.dev
+         https://github.com/GyanD/codexffmpeg/releases/tag/8.0.1
+License: GNU General Public License version 3 (see FFMPEG-LICENSE.txt).
+Source:  https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz
+         and the build configuration at https://www.gyan.dev/ffmpeg/builds/
+
+FFmpeg is a trademark of Fabrice Bellard, originator of the FFmpeg project.
+Dynamic Delay is not affiliated with the FFmpeg project.

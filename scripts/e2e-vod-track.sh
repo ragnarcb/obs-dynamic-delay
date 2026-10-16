@@ -39,7 +39,8 @@ EOF
   -i rtmp://127.0.0.1:1941/app/testkey -map 0:v -map 0:a -c copy out.flv > receiver.log 2>&1 &
 RECV=$!; pids+=("$RECV")
 sleep 1
-"$BIN" test.toml > relay.log 2>&1 &
+# the VOD track only goes to Twitch ingests; the local receiver stands in for one
+DD_VOD_TRACK_ANY_HOST=1 "$BIN" test.toml > relay.log 2>&1 &
 RELAY=$!; pids+=("$RELAY")
 for _ in {1..100}; do
   if [ -f test.toml ]; then TOKEN="$(sed -n 's/^api_token = "\(.*\)"/\1/p' test.toml)"; fi

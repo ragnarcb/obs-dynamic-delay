@@ -293,6 +293,12 @@ pub struct OutputStatus {
     /// How far behind the delayed stream this destination runs after an outage.
     pub behind_ms: u32,
     pub reconnects: u32,
+    /// Own video bitrate, re-encoded by the relay (0 = what OBS sends).
+    pub video_kbps: u32,
+    /// Encoder doing that ("NVENC", "x264"...), empty while not re-encoding.
+    pub encoder: String,
+    /// Why the video is sent as OBS sends it although a bitrate of its own is set.
+    pub transcode_error: Option<String>,
 }
 
 impl OutputStatus {
@@ -309,6 +315,9 @@ impl OutputStatus {
             kbps: 0,
             behind_ms: 0,
             reconnects: 0,
+            video_kbps: 0,
+            encoder: String::new(),
+            transcode_error: None,
         }
     }
 }

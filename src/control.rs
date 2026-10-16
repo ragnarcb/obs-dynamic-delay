@@ -65,6 +65,7 @@ pub async fn serve_http(tx: UnboundedSender<EngineMsg>, shared: Arc<Shared>) -> 
         .route("/api/obs/restore", post(obs_restore))
         .route("/api/obs/fps/{fps}", post(obs_fps))
         .route("/api/obs/overlay", post(obs_overlay))
+        .route("/api/obs/stream/{action}", post(obs_stream))
         .route("/api/update/check", post(update_check))
         .route("/api/output/{id}/{action}", post(output_action))
         .route("/api/open/{target}", post(open_target))
@@ -272,7 +273,11 @@ async fn set_config(State(s): State<AppState>, Json(patch): Json<Value>) -> impl
             Err(e) => return Json(json!({ "ok": false, "error": e })),
         };
         let delay_changed = cfg.delay_seconds != cur.delay_seconds;
-        let dest_changed = cfg.upstream_url != cur.upstream_url || cfg.stream_key != cur.stream_key || cfg.destinations != cur.destinations;
+        let dest_changed = cfg.upstream_url != cur.upstream_url
+            || cfg.stream_key != cur.stream_key
+            || cfg.main_auto_start != cur.main_auto_start
+            || cfg.main_video_kbps != cur.main_video_kbps
+            || cfg.destinations != cur.destinations;
         if cfg.language != cur.language {
             i18n::set(Lang::parse(&cfg.language));
         }
@@ -379,6 +384,30 @@ fn queue_obs_action(s: &AppState, action: ObsAction) -> Json<Value> {
     }
     b.pending.push_back(action);
     Json(json!({ "ok": true }))
+}
+
+/// Starts or stops the stream in OBS ("Go live" in the panel). The destinations
+/// set to start with the stream go live with it.
+async fn obs_stream(State(s): State<AppState>, Path(action): Path<String>) -> impl IntoResponse {
+    let want = match action.as_str() {
+        "start" => true,
+        "stop" => false,
+        _ => return Json(json!({ "ok": false, "error": "use start or stop" })),
+    };
+    if want {
+        let c = s.shared.config.lock().unwrap();
+        let extras = c.features.multistream && c.destinations.iter().any(|d| d.enabled && d.auto_start && !d.url.is_empty());
+        if !c.main_auto_start && !extras {
+            return Json(json!({
+                "ok": false,
+                "error": t!("Pick at least one platform to go live on.", "Escolha pelo menos uma plataforma para entrar ao vivo.", "Elige al menos una plataforma para entrar en directo.")
+            }));
+        }
+    }
+    if s.shared.bridge.lock().unwrap().streaming == want {
+        return Json(json!({ "ok": true }));
+    }
+    queue_obs_action(&s, ObsAction::ToggleStream)
 }
 
 async fn obs_configure(State(s): State<AppState>) -> impl IntoResponse {
@@ -673,7 +702,7 @@ mod tests {
         let mut cur = Config::default();
         cur.stream_key = "main-key".into();
         cur.api_token = "tok".into();
-        cur.destinations.push(Destination { id: 1, name: "YT".into(), url: "rtmp://yt/live2".into(), key: "yt-key".into(), enabled: true, auto_start: true });
+        cur.destinations.push(Destination { id: 1, name: "YT".into(), url: "rtmp://yt/live2".into(), key: "yt-key".into(), enabled: true, auto_start: true, video_kbps: 0 });
         let public = public_config(&cur);
         assert_eq!(public["stream_key"], "");
         assert!(public.get("api_token").is_none());

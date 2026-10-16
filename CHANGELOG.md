@@ -2,6 +2,20 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.14.0] - 2026-10-16
+
+### Added
+
+- **Pick where to go live, with one button.** Before the stream, the Multistream block lists the main destination and the extras with a tick box each, plus **Only this**. **Start the stream** starts OBS and only the ticked platforms go live; the main destination can now be left out (`main_auto_start`). The same button ends the stream (click twice). API: `POST /api/obs/stream/start|stop`.
+- **A bitrate of its own per platform** (`video_kbps` per destination, `main_video_kbps` for the main one). The relay re-encodes that destination's video after the delay with ffmpeg on the graphics card (NVENC, AMF, Quick Sync, x264 as the fallback), keeping OBS' keyframes and timestamps; audio and the Twitch VOD track pass through untouched. If ffmpeg is missing or fails three times in a row, the stream goes on as OBS sends it and the reason shows in the panel. The Setup ships ffmpeg 8.0.1 (gyan.dev essentials, GPLv3, pinned by hash).
+- The OBS script and the panel no longer cap OBS' bitrate for a destination that has a bitrate of its own (OBS at 15000 for YouTube with Twitch re-encoded at 6000).
+- `scripts/e2e-bitrate.sh`: end-to-end test of a re-encoded destination started mid-stream, with the delay toggled.
+
+### Fixed
+
+- The Multistream block lost its destination rows after saving any setting until the next state change.
+- The VOD end-to-end test in CI failed since 0.13.1 (its local receiver is not a Twitch ingest, so the VOD track was left out): `DD_VOD_TRACK_ANY_HOST` lets the test send it.
+
 ## [0.13.1] - 2026-10-15
 
 ### Fixed

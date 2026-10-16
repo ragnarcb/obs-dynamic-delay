@@ -44,7 +44,7 @@ O "Stream Delay" que já vem no OBS só pode ser mudado com a live parada. Com o
 **Conteúdo e alcance**
 - **Replay instantâneo** dos últimos segundos no ar, como replay de jogada.
 - **Clipes:** salva os últimos segundos em MP4, pronto para TikTok e Shorts.
-- **Multistream:** Twitch, YouTube, Kick e qualquer destino RTMP/RTMPS ao mesmo tempo, com uma saída só do OBS.
+- **Multistream:** Twitch, YouTube, Kick e qualquer destino RTMP/RTMPS ao mesmo tempo, com uma saída só do OBS. Escolha onde ligar a live com um botão só e dê a cada plataforma um bitrate próprio.
 - **Proteção contra queda de conexão:** se a conexão com uma plataforma cair, o que não foi enviado fica guardado e é enviado quando ela voltar, e o público não perde nada.
 
 **Controle**
@@ -180,7 +180,11 @@ Transmita para Twitch, Kick, YouTube, Facebook ou qualquer servidor RTMP(S) ao m
 
 Com a live no ar, **Destinos agora** mostra cada destino com o estado e o bitrate e um botão **Entrar ao vivo** / **Parar**: cada um entra ou para sozinho, sem mexer nos outros nem no OBS. Mudanças na configuração valem na hora: um destino novo entra ao vivo (se estiver para iniciar junto), um removido para, uma chave ou endereço trocado reconecta. Um destino ligado no meio da live começa limpo, num keyframe. O deck no celular também tem um botão para isso (**Multistream: ligar/desligar um destino**, segurar para confirmar).
 
-Cada destino recebe a mesma live atrasada numa conexão própria, e um problema em um não afeta os outros. A sua internet precisa aguentar o bitrate uma vez para cada destino (dois a 6000 kbps precisam de uns 12 Mbps de upload).
+**Escolha onde ligar a live.** Antes da live, **Destinos agora** mostra o destino principal e os extras, cada um com uma caixa: marque onde quer entrar ao vivo (ou aperte **Só esta** ao lado de um) e aperte **Ligar a live**. O OBS entra ao vivo e só as plataformas marcadas recebem a live, sem trocar o destino principal nem mexer na configuração do multistream. A escolha fica salva para as próximas lives. O mesmo botão encerra a live (dois cliques). Precisa do script do OBS rodando.
+
+**Bitrate próprio por plataforma.** Cada destino, inclusive o principal (em Configuração), tem o campo **Bitrate próprio (kbps)**. Vazio, a plataforma recebe o que o OBS manda. Com um valor, o relay recodifica o vídeo só para aquela plataforma, pela placa de vídeo (NVENC, AMF ou Quick Sync, e x264 se nenhuma funcionar), depois do delay, então apagar, replay e o resto funcionam igual; o áudio e a faixa da VOD da Twitch não são mexidos. Deixe o OBS no maior bitrate que você usa e baixe os outros: o OBS em 15000 para o YouTube e 6000 na Twitch, por exemplo. O status mostra *recodificado a 6000 kbps (NVENC)*. Um destino com bitrate próprio não segura mais o OBS no limite da plataforma dele (Twitch 6000, Kick 8000). O instalador traz o ffmpeg para isso (GPLv3, veja `FFMPEG-NOTICE.txt`).
+
+Cada destino recebe a live atrasada numa conexão própria, e um problema em um não afeta os outros. A sua internet precisa aguentar o bitrate uma vez para cada destino (dois a 6000 kbps precisam de uns 12 Mbps de upload).
 
 ### Proteção contra queda de conexão
 

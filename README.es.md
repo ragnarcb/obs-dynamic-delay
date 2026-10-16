@@ -44,7 +44,7 @@ El "Retraso de transmisión" nativo de OBS solo se puede cambiar con la transmis
 **Contenido y alcance**
 - **Repetición instantánea** de los últimos segundos al aire, como una repetición deportiva.
 - **Clips:** guarda los últimos segundos en MP4, listos para TikTok y Shorts.
-- **Multistream:** Twitch, YouTube, Kick y cualquier destino RTMP/RTMPS a la vez, desde una sola salida de OBS.
+- **Multistream:** Twitch, YouTube, Kick y cualquier destino RTMP/RTMPS a la vez, desde una sola salida de OBS. Elige dónde entrar en directo con un solo botón y dale a cada plataforma un bitrate propio.
 - **Protección contra caídas de conexión:** si se cae la conexión con una plataforma, lo que no se pudo enviar se guarda y se envía al reconectar, así el público no se pierde nada.
 
 **Control**
@@ -180,7 +180,11 @@ Transmite a Twitch, Kick, YouTube, Facebook o cualquier servidor RTMP(S) a la ve
 
 En directo, **Destinos ahora** muestra cada destino con su estado y bitrate y un botón **Entrar en directo** / **Detener**: cada uno inicia o se detiene por su cuenta, sin tocar los demás ni OBS. Los cambios de configuración se aplican al instante: un destino nuevo entra en directo (si está configurado para iniciar con la transmisión), uno eliminado se detiene, una clave o dirección cambiada se reconecta. Un destino iniciado a mitad de la transmisión empieza limpio en un keyframe. El deck en el celular también tiene un botón para esto (**Multistream: iniciar/detener un destino**, mantén presionado para confirmar).
 
-Cada destino recibe la misma transmisión con delay por su propia conexión, y un problema en uno no afecta a los demás. Tu subida tiene que soportar el bitrate una vez por destino (dos a 6000 kbps necesitan unos 12 Mbps).
+**Elige dónde entrar en directo.** Antes de la transmisión, **Destinos ahora** muestra el destino principal y los extra, cada uno con una casilla: marca dónde entrar en directo (o pulsa **Solo esta** junto a uno) y pulsa **Iniciar la transmisión**. OBS entra en directo y solo las plataformas marcadas reciben la transmisión, sin cambiar el destino principal ni la configuración del multistream. La elección se guarda para las próximas. El mismo botón termina la transmisión (dos clics). Necesita el script de OBS en ejecución.
+
+**Bitrate propio por plataforma.** Cada destino, el principal incluido (en Configuración), tiene el campo **Bitrate propio (kbps)**. Vacío, la plataforma recibe lo que envía OBS. Con un valor, el relay recodifica el video solo para esa plataforma, con la tarjeta gráfica (NVENC, AMF o Quick Sync, y x264 si ninguna funciona), después del delay, así que borrar, la repetición y lo demás funcionan igual; el audio y la pista del VOD de Twitch no se tocan. Deja OBS en el bitrate más alto que uses y baja los demás: OBS a 15000 para YouTube y 6000 en Twitch, por ejemplo. El estado muestra *recodificado a 6000 kbps (NVENC)*. Un destino con bitrate propio ya no limita OBS al tope de su plataforma (Twitch 6000, Kick 8000). El instalador incluye ffmpeg para esto (GPLv3, ver `FFMPEG-NOTICE.txt`).
+
+Cada destino recibe la transmisión con delay por su propia conexión, y un problema en uno no afecta a los demás. Tu subida tiene que soportar el bitrate una vez por destino (dos a 6000 kbps necesitan unos 12 Mbps).
 
 ### Protección contra caídas de conexión
 
