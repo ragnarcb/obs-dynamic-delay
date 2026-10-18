@@ -2,6 +2,18 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.14.3] - 2026-10-18
+
+### Changed
+
+- **A bitrate of its own at 1080p60 with a game running.** The re-encoding now decodes OBS' video on the graphics card and hands the frames straight to its encoder (D3D11 for AMF, picking the right card on PCs with two, CUDA for NVENC, Quick Sync for Intel): about 14x less CPU than before, the CPU a game is using too. If the card cannot decode the stream, it goes back to the CPU by itself. ffmpeg also runs above normal priority, like OBS, and AMF uses its lighter "speed" mode.
+
+### Fixed
+
+- Timestamps of the re-encoded video stay in milliseconds: on the encoder's frame-rate grid, the delay's filler frames could get the same timestamp as the frame next to them.
+- AMF overshot the bitrate asked by about 13%; now about 8% at worst (smaller rate buffer).
+- `DD_HW_DECODE=0` decodes on the CPU (troubleshooting).
+
 ## [0.14.2] - 2026-10-18
 
 ### Fixed

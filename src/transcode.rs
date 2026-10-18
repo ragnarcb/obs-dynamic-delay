@@ -32,16 +32,44 @@ struct Encoder {
     label: &'static str,
     codec: &'static str,
     args: &'static [&'static str],
+    /// Decoding on the same graphics card, frames handed to the encoder there: barely any
+    /// CPU, which a game is using too (14x less CPU than decoding 1080p60 on it).
+    /// `{dev}` is a D3D11 adapter number, tried in turn on PCs with two cards.
+    hw_decode: &'static [&'static str],
 }
 
 // The hardware encoders turn a forced keyframe into a plain I-frame unless told to make
 // it an IDR: the stream then has a keyframe only every 8 s, and Twitch drops it.
 const ENCODERS: &[Encoder] = &[
-    Encoder { label: "NVENC", codec: "h264_nvenc", args: &["-preset", "p5", "-tune", "hq", "-rc", "cbr", "-forced-idr", "1"] },
-    Encoder { label: "AMF", codec: "h264_amf", args: &["-usage", "transcoding", "-quality", "balanced", "-rc", "cbr", "-forced_idr", "1"] },
-    Encoder { label: "Quick Sync", codec: "h264_qsv", args: &["-preset", "medium", "-forced_idr", "1"] },
-    Encoder { label: "x264", codec: "libx264", args: &["-preset", "veryfast", "-x264-params", "nal-hrd=cbr"] },
+    Encoder {
+        label: "NVENC",
+        codec: "h264_nvenc",
+        args: &["-preset", "p5", "-tune", "hq", "-rc", "cbr", "-forced-idr", "1"],
+        // NVDEC takes at most 32 surfaces: 8 extra already fails on 1080p H.264
+        hw_decode: &["-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-extra_hw_frames", "4"],
+    },
+    Encoder {
+        label: "AMF",
+        codec: "h264_amf",
+        // "speed": the card's encoder also runs OBS' own encode
+        args: &["-usage", "transcoding", "-quality", "speed", "-rc", "cbr", "-forced_idr", "1"],
+        hw_decode: &["-hwaccel", "d3d11va", "-hwaccel_device", "{dev}", "-hwaccel_output_format", "d3d11", "-extra_hw_frames", "16"],
+    },
+    Encoder {
+        label: "Quick Sync",
+        codec: "h264_qsv",
+        args: &["-preset", "medium", "-forced_idr", "1"],
+        hw_decode: &["-hwaccel", "qsv", "-hwaccel_output_format", "qsv", "-extra_hw_frames", "8"],
+    },
+    Encoder { label: "x264", codec: "libx264", args: &["-preset", "veryfast", "-x264-params", "nal-hrd=cbr"], hw_decode: &[] },
 ];
+
+/// What re-encodes on this PC: the encoder and how the video is decoded for it.
+struct Pick {
+    enc: &'static Encoder,
+    /// Decoding options (empty: on the CPU).
+    decode: Vec<String>,
+}
 
 /// Audio is held back for the video it goes with; with no video coming out of
 /// ffmpeg for this long it goes on alone.
@@ -72,45 +100,90 @@ fn ffmpeg_path() -> PathBuf {
 fn command(path: &PathBuf) -> Command {
     let mut c = Command::new(path);
     c.kill_on_drop(true).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    // CREATE_NO_WINDOW (no console flashing up while live) and ABOVE_NORMAL_PRIORITY_CLASS,
+    // as OBS runs itself: a game at normal priority must not starve the re-encoding
     #[cfg(windows)]
-    c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW: no console flashing up while live
+    c.creation_flags(0x0800_0000 | 0x0000_8000);
     c
 }
 
-/// The first encoder that works on this PC, found once (a short test encode each).
-async fn encoder() -> Result<&'static Encoder, String> {
-    static PICK: OnceCell<Result<usize, String>> = OnceCell::const_new();
+/// Runs a short ffmpeg job; it works if it ends well without printing an error
+/// (a decoder that runs out of surfaces still exits with 0).
+async fn works(path: &PathBuf, args: &[String]) -> Result<bool, std::io::Error> {
+    let mut c = command(path);
+    c.args(["-hide_banner", "-loglevel", "error"]).args(args).stderr(Stdio::piped());
+    match tokio::time::timeout(Duration::from_secs(15), c.output()).await {
+        Ok(Ok(o)) => Ok(o.status.success() && o.stderr.is_empty()),
+        Ok(Err(e)) => Err(e),
+        Err(_) => Ok(false),
+    }
+}
+
+/// The first encoder that works on this PC, with the lightest decoding that works with
+/// it, found once (short test jobs on a test clip).
+async fn encoder() -> Result<&'static Pick, String> {
+    static PICK: OnceCell<Result<Pick, String>> = OnceCell::const_new();
     let pick = PICK
         .get_or_init(|| async {
             let path = ffmpeg_path();
-            // DD_ENCODER=h264_amf (or another codec of the list) tries only that one
-            let only = std::env::var("DD_ENCODER").ok();
-            for (i, e) in ENCODERS.iter().enumerate() {
-                if only.as_deref().is_some_and(|o| o != e.codec) {
-                    continue;
+            // an H.264 clip to try the hardware decoders on
+            let clip = std::env::temp_dir().join("dynamic-delay-decode-test.flv");
+            let clip_s = clip.to_string_lossy().to_string();
+            let make = ["-f", "lavfi", "-i", "testsrc2=s=1280x720:r=30", "-t", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "30", "-y", &clip_s];
+            let have_clip = match works(&path, &make.map(String::from)).await {
+                Ok(ok) => ok,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    return Err(t!(
+                        "ffmpeg not found: reinstall Dynamic Delay",
+                        "ffmpeg não encontrado: reinstale o Dynamic Delay",
+                        "no se encontró ffmpeg: reinstala Dynamic Delay"
+                    ));
                 }
-                let mut c = command(&path);
-                c.args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:s=1280x720:r=30", "-frames:v", "10", "-c:v", e.codec]);
-                c.args(e.args).args(["-b:v", "2000k", "-f", "null", "-"]);
-                match tokio::time::timeout(Duration::from_secs(15), c.status()).await {
-                    Ok(Ok(st)) if st.success() => {
-                        log::info!("video re-encoding with {} ({})", e.label, e.codec);
-                        return Ok(i);
+                Err(_) => false,
+            };
+            // DD_ENCODER=h264_amf (or another codec of the list) tries only that one;
+            // DD_HW_DECODE=0 decodes on the CPU
+            let only = std::env::var("DD_ENCODER").ok();
+            let hw_ok = std::env::var("DD_HW_DECODE").map_or(true, |v| v != "0");
+            let mut found = None;
+            for e in ENCODERS.iter().filter(|e| only.as_deref().is_none_or(|o| o == e.codec)) {
+                let encode = |mut a: Vec<String>| {
+                    a.extend(["-frames:v", "20", "-c:v", e.codec].map(String::from));
+                    a.extend(e.args.iter().map(|s| s.to_string()));
+                    a.extend(["-b:v", "2000k", "-f", "null", "-"].map(String::from));
+                    a
+                };
+                if have_clip && hw_ok && !e.hw_decode.is_empty() {
+                    let devs: &[&str] = if e.hw_decode.contains(&"{dev}") { &["0", "1", "2", "3"] } else { &["0"] };
+                    for d in devs {
+                        let decode: Vec<String> = e.hw_decode.iter().map(|a| a.replace("{dev}", d)).collect();
+                        let mut input = decode.clone();
+                        input.extend(["-i".to_string(), clip_s.clone()]);
+                        if works(&path, &encode(input)).await.unwrap_or(false) {
+                            found = Some(Pick { enc: e, decode });
+                            break;
+                        }
                     }
-                    Ok(Err(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                        return Err(t!(
-                            "ffmpeg not found: reinstall Dynamic Delay",
-                            "ffmpeg não encontrado: reinstale o Dynamic Delay",
-                            "no se encontró ffmpeg: reinstala Dynamic Delay"
-                        ));
-                    }
-                    _ => {}
+                }
+                if found.is_some() {
+                    break;
+                }
+                let input = ["-f", "lavfi", "-i", "color=c=black:s=1280x720:r=30"].map(String::from).to_vec();
+                if works(&path, &encode(input)).await.unwrap_or(false) {
+                    found = Some(Pick { enc: e, decode: Vec::new() });
+                    break;
                 }
             }
-            Err(t!("no H.264 encoder works on this PC", "nenhum encoder H.264 funciona neste PC", "ningún codificador H.264 funciona en este PC"))
+            let _ = std::fs::remove_file(&clip);
+            let Some(p) = found else {
+                return Err(t!("no H.264 encoder works on this PC", "nenhum encoder H.264 funciona neste PC", "ningún codificador H.264 funciona en este PC"));
+            };
+            let how = if p.decode.is_empty() { "decoding on the CPU".to_string() } else { format!("decoding on the graphics card ({})", p.decode.join(" ")) };
+            log::info!("video re-encoding with {} ({}), {how}", p.enc.label, p.enc.codec);
+            Ok(p)
         })
         .await;
-    pick.as_ref().map(|&i| &ENCODERS[i]).map_err(Clone::clone)
+    pick.as_ref().map_err(Clone::clone)
 }
 
 /// Starts the re-encoding stage in front of `up`; returns where the engine sends to.
@@ -218,6 +291,10 @@ struct Stage {
     /// When the current ffmpeg run started: its first seconds (opening the encoder) are
     /// slow on any PC and are not taken as falling behind.
     started_at: Instant,
+    /// Decode on the graphics card when that works here; off after a run that used it failed.
+    hw_decode: bool,
+    /// The current run decodes on the graphics card.
+    run_hw: bool,
 }
 
 /// Re-encoding speed since the last log line.
@@ -240,24 +317,32 @@ impl Stage {
     }
 
     async fn start(&mut self) -> bool {
-        let enc = match encoder().await {
-            Ok(e) => e,
+        let pick = match encoder().await {
+            Ok(p) => p,
             Err(e) => {
                 self.give_up(e);
                 return false;
             }
         };
+        let enc = pick.enc;
         let k = format!("{}k", self.kbps);
-        let buf = format!("{}k", self.kbps * 2);
+        // AMF overshoots with a 2x buffer (6800 for 6000 kbps); 1x keeps it near the target
+        let buf = format!("{}k", if enc.codec == "h264_amf" { self.kbps } else { self.kbps * 2 });
         let mut c = command(&ffmpeg_path());
         c.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
         c.args(["-hide_banner", "-loglevel", "error", "-fflags", "+nobuffer", "-probesize", "32", "-analyzeduration", "0"]);
+        self.run_hw = self.hw_decode && !pick.decode.is_empty();
+        if self.run_hw {
+            c.args(&pick.decode);
+        }
         c.args(["-f", "flv", "-i", "pipe:0", "-map", "0:v:0", "-c:v", enc.codec]).args(enc.args);
         // keyframes where OBS put them (the delay cuts there), timestamps unchanged, no B-frames
         // and at most 2 s apart, what the platforms ask for, whatever OBS sends
         let gop = self.video_info.map_or(120, |(fps, _, _)| (fps * 2.0).round().max(1.0) as u32).to_string();
         c.args(["-b:v", &k, "-maxrate", &k, "-bufsize", &buf, "-bf", "0", "-force_key_frames", "source", "-g", &gop]);
-        c.args(["-fps_mode", "passthrough", "-copyts", "-an", "-flush_packets", "1", "-f", "flv", "-flvflags", "no_duration_filesize", "pipe:1"]);
+        // millisecond timestamps, as in FLV: on the encoder's frame-rate grid, the delay's
+        // filler frames landed on the same timestamp as the frame next to them
+        c.args(["-fps_mode", "passthrough", "-enc_time_base", "1:1000", "-copyts", "-an", "-flush_packets", "1", "-f", "flv", "-flvflags", "no_duration_filesize", "pipe:1"]);
         let mut child = match c.spawn() {
             Ok(c) => c,
             Err(e) => {
@@ -298,12 +383,21 @@ impl Stage {
         if let Some(h) = &self.video_header {
             let _ = in_tx.send(flv_tag(9, h.ts, &h.data));
         }
-        log::info!("[{}] re-encoding the video at {} kbps with {}", self.name, self.kbps, enc.label);
+        let how = if self.run_hw { "graphics card" } else { "CPU" };
+        log::info!("[{}] re-encoding the video at {} kbps with {}, decoding on the {how}", self.name, self.kbps, enc.label);
         self.set_status(enc.label, None);
         self.inside.clear();
         self.started_at = Instant::now();
         self.ff = Some(Ffmpeg { run, stdin: in_tx, wait_key: true, _child: child });
         true
+    }
+
+    /// Ends a run that decodes on the graphics card and decodes on the CPU from now on.
+    fn decode_on_cpu(&mut self) {
+        log::warn!("[{}] decoding on the graphics card failed; decoding on the CPU from now on", self.name);
+        self.hw_decode = false;
+        self.run_hw = false;
+        self.ff = None;
     }
 
     /// Sends the stream on as OBS sends it from here on.
@@ -476,6 +570,8 @@ async fn run(shared: Arc<Shared>, id: u64, name: String, kbps: u32, mut rx: Unbo
         latency: Duration::ZERO,
         measure_from: 0,
         started_at: Instant::now(),
+        hw_decode: true,
+        run_hw: false,
     };
     let mut stats_at = Instant::now();
     // a failed run is restarted after a pause, at the next keyframe
@@ -518,9 +614,19 @@ async fn run(shared: Arc<Shared>, id: u64, name: String, kbps: u32, mut rx: Unbo
                     if s.ff.as_ref().is_some_and(|f| f.run == run) {
                         log::warn!("[{}] ffmpeg: {l}", s.name);
                         s.last_error = l;
+                        if s.run_hw {
+                            // the card decoded the test clip but not this stream (HEVC, 10-bit...)
+                            s.decode_on_cpu();
+                            retry_at = Some(Instant::now() + Duration::from_secs(1));
+                        }
                     }
                 }
                 Some(FfOut::Ended(run)) if s.ff.as_ref().is_some_and(|f| f.run == run) => {
+                    if s.run_hw {
+                        s.decode_on_cpu();
+                        retry_at = Some(Instant::now() + Duration::from_secs(1));
+                        continue;
+                    }
                     s.ff = None;
                     s.failures += 1;
                     let why = if s.last_error.is_empty() { "ffmpeg stopped".to_string() } else { format!("ffmpeg: {}", s.last_error) };
