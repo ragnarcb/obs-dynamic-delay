@@ -48,6 +48,14 @@ const ENCODERS: &[Encoder] = &[
 const AUDIO_WAIT: Duration = Duration::from_secs(5);
 /// ffmpeg failures in a row before giving up and sending the stream as it comes.
 const MAX_FAILURES: u32 = 3;
+/// A frame that spent this long inside ffmpeg means the PC cannot keep up (a game
+/// using the graphics card, say): frames are skipped up to the next keyframe, so the
+/// platform gets a short freeze instead of a growing lag, audio without video and,
+/// on Twitch, a dropped stream. (Not fed, an encoder keeps its last frames: what
+/// comes out after a skip is only measured from the keyframe it went on from.)
+const MAX_LATENCY: Duration = Duration::from_secs(2);
+/// How often the re-encoding speed goes to the log.
+const STATS_EVERY: Duration = Duration::from_secs(15);
 
 /// ffmpeg next to the program (shipped with the Setup), else the one on the PATH.
 fn ffmpeg_path() -> PathBuf {
@@ -199,6 +207,27 @@ struct Stage {
     /// When ffmpeg last gave a frame.
     last_video_at: Option<Instant>,
     last_error: String,
+    /// Frames fed to ffmpeg and not out yet: (timestamp, when fed).
+    inside: VecDeque<(u32, Instant)>,
+    stats: Stats,
+    /// When frames were last skipped for the PC not keeping up.
+    skipped_at: Option<Instant>,
+    /// Time inside ffmpeg of the latest frame fed from `measure_from` on.
+    latency: Duration,
+    measure_from: u32,
+    /// When the current ffmpeg run started: its first seconds (opening the encoder) are
+    /// slow on any PC and are not taken as falling behind.
+    started_at: Instant,
+}
+
+/// Re-encoding speed since the last log line.
+#[derive(Default)]
+struct Stats {
+    frames_in: u32,
+    frames_out: u32,
+    skipped: u32,
+    latency_sum: Duration,
+    latency_max: Duration,
 }
 
 impl Stage {
@@ -271,6 +300,8 @@ impl Stage {
         }
         log::info!("[{}] re-encoding the video at {} kbps with {}", self.name, self.kbps, enc.label);
         self.set_status(enc.label, None);
+        self.inside.clear();
+        self.started_at = Instant::now();
         self.ff = Some(Ffmpeg { run, stdin: in_tx, wait_key: true, _child: child });
         true
     }
@@ -301,13 +332,70 @@ impl Stage {
             let _ = ff.stdin.send(flv_tag(9, p.ts, &p.data));
             return;
         }
+        let now = Instant::now();
+        let latency = std::mem::replace(&mut self.latency, Duration::ZERO);
+        if !ff.wait_key && latency > MAX_LATENCY {
+            // the PC is not keeping up: let ffmpeg catch up, go on from the next keyframe
+            ff.wait_key = true;
+            let first = self.skipped_at.is_none();
+            self.skipped_at = Some(now);
+            if first {
+                log::warn!("[{}] re-encoding {} ms behind: skipping frames (PC too busy)", self.name, latency.as_millis());
+                self.set_status_warning(true);
+            }
+        }
+        let Some(ff) = &mut self.ff else { return };
         if ff.wait_key {
             if !flv::video_is_keyframe(&p.data) {
+                if self.skipped_at.is_some() {
+                    self.stats.skipped += 1;
+                }
                 return;
             }
             ff.wait_key = false;
+            self.measure_from = p.ts;
+        } else {
+            self.latency = latency; // still to be checked against the next frames
         }
+        self.stats.frames_in += 1;
+        self.inside.push_back((p.ts, now));
         let _ = ff.stdin.send(flv_tag(9, p.ts, &p.data));
+    }
+
+    /// Shows (or clears) in the panel that the PC cannot keep up with the re-encoding.
+    fn set_status_warning(&self, on: bool) {
+        let why = on.then(|| {
+            t!(
+                "the PC cannot keep up with the re-encoding: frames skipped (lower the game load or this bitrate)",
+                "o PC não está dando conta da recodificação: quadros pulados (alivie o jogo ou use o mesmo bitrate do OBS)",
+                "el PC no da abasto con la recodificación: se saltan cuadros (baja la carga del juego o usa el bitrate de OBS)"
+            )
+        });
+        let mut st = self.shared.status.lock().unwrap();
+        if let Some(o) = st.outputs.iter_mut().find(|o| o.id == self.id) {
+            o.transcode_error = why;
+        }
+    }
+
+    /// Logs the speed of the re-encoding, and clears the warning once it keeps up again.
+    fn log_stats(&mut self, every: Duration) {
+        let st = std::mem::take(&mut self.stats);
+        if self.ff.is_some() || st.frames_in > 0 {
+            let avg = st.latency_sum.as_millis() as u32 / st.frames_out.max(1);
+            let fps = |n: u32| n as f64 / every.as_secs_f64();
+            log::info!(
+                "[{}] re-encoding: {:.1} fps in, {:.1} fps out, latency {avg} ms (max {} ms), {} frames skipped",
+                self.name,
+                fps(st.frames_in),
+                fps(st.frames_out),
+                st.latency_max.as_millis(),
+                st.skipped
+            );
+        }
+        if self.skipped_at.is_some_and(|t| t.elapsed() > every) {
+            self.skipped_at = None;
+            self.set_status_warning(false);
+        }
     }
 
     /// A frame from ffmpeg. The destination needs one timeline across audio and
@@ -315,7 +403,27 @@ impl Stage {
     fn video_out(&mut self, p: OutPacket) {
         if !flv::video_is_sequence_header(&p.data) {
             self.failures = 0;
-            self.last_video_at = Some(Instant::now());
+            let now = Instant::now();
+            self.last_video_at = Some(now);
+            // frames come out in order: what was fed up to this one is done. The
+            // encoder puts timestamps on its frame-rate grid, a few ms off what went in.
+            let mut fed = None;
+            while let Some(&(ts, at)) = self.inside.front() {
+                if ts > p.ts.saturating_add(8) {
+                    break;
+                }
+                self.inside.pop_front();
+                fed = Some((ts, at));
+            }
+            if let Some((ts, at)) = fed {
+                let l = now.duration_since(at);
+                self.stats.frames_out += 1;
+                self.stats.latency_sum += l;
+                self.stats.latency_max = self.stats.latency_max.max(l);
+                if ts >= self.measure_from && now.duration_since(self.started_at) > Duration::from_secs(3) {
+                    self.latency = l;
+                }
+            }
         }
         self.flush_audio(Some(p.ts));
         let _ = self.up.send(UpMsg::Packet(p));
@@ -362,7 +470,14 @@ async fn run(shared: Arc<Shared>, id: u64, name: String, kbps: u32, mut rx: Unbo
         audio: VecDeque::new(),
         last_video_at: None,
         last_error: String::new(),
+        inside: VecDeque::new(),
+        stats: Stats::default(),
+        skipped_at: None,
+        latency: Duration::ZERO,
+        measure_from: 0,
+        started_at: Instant::now(),
     };
+    let mut stats_at = Instant::now();
     // a failed run is restarted after a pause, at the next keyframe
     let mut retry_at: Option<Instant> = Some(Instant::now());
     let mut tick = tokio::time::interval(Duration::from_millis(200));
@@ -418,7 +533,13 @@ async fn run(shared: Arc<Shared>, id: u64, name: String, kbps: u32, mut rx: Unbo
                 }
                 _ => {}
             },
-            _ = tick.tick() => s.flush_stale(Instant::now()),
+            _ = tick.tick() => {
+                s.flush_stale(Instant::now());
+                if stats_at.elapsed() >= STATS_EVERY {
+                    s.log_stats(stats_at.elapsed());
+                    stats_at = Instant::now();
+                }
+            }
         }
     }
     // end of the stream: let ffmpeg finish what it has, then stop the destination

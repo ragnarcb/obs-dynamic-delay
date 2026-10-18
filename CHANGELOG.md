@@ -2,6 +2,17 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.14.2] - 2026-10-18
+
+### Fixed
+
+- **A PC that cannot keep up with the re-encoding no longer brings Twitch down.** With a game loading the graphics card, re-encoding 1080p60 can fall behind real time: the lag grew without end, the platform got audio without video and Twitch dropped the stream. Now a frame that spends more than 2 s in ffmpeg makes the relay skip to the next keyframe, so the platform gets a short freeze and stays live, and the panel says the PC is not keeping up.
+- The re-encoding info of a destination ("re-encoded at ... kbps") no longer overlaps its name in a narrow panel.
+
+### Added
+
+- Every 15 s the log tells the re-encoding speed of each destination: frames in and out per second, latency and frames skipped.
+
 ## [0.14.1] - 2026-10-17
 
 ### Fixed

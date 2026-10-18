@@ -194,6 +194,9 @@
   .dim { color: var(--text-3); font-size: 12px; font-variant-numeric: tabular-nums; }
   .link-row { display: flex; align-items: center; gap: 8px; min-height: 32px; }
   .link-row > .grow { flex: 1; min-width: 0; }
+  .link-row { flex-wrap: wrap; }
+  .link-row > .full { flex-basis: 100%; }
+  .link-row > .nowrap { white-space: nowrap; }
   .qr-wrap { display: grid; justify-items: center; gap: 10px; padding: 12px; border-radius: var(--r-md); background: var(--surface-2); border: 1px solid var(--border); }
   .qr-wrap:empty { display: none; }
   .qr { background: #fff; padding: 10px; border-radius: 10px; }
@@ -1010,20 +1013,22 @@ const MODULES = {
           return;
         }
         this.now.replaceChildren(...outs.map((o) => {
-          const rate = h("span", { class: "dim" });
-          this.rows[o.id] = rate;
+          const rate = h("span", { class: "dim nowrap" });
+          const own = h("span", { class: "dim full" });
+          this.rows[o.id] = { rate, own };
           const state = o.running ? T().states[o.state] : T().msStopped;
           const btn = o.running
             ? button("small", "x", T().msStop, () => outputAction(o.id, "stop"), { "aria-label": `${T().msStop}: ${o.name}` })
             : button("small primary", "tower", T().msStart, () => outputAction(o.id, "start"), { "aria-label": `${T().msStart}: ${o.name}` });
           return h("div", { class: "link-row" }, h("span", { class: "dot grow " + (o.running ? cls[o.state] : "") }, h("span", {}, h("b", { text: o.name }), ` · ${state}`)), rate, btn,
-            o.running && o.transcode_error ? h("span", { class: "err full", text: o.transcode_error }) : null);
+            own, o.running && o.transcode_error ? h("span", { class: "err full", text: o.transcode_error }) : null);
         }));
       }
       for (const o of outs) {
         if (!this.rows?.[o.id]) continue;
-        const own = o.video_kbps && o.encoder ? ` · ${T().reencoded(o.video_kbps, o.encoder)}` : "";
-        this.rows[o.id].textContent = o.running && o.state === "connected" ? `${o.kbps} kbps${own}` : "";
+        const on = o.running && o.state === "connected";
+        this.rows[o.id].rate.textContent = on ? `${o.kbps} kbps` : "";
+        this.rows[o.id].own.textContent = on && o.video_kbps && o.encoder ? T().reencoded(o.video_kbps, o.encoder) : "";
       }
     },
   },
