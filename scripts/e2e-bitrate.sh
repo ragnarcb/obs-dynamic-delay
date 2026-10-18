@@ -75,6 +75,11 @@ MAIN="$(kbps main.flv)"; LOW="$(kbps low.flv)"
 echo "main ${MAIN} kbps, re-encoded ${LOW} kbps with $ENC"
 [ "$MAIN" -gt 3000 ] || { echo "FAIL: main should be ~4000 kbps"; exit 1; }
 [ "$LOW" -gt 800 ] && [ "$LOW" -lt 1150 ] || { echo "FAIL: re-encoded should be ~1000 kbps"; exit 1; }
+# keyframes at most 2 s apart (Twitch drops a stream with keyframes 8 s apart)
+GAP="$(ffprobe -v error -select_streams v -show_entries packet=pts_time,flags -of csv=p=0 low.flv |
+  awk -F, '$2 ~ /K/ {if (p != "" && $1 - p > m) m = $1 - p; p = $1} END{printf "%.2f", m}')"
+echo "longest keyframe interval of the re-encoded copy: ${GAP}s"
+awk -v g="$GAP" 'BEGIN{exit !(g > 0 && g <= 2.1)}' || { echo "FAIL: keyframes ${GAP}s apart"; exit 1; }
 # audio and video of the re-encoded copy cover the same time span
 span() { ffprobe -v error -select_streams "$2" -show_entries packet=pts_time -of csv=p=0 "$1" | awk 'NR==1{a=$1} {b=$1} END{printf "%.2f %.2f", a, b}'; }
 read -r VA VB <<< "$(span low.flv v)"; read -r AA AB <<< "$(span low.flv a)"

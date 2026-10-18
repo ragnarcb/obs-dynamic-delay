@@ -34,10 +34,12 @@ struct Encoder {
     args: &'static [&'static str],
 }
 
+// The hardware encoders turn a forced keyframe into a plain I-frame unless told to make
+// it an IDR: the stream then has a keyframe only every 8 s, and Twitch drops it.
 const ENCODERS: &[Encoder] = &[
-    Encoder { label: "NVENC", codec: "h264_nvenc", args: &["-preset", "p5", "-tune", "hq", "-rc", "cbr"] },
-    Encoder { label: "AMF", codec: "h264_amf", args: &["-usage", "transcoding", "-quality", "balanced", "-rc", "cbr"] },
-    Encoder { label: "Quick Sync", codec: "h264_qsv", args: &["-preset", "medium"] },
+    Encoder { label: "NVENC", codec: "h264_nvenc", args: &["-preset", "p5", "-tune", "hq", "-rc", "cbr", "-forced-idr", "1"] },
+    Encoder { label: "AMF", codec: "h264_amf", args: &["-usage", "transcoding", "-quality", "balanced", "-rc", "cbr", "-forced_idr", "1"] },
+    Encoder { label: "Quick Sync", codec: "h264_qsv", args: &["-preset", "medium", "-forced_idr", "1"] },
     Encoder { label: "x264", codec: "libx264", args: &["-preset", "veryfast", "-x264-params", "nal-hrd=cbr"] },
 ];
 
@@ -73,7 +75,12 @@ async fn encoder() -> Result<&'static Encoder, String> {
     let pick = PICK
         .get_or_init(|| async {
             let path = ffmpeg_path();
+            // DD_ENCODER=h264_amf (or another codec of the list) tries only that one
+            let only = std::env::var("DD_ENCODER").ok();
             for (i, e) in ENCODERS.iter().enumerate() {
+                if only.as_deref().is_some_and(|o| o != e.codec) {
+                    continue;
+                }
                 let mut c = command(&path);
                 c.args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:s=1280x720:r=30", "-frames:v", "10", "-c:v", e.codec]);
                 c.args(e.args).args(["-b:v", "2000k", "-f", "null", "-"]);
@@ -218,7 +225,9 @@ impl Stage {
         c.args(["-hide_banner", "-loglevel", "error", "-fflags", "+nobuffer", "-probesize", "32", "-analyzeduration", "0"]);
         c.args(["-f", "flv", "-i", "pipe:0", "-map", "0:v:0", "-c:v", enc.codec]).args(enc.args);
         // keyframes where OBS put them (the delay cuts there), timestamps unchanged, no B-frames
-        c.args(["-b:v", &k, "-maxrate", &k, "-bufsize", &buf, "-bf", "0", "-force_key_frames", "source"]);
+        // and at most 2 s apart, what the platforms ask for, whatever OBS sends
+        let gop = self.video_info.map_or(120, |(fps, _, _)| (fps * 2.0).round().max(1.0) as u32).to_string();
+        c.args(["-b:v", &k, "-maxrate", &k, "-bufsize", &buf, "-bf", "0", "-force_key_frames", "source", "-g", &gop]);
         c.args(["-fps_mode", "passthrough", "-copyts", "-an", "-flush_packets", "1", "-f", "flv", "-flvflags", "no_duration_filesize", "pipe:1"]);
         let mut child = match c.spawn() {
             Ok(c) => c,

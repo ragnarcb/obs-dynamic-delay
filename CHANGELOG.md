@@ -2,6 +2,13 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.14.1] - 2026-10-17
+
+### Fixed
+
+- **Twitch dropped a destination with a bitrate of its own after a couple of seconds.** NVENC, AMF and Quick Sync turned OBS' keyframes into plain I-frames, so the re-encoded stream had a keyframe only every 8 s and Twitch cut it. They now make real keyframes (IDR) where OBS puts them, at most 2 s apart.
+- `DD_ENCODER` picks the encoder to use (`h264_nvenc`, `h264_amf`, `h264_qsv`, `libx264`), for tests and troubleshooting; `scripts/e2e-bitrate.sh` checks the keyframe interval.
+
 ## [0.14.0] - 2026-10-16
 
 ### Added
