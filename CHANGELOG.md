@@ -2,6 +2,18 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.14.4] - 2026-10-19
+
+### Fixed
+
+- **A re-encoding that cannot keep up no longer piles up a lag of minutes.** The 0.14.2 protection stopped acting after its first skip (a log showed 12 of 60 fps out and a lag of 88 s). Now, when frames wait more than 2 s inside ffmpeg, it is restarted at the next keyframe without what piled up; if that happens 3 times in a minute, the platform gets the stream as OBS sends it, with the reason in the panel, and stays live.
+- The log of the previous session is kept as `obs-dynamic-delay.old.log` (reopening OBS after a stream used to wipe it).
+- `scripts/e2e-test.sh` decodes with the real timestamps (it failed now and then on a 30 fps grid artifact).
+
+### Changed
+
+- ffmpeg gets a high priority on the graphics card, as OBS does for itself, so a game keeping the card at 100% does not starve the re-encoding.
+
 ## [0.14.3] - 2026-10-18
 
 ### Changed

@@ -46,7 +46,7 @@ wait $SRC
 sleep 4
 kill $RELAY; wait $RECV || true
 
-ERRORS="$(ffmpeg -v error -i out.flv -f null - 2>&1 || true)"
+ERRORS="$(ffmpeg -v error -i out.flv -fps_mode passthrough -enc_time_base 1:1000 -f null - 2>&1 || true)"
 if [ -n "$ERRORS" ]; then
   echo "FAIL: decode errors:"; echo "$ERRORS"; exit 1
 fi

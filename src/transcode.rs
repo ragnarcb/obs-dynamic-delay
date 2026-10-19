@@ -76,12 +76,17 @@ struct Pick {
 const AUDIO_WAIT: Duration = Duration::from_secs(5);
 /// ffmpeg failures in a row before giving up and sending the stream as it comes.
 const MAX_FAILURES: u32 = 3;
-/// A frame that spent this long inside ffmpeg means the PC cannot keep up (a game
-/// using the graphics card, say): frames are skipped up to the next keyframe, so the
-/// platform gets a short freeze instead of a growing lag, audio without video and,
-/// on Twitch, a dropped stream. (Not fed, an encoder keeps its last frames: what
-/// comes out after a skip is only measured from the keyframe it went on from.)
+/// A frame inside ffmpeg for this long means the PC cannot keep up (a game using the
+/// graphics card, say). ffmpeg is restarted at the next keyframe, dropping what piled up
+/// in it, so the platform gets a short freeze instead of a growing lag, audio without
+/// video and, on Twitch, a dropped stream.
 const MAX_LATENCY: Duration = Duration::from_secs(2);
+/// A new run is not judged before this: opening the encoder and the first frames are slow.
+const SETTLE: Duration = Duration::from_secs(5);
+/// Falling behind this many times within `OVERLOAD_WINDOW`: this PC cannot re-encode
+/// the stream, which then goes on as OBS sends it (the platform stays live).
+const MAX_OVERLOADS: usize = 3;
+const OVERLOAD_WINDOW: Duration = Duration::from_secs(60);
 /// How often the re-encoding speed goes to the log.
 const STATS_EVERY: Duration = Duration::from_secs(15);
 
@@ -105,6 +110,25 @@ fn command(path: &PathBuf) -> Command {
     #[cfg(windows)]
     c.creation_flags(0x0800_0000 | 0x0000_8000);
     c
+}
+
+/// Gives ffmpeg a high priority on the graphics card, as OBS does for itself: a game
+/// keeping the card at 100% otherwise leaves the re-encoding a fraction of the frames
+/// it needs (12 of 60 fps on an RX 6600 while gaming).
+#[cfg(windows)]
+fn gpu_priority_high(process: std::os::windows::io::RawHandle, name: &str) {
+    #[link(name = "gdi32")]
+    unsafe extern "system" {
+        fn D3DKMTSetProcessSchedulingPriorityClass(process: *mut std::ffi::c_void, priority: i32) -> i32;
+    }
+    const D3DKMT_SCHEDULINGPRIORITYCLASS_HIGH: i32 = 4;
+    // SAFETY: a valid handle of the child process, alive while `child` is
+    let status = unsafe { D3DKMTSetProcessSchedulingPriorityClass(process, D3DKMT_SCHEDULINGPRIORITYCLASS_HIGH) };
+    if status == 0 {
+        log::info!("[{name}] re-encoding at high graphics card priority");
+    } else {
+        log::info!("[{name}] high graphics card priority not granted (0x{status:08X})");
+    }
 }
 
 /// Runs a short ffmpeg job; it works if it ends well without printing an error
@@ -205,7 +229,9 @@ struct Ffmpeg {
     stdin: UnboundedSender<Bytes>,
     /// Frames are only fed from a keyframe on (after the codec header).
     wait_key: bool,
-    _child: Child,
+    child: Child,
+    /// The graphics card priority is set once the process has opened the card.
+    prioritized: bool,
 }
 
 /// FLV file header for a video-only stream, plus PreviousTagSize0.
@@ -283,14 +309,15 @@ struct Stage {
     /// Frames fed to ffmpeg and not out yet: (timestamp, when fed).
     inside: VecDeque<(u32, Instant)>,
     stats: Stats,
-    /// When frames were last skipped for the PC not keeping up.
-    skipped_at: Option<Instant>,
-    /// Time inside ffmpeg of the latest frame fed from `measure_from` on.
-    latency: Duration,
-    measure_from: u32,
-    /// When the current ffmpeg run started: its first seconds (opening the encoder) are
-    /// slow on any PC and are not taken as falling behind.
+    /// Times the re-encoding fell behind lately, and the last one (for the panel warning).
+    overloads: VecDeque<Instant>,
+    overloaded_at: Option<Instant>,
+    /// When the current ffmpeg run started (see `SETTLE`).
     started_at: Instant,
+    /// When ffmpeg is (re)started, at the first keyframe from then on.
+    retry_at: Option<Instant>,
+    /// Gave up re-encoding mid-stream: OBS' frames go on from its next keyframe.
+    pass_wait_key: bool,
     /// Decode on the graphics card when that works here; off after a run that used it failed.
     hw_decode: bool,
     /// The current run decodes on the graphics card.
@@ -302,7 +329,7 @@ struct Stage {
 struct Stats {
     frames_in: u32,
     frames_out: u32,
-    skipped: u32,
+    restarts: u32,
     latency_sum: Duration,
     latency_max: Duration,
 }
@@ -388,7 +415,7 @@ impl Stage {
         self.set_status(enc.label, None);
         self.inside.clear();
         self.started_at = Instant::now();
-        self.ff = Some(Ffmpeg { run, stdin: in_tx, wait_key: true, _child: child });
+        self.ff = Some(Ffmpeg { run, stdin: in_tx, wait_key: true, child, prioritized: false });
         true
     }
 
@@ -404,6 +431,7 @@ impl Stage {
     fn give_up(&mut self, why: String) {
         log::warn!("[{}] video not re-encoded, sent as OBS sends it: {why}", self.name);
         self.passthrough = true;
+        self.pass_wait_key = true;
         self.ff = None;
         self.flush_audio(None);
         // the platform got ffmpeg's decoder config: switch back to OBS' before its frames
@@ -418,6 +446,12 @@ impl Stage {
             self.video_header = Some(p.clone());
         }
         if self.passthrough {
+            if self.pass_wait_key && !flv::video_is_sequence_header(&p.data) {
+                if !flv::video_is_keyframe(&p.data) {
+                    return;
+                }
+                self.pass_wait_key = false;
+            }
             let _ = self.up.send(UpMsg::Packet(p));
             return;
         }
@@ -426,43 +460,56 @@ impl Stage {
             let _ = ff.stdin.send(flv_tag(9, p.ts, &p.data));
             return;
         }
+        // how long the oldest frame has been waiting inside ffmpeg (it is always fed,
+        // so frames only wait there when the encoder is slower than the stream)
         let now = Instant::now();
-        let latency = std::mem::replace(&mut self.latency, Duration::ZERO);
-        if !ff.wait_key && latency > MAX_LATENCY {
-            // the PC is not keeping up: let ffmpeg catch up, go on from the next keyframe
-            ff.wait_key = true;
-            let first = self.skipped_at.is_none();
-            self.skipped_at = Some(now);
-            if first {
-                log::warn!("[{}] re-encoding {} ms behind: skipping frames (PC too busy)", self.name, latency.as_millis());
-                self.set_status_warning(true);
+        if now.duration_since(self.started_at) > SETTLE {
+            let behind = self.inside.front().map_or(Duration::ZERO, |(_, at)| now.duration_since(*at));
+            if behind > MAX_LATENCY {
+                self.overloaded(behind, now);
+                return;
             }
         }
         let Some(ff) = &mut self.ff else { return };
         if ff.wait_key {
             if !flv::video_is_keyframe(&p.data) {
-                if self.skipped_at.is_some() {
-                    self.stats.skipped += 1;
-                }
                 return;
             }
             ff.wait_key = false;
-            self.measure_from = p.ts;
-        } else {
-            self.latency = latency; // still to be checked against the next frames
         }
         self.stats.frames_in += 1;
         self.inside.push_back((p.ts, now));
         let _ = ff.stdin.send(flv_tag(9, p.ts, &p.data));
     }
 
+    /// The re-encoding fell behind: restart it from the next keyframe without what piled
+    /// up, or, when that keeps happening, send the stream as OBS sends it.
+    fn overloaded(&mut self, behind: Duration, now: Instant) {
+        self.stats.restarts += 1;
+        self.overloads.retain(|t| now.duration_since(*t) < OVERLOAD_WINDOW);
+        self.overloads.push_back(now);
+        if self.overloads.len() >= MAX_OVERLOADS {
+            self.give_up(t!(
+                "this PC cannot keep up with re-encoding (a game using the graphics card?): this platform gets the stream as OBS sends it",
+                "o PC não está dando conta de recodificar (jogo pesando na placa de vídeo?): esta plataforma recebe a live igual ao OBS manda",
+                "el PC no da abasto con la recodificación (¿un juego usando la tarjeta gráfica?): esta plataforma recibe la transmisión tal como la envía OBS"
+            ));
+            return;
+        }
+        log::warn!("[{}] re-encoding {} ms behind (PC too busy): restarting it at the next keyframe", self.name, behind.as_millis());
+        self.ff = None; // kills ffmpeg with the frames piled up in it
+        self.retry_at = Some(now);
+        self.overloaded_at = Some(now);
+        self.set_status_warning(true);
+    }
+
     /// Shows (or clears) in the panel that the PC cannot keep up with the re-encoding.
     fn set_status_warning(&self, on: bool) {
         let why = on.then(|| {
             t!(
-                "the PC cannot keep up with the re-encoding: frames skipped (lower the game load or this bitrate)",
-                "o PC não está dando conta da recodificação: quadros pulados (alivie o jogo ou use o mesmo bitrate do OBS)",
-                "el PC no da abasto con la recodificación: se saltan cuadros (baja la carga del juego o usa el bitrate de OBS)"
+                "the PC is not keeping up with the re-encoding: it restarted (lower the game load or use the bitrate of OBS)",
+                "o PC não está dando conta da recodificação: ela reiniciou (alivie o jogo ou use o mesmo bitrate do OBS)",
+                "el PC no da abasto con la recodificación: se reinició (baja la carga del juego o usa el bitrate de OBS)"
             )
         });
         let mut st = self.shared.status.lock().unwrap();
@@ -478,16 +525,16 @@ impl Stage {
             let avg = st.latency_sum.as_millis() as u32 / st.frames_out.max(1);
             let fps = |n: u32| n as f64 / every.as_secs_f64();
             log::info!(
-                "[{}] re-encoding: {:.1} fps in, {:.1} fps out, latency {avg} ms (max {} ms), {} frames skipped",
+                "[{}] re-encoding: {:.1} fps in, {:.1} fps out, latency {avg} ms (max {} ms), {} restarts for falling behind",
                 self.name,
                 fps(st.frames_in),
                 fps(st.frames_out),
                 st.latency_max.as_millis(),
-                st.skipped
+                st.restarts
             );
         }
-        if self.skipped_at.is_some_and(|t| t.elapsed() > every) {
-            self.skipped_at = None;
+        if !self.passthrough && self.overloaded_at.is_some_and(|t| t.elapsed() > every) {
+            self.overloaded_at = None;
             self.set_status_warning(false);
         }
     }
@@ -495,6 +542,15 @@ impl Stage {
     /// A frame from ffmpeg. The destination needs one timeline across audio and
     /// video, so the audio up to this frame goes first.
     fn video_out(&mut self, p: OutPacket) {
+        if let Some(ff) = &mut self.ff
+            && !ff.prioritized
+        {
+            ff.prioritized = true;
+            #[cfg(windows)]
+            if let Some(h) = ff.child.raw_handle() {
+                gpu_priority_high(h, &self.name);
+            }
+        }
         if !flv::video_is_sequence_header(&p.data) {
             self.failures = 0;
             let now = Instant::now();
@@ -509,14 +565,11 @@ impl Stage {
                 self.inside.pop_front();
                 fed = Some((ts, at));
             }
-            if let Some((ts, at)) = fed {
+            if let Some((_, at)) = fed {
                 let l = now.duration_since(at);
                 self.stats.frames_out += 1;
                 self.stats.latency_sum += l;
                 self.stats.latency_max = self.stats.latency_max.max(l);
-                if ts >= self.measure_from && now.duration_since(self.started_at) > Duration::from_secs(3) {
-                    self.latency = l;
-                }
             }
         }
         self.flush_audio(Some(p.ts));
@@ -566,16 +619,16 @@ async fn run(shared: Arc<Shared>, id: u64, name: String, kbps: u32, mut rx: Unbo
         last_error: String::new(),
         inside: VecDeque::new(),
         stats: Stats::default(),
-        skipped_at: None,
-        latency: Duration::ZERO,
-        measure_from: 0,
+        overloads: VecDeque::new(),
+        overloaded_at: None,
         started_at: Instant::now(),
+        // the first run starts at the first keyframe
+        retry_at: Some(Instant::now()),
+        pass_wait_key: false,
         hw_decode: true,
         run_hw: false,
     };
     let mut stats_at = Instant::now();
-    // a failed run is restarted after a pause, at the next keyframe
-    let mut retry_at: Option<Instant> = Some(Instant::now());
     let mut tick = tokio::time::interval(Duration::from_millis(200));
     loop {
         tokio::select! {
@@ -601,8 +654,8 @@ async fn run(shared: Arc<Shared>, id: u64, name: String, kbps: u32, mut rx: Unbo
                     }
                 }
                 Some(UpMsg::Packet(p)) => {
-                    if s.ff.is_none() && !s.passthrough && retry_at.is_some_and(|t| Instant::now() >= t) && flv::video_is_keyframe(&p.data) && !flv::video_is_sequence_header(&p.data) {
-                        retry_at = None;
+                    if s.ff.is_none() && !s.passthrough && s.retry_at.is_some_and(|t| Instant::now() >= t) && flv::video_is_keyframe(&p.data) && !flv::video_is_sequence_header(&p.data) {
+                        s.retry_at = None;
                         s.start().await;
                     }
                     s.video_in(p);
@@ -617,14 +670,14 @@ async fn run(shared: Arc<Shared>, id: u64, name: String, kbps: u32, mut rx: Unbo
                         if s.run_hw {
                             // the card decoded the test clip but not this stream (HEVC, 10-bit...)
                             s.decode_on_cpu();
-                            retry_at = Some(Instant::now() + Duration::from_secs(1));
+                            s.retry_at = Some(Instant::now() + Duration::from_secs(1));
                         }
                     }
                 }
                 Some(FfOut::Ended(run)) if s.ff.as_ref().is_some_and(|f| f.run == run) => {
                     if s.run_hw {
                         s.decode_on_cpu();
-                        retry_at = Some(Instant::now() + Duration::from_secs(1));
+                        s.retry_at = Some(Instant::now() + Duration::from_secs(1));
                         continue;
                     }
                     s.ff = None;
@@ -634,7 +687,7 @@ async fn run(shared: Arc<Shared>, id: u64, name: String, kbps: u32, mut rx: Unbo
                         s.give_up(why);
                     } else {
                         log::warn!("[{}] {why}; restarting the re-encoding", s.name);
-                        retry_at = Some(Instant::now() + Duration::from_secs(1));
+                        s.retry_at = Some(Instant::now() + Duration::from_secs(1));
                     }
                 }
                 _ => {}

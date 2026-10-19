@@ -73,6 +73,8 @@ impl Write for Tee {
 fn init_logging(config: &Path) {
     let mut b = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
     let log_path = config.with_file_name("obs-dynamic-delay.log");
+    // the previous session's log is kept: OBS reopened after a stream would wipe it
+    let _ = std::fs::rename(&log_path, config.with_file_name("obs-dynamic-delay.old.log"));
     if let Ok(f) = File::create(&log_path) {
         b.target(env_logger::Target::Pipe(Box::new(Tee(f))));
     }
