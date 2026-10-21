@@ -293,5 +293,31 @@ position = "top-left"
         self.assertFalse(list(self.obs_dir.rglob("*.dd-changes.json")))
 
 
+@unittest.skipUnless(sys.platform == "win32", "Windows code page and UTF-16 file functions")
+class AccentedUserFolderTest(unittest.TestCase):
+    """The real LuaJIT FFI on Windows: OBS hands the script UTF-8 paths, which io.open and
+    the "A" functions read in the system code page, so a user folder like "Vinícius" was
+    unreadable and the relay was never found."""
+
+    def test_reads_config_and_finds_relay(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Path(tmp) / "Vinícius" / "obs-dynamic-delay"
+            app.mkdir(parents=True)
+            (app / "config.toml").write_bytes(
+                b'language = "pt"\r\nudp_listen = "127.0.0.1:9123"\r\napi_token = "abc123"\r\n')
+            (app / "obs-dynamic-delay.exe").write_bytes(b"MZ")
+            lua = LuaRuntime(unpack_returned_tuples=True)
+            lua.globals().obslua = lua.table()
+            lua.globals().script_path = lambda: app.as_posix() + "/"
+            source = (ROOT / "obs/obs-dynamic-delay.lua").read_text(encoding="utf-8")
+            bridge = lua.execute(source + "\nreturn {read_config=read_ports, exists=exists, exe=exe_path, "
+                                 "state=function() return lang, ports.udp, api_token end}")
+            bridge.read_config()
+            self.assertEqual(tuple(bridge.state()), ("pt", 9123, "abc123"))
+            self.assertTrue(bridge.exists(bridge.exe()))
+            self.assertFalse(bridge.exists(str(app / "missing.exe")))
+            self.assertFalse(bridge.exists(str(app)))  # a folder is not a file
+
+
 if __name__ == "__main__":
     unittest.main()

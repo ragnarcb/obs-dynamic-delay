@@ -38,7 +38,7 @@ end
 ---------------------------------------------------------------------------
 -- Sockets (LuaJIT FFI, no extra dependencies)
 ---------------------------------------------------------------------------
-local sock_lib, shell32 = nil, nil
+local sock_lib, shell32, kernel32 = nil, nil, nil
 
 ffi.cdef [[
   uint16_t htons(uint16_t v);
@@ -56,10 +56,16 @@ if is_windows then
     int setsockopt(SOCKET s, int level, int optname, const void *optval, int optlen);
     int closesocket(SOCKET s);
     int WSAIoctl(SOCKET s, uint32_t code, void *in, uint32_t inlen, void *out, uint32_t outlen, uint32_t *ret, void *ov, void *cb);
-    void *ShellExecuteA(void *hwnd, const char *op, const char *file, const char *params, const char *dir, int show);
+    void *ShellExecuteW(void *hwnd, const uint16_t *op, const uint16_t *file, const uint16_t *params, const uint16_t *dir, int show);
+    int MultiByteToWideChar(unsigned int cp, uint32_t flags, const char *s, int n, uint16_t *w, int wn);
+    uint32_t GetFileAttributesW(const uint16_t *path);
+    void *CreateFileW(const uint16_t *name, uint32_t access, uint32_t share, void *sa, uint32_t disposition, uint32_t flags, void *tmpl);
+    int ReadFile(void *file, void *buf, uint32_t n, uint32_t *read, void *overlapped);
+    int CloseHandle(void *handle);
   ]]
   sock_lib = ffi.load("ws2_32")
   shell32 = ffi.load("shell32")
+  kernel32 = ffi.load("kernel32")
   sock_lib.WSAStartup(0x0202, ffi.new("uint8_t[512]"))
 else
   if ffi.os == "OSX" then
@@ -142,10 +148,49 @@ end
 local function dir() return script_path() end
 local function config_path() return dir() .. "config.toml" end
 
+-- OBS gives paths in UTF-8, but on Windows io.open and the "A" functions read them in
+-- the system code page: a user folder with an accent (C:\Users\Vinícius) was never
+-- found. Windows goes through the UTF-16 ("W") functions instead.
+local function wide(s)
+  if s == nil then return nil end
+  local n = kernel32.MultiByteToWideChar(65001, 0, s, #s, nil, 0)
+  local w = ffi.new("uint16_t[?]", n + 1)
+  kernel32.MultiByteToWideChar(65001, 0, s, #s, w, n)
+  return w
+end
+
 local function exists(path)
+  if is_windows then
+    local attr = kernel32.GetFileAttributesW(wide(path))
+    return attr ~= 0xFFFFFFFF and bit.band(attr, 0x10) == 0 -- a file, not a folder
+  end
   local f = io.open(path, "rb")
   if f then f:close() return true end
   return false
+end
+
+-- Whole file as a string, or nil.
+local function read_file(path)
+  if not is_windows then
+    local f = io.open(path, "rb")
+    if not f then return nil end
+    local text = f:read("*a")
+    f:close()
+    return text
+  end
+  -- GENERIC_READ, shared with the relay writing it, OPEN_EXISTING
+  local h = kernel32.CreateFileW(wide(path), 0x80000000, 7, nil, 3, 0, nil)
+  if tonumber(ffi.cast("intptr_t", h)) == -1 then return nil end
+  local parts, chunk, got = {}, ffi.new("char[65536]"), ffi.new("uint32_t[1]")
+  while kernel32.ReadFile(h, chunk, 65536, got, nil) ~= 0 and got[0] > 0 do
+    table.insert(parts, ffi.string(chunk, got[0]))
+  end
+  kernel32.CloseHandle(h)
+  return table.concat(parts)
+end
+
+local function shell_open(file, params, wd, show)
+  return shell32.ShellExecuteW(nil, wide("open"), wide(file), wide(params), wide(wd), show)
 end
 
 local function exe_path()
@@ -155,10 +200,9 @@ end
 
 -- Ports and language come from the relay's config.toml (edited by the installer/panel).
 local function read_ports()
-  local f = io.open(config_path(), "r")
-  if not f then return end
-  local text = "\n" .. f:read("*a") -- so a key on the first line matches too
-  f:close()
+  local body = read_file(config_path())
+  if not body then return end
+  local text = "\n" .. body:gsub("\r\n", "\n") -- so a key on the first line matches too
   local function port(key)
     return tonumber(text:match("\n%s*" .. key .. "%s*=%s*\"[^\"]*:(%d+)\""))
   end
@@ -200,7 +244,7 @@ end
 
 local function open_target(target)
   if is_windows then
-    shell32.ShellExecuteA(nil, "open", target, nil, nil, 1)
+    shell_open(target, nil, nil, 1)
   elseif ffi.os == "OSX" then
     os.execute('open "' .. target .. '"')
   else
@@ -217,7 +261,7 @@ local function launch()
   if is_windows then
     local wd = exe:match("^(.*)[\\/]")
     -- 0 = SW_HIDE: the relay runs in the background, logs go to obs-dynamic-delay.log
-    local r = shell32.ShellExecuteA(nil, "open", exe, '"' .. config_path() .. '"', wd, 0)
+    local r = shell_open(exe, '"' .. config_path() .. '"', wd, 0)
     if tonumber(ffi.cast("intptr_t", r)) <= 32 then
       obs.script_log(obs.LOG_WARNING, L("could not start ", "falha ao iniciar ", "no se pudo iniciar ") .. exe)
       return false

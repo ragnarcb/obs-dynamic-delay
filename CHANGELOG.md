@@ -2,6 +2,12 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.14.5] - 2026-10-21
+
+### Fixed
+
+- **Windows accounts with an accent in the name (`C:\Users\Vinícius`) did not work.** OBS gives the script its paths in UTF-8, but on Windows Lua's `io.open` and `ShellExecuteA` read them in the system code page, so the script never found the relay nor read its `config.toml` (language back to English, default ports and token). The script now reads files and starts the relay through the Windows UTF-16 functions (`CreateFileW`, `GetFileAttributesW`, `ShellExecuteW`). A Windows-only test runs the script with the real LuaJIT FFI in an accented folder.
+
 ## [0.14.4] - 2026-10-19
 
 ### Fixed
