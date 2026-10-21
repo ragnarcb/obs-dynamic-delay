@@ -296,12 +296,12 @@ position = "top-left"
 @unittest.skipUnless(sys.platform == "win32", "Windows code page and UTF-16 file functions")
 class AccentedUserFolderTest(unittest.TestCase):
     """The real LuaJIT FFI on Windows: OBS hands the script UTF-8 paths, which io.open and
-    the "A" functions read in the system code page, so a user folder like "Vinícius" was
+    the "A" functions read in the system code page, so a user folder like "José" was
     unreadable and the relay was never found."""
 
     def test_reads_config_and_finds_relay(self):
         with tempfile.TemporaryDirectory() as tmp:
-            app = Path(tmp) / "Vinícius" / "obs-dynamic-delay"
+            app = Path(tmp) / "José" / "obs-dynamic-delay"
             app.mkdir(parents=True)
             (app / "config.toml").write_bytes(
                 b'language = "pt"\r\nudp_listen = "127.0.0.1:9123"\r\napi_token = "abc123"\r\n')

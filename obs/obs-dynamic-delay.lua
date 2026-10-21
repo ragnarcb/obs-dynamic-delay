@@ -149,7 +149,7 @@ local function dir() return script_path() end
 local function config_path() return dir() .. "config.toml" end
 
 -- OBS gives paths in UTF-8, but on Windows io.open and the "A" functions read them in
--- the system code page: a user folder with an accent (C:\Users\Vinícius) was never
+-- the system code page: a user folder with an accent (C:\Users\José) was never
 -- found. Windows goes through the UTF-16 ("W") functions instead.
 local function wide(s)
   if s == nil then return nil end
