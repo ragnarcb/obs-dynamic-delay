@@ -128,6 +128,8 @@ fn same_secret(a: &[u8], b: &[u8]) -> bool {
 }
 
 fn run(State(s): State<AppState>, cmd: Cmd) -> impl std::future::Future<Output = Json<Value>> {
+    // where each command came from, so "the delay turned on by itself" can be traced
+    log::info!("command {cmd:?} from the panel or the HTTP API (dock, Stream Deck, bots)");
     let _ = s.tx.send(EngineMsg::Cmd(cmd));
     async { Json(json!({ "ok": true })) }
 }
@@ -529,6 +531,7 @@ async fn deck_press(State(s): State<AppState>, Path(index): Path<usize>) -> Json
         _ => None,
     };
     if let Some(cmd) = cmd {
+        log::info!("command {cmd:?} from the phone deck");
         let _ = s.tx.send(EngineMsg::Cmd(cmd));
         if key.action == "delay.set" {
             let _ = s.tx.send(EngineMsg::Cmd(Cmd::On));
@@ -601,6 +604,10 @@ pub async fn serve_udp(sock: UdpSocket, tx: UnboundedSender<EngineMsg>, shared: 
                 let _ = sock.send_to(reply.as_bytes(), from).await;
             }
             "import" if from_script(script, from, Instant::now()) => import_from_obs(&shared, rest),
+            // the streamer ended the stream in OBS (a dropped connection does not send it)
+            "stopped" => {
+                let _ = tx.send(EngineMsg::StreamStopped);
+            }
             "import" => log::warn!("ignored an import from {from}: not the OBS script"),
             "scene_shown" => {
                 let _ = tx.send(EngineMsg::SceneShown(Instant::now()));
@@ -647,6 +654,9 @@ pub async fn serve_udp(sock: UdpSocket, tx: UnboundedSender<EngineMsg>, shared: 
             }
             _ => match Cmd::parse(&text) {
                 Some(cmd) => {
+                    if !matches!(cmd, Cmd::Stay | Cmd::Quit) {
+                        log::info!("command {cmd:?} from UDP (an OBS hotkey, or another program)");
+                    }
                     let _ = tx.send(EngineMsg::Cmd(cmd));
                 }
                 None => log::warn!("unknown UDP command {text:?}"),

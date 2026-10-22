@@ -356,9 +356,21 @@ local function report_error(msg)
 end
 
 -- Recovery data lives with the profile, not in the shared relay folder.
+-- obs_frontend_get_current_profile_path is not in OBS' Lua binding (it returns memory
+-- the caller must free), so every call failed: the folder comes from [Basic] ProfileDir
+-- of user.ini (OBS 31 and newer) or global.ini (older), as the installer reads it.
 local function profile_path()
-  local ok, path = pcall(obs.obs_frontend_get_current_profile_path)
-  if ok and path and path ~= "" then return path end
+  for _, getter in ipairs({ "obs_frontend_get_user_config", "obs_frontend_get_global_config" }) do
+    local ok, cfg = pcall(function() return obs[getter]() end)
+    local name = ok and cfg ~= nil and obs.config_get_string(cfg, "Basic", "ProfileDir") or nil
+    if name and name ~= "" then
+      local ok2, path = pcall(obs.os_get_config_path_ptr, "obs-studio/basic/profiles/" .. name)
+      if ok2 and path and path ~= "" then
+        path = path:gsub("\\", "/"):gsub("/$", "")
+        if exists(path .. "/basic.ini") then return path end
+      end
+    end
+  end
   report_error(L("Could not locate the OBS profile. No settings changed.",
     "Não foi possível localizar o perfil do OBS. Nenhuma configuração alterada.",
     "No se pudo localizar el perfil de OBS. No se cambió la configuración."))
@@ -1027,6 +1039,9 @@ function script_update(s)
 end
 
 local function on_event(event)
+  -- the streamer ended the stream (OBS reconnecting after a drop does not fire this):
+  -- the relay starts the next one as its settings say, not as this one was left
+  if event == obs.OBS_FRONTEND_EVENT_STREAMING_STOPPED then send("stopped") end
   if event == obs.OBS_FRONTEND_EVENT_STREAMING_STARTING and obs_configured() then
     read_ports() -- the destination may have changed in the panel
     apply_platform_limits()

@@ -60,7 +60,10 @@ class BridgeTest(unittest.TestCase):
         for kind, cast, default in [("int", int, 0), ("string", str, ""), ("bool", bool, False)]:
             obs["obs_data_get_" + kind] = lambda d, k, c=cast, v=default: c(d.get(k, v))
             obs["obs_data_set_" + kind] = lambda d, k, v, c=cast: d.__setitem__(k, c(v))
-        obs.obs_frontend_get_current_profile_path = lambda: self.path.as_posix()
+        # what OBS' Lua binding really has: no obs_frontend_get_current_profile_path, the
+        # profile folder comes from user.ini's [Basic] ProfileDir under the config path
+        obs.obs_frontend_get_user_config = self.user_config
+        obs.os_get_config_path_ptr = lambda rel: (self.root / rel).as_posix()
         obs.obs_frontend_get_profile_config = lambda: self.profile["config"]
         obs.config_has_user_value = lambda d, s, k: k in d.get(s, {})
         obs.config_get_string = lambda d, s, k: d.get(s, {}).get(k, "")
@@ -106,6 +109,12 @@ class BridgeTest(unittest.TestCase):
             self.save_config()
             self.save_json(self.profile["service"], self.path / "service.json")
         (self.obs_dir / "user.ini").write_text("[Basic]\nProfileDir=" + name + "\n", encoding="utf-8")
+
+    def user_config(self):
+        cfg = configparser.ConfigParser()
+        cfg.optionxform = str
+        cfg.read(self.obs_dir / "user.ini", encoding="utf-8")
+        return {s: dict(cfg[s]) for s in cfg.sections()}
 
     @staticmethod
     def read_json(path):

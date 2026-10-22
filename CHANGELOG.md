@@ -2,6 +2,17 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.14.6] - 2026-10-22
+
+### Fixed
+
+- **The delay seemed to turn on by itself when a stream started.** The relay keeps running while OBS is open, so a stream ended with the delay on started the next one with the delay already on, without a word in the log. Now, when the streamer ends the stream in OBS, the next one starts as **Start every stream with the delay on** says (switching the delay on before going live still works). A connection OBS drops and reconnects keeps the delay as it was, so nothing airs early.
+- **Configure OBS, Restore OBS and the platform bitrate rules never worked from the OBS script** ("Could not locate the OBS profile" at every stream start). `obs_frontend_get_current_profile_path` is not in OBS' Lua binding; the profile folder now comes from `[Basic] ProfileDir` of `user.ini` (or `global.ini` on older OBS), as the installer reads it. The script tests now mock only what the binding really has.
+
+### Added
+
+- The log tells where each command came from (panel or HTTP API, an OBS hotkey over UDP, the phone deck, chat) and whether each stream started with the delay on, and why.
+
 ## [0.14.5] - 2026-10-21
 
 ### Fixed

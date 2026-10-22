@@ -44,6 +44,8 @@ pub enum EngineMsg {
     ProgramScene(String),
     /// The destinations changed in the settings: apply them to the running stream.
     DestinationsChanged,
+    /// The streamer ended the stream in OBS (not a dropped connection OBS reconnects).
+    StreamStopped,
 }
 
 fn config_path() -> PathBuf {
@@ -355,6 +357,8 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
     let mut video_size = (1280u16, 720u16);
     let mut last_metadata: Option<StreamMetadata> = None;
     let mut stream_started: Option<Instant> = None;
+    // the streamer ended the stream in OBS (see EngineMsg::StreamStopped)
+    let mut stopped_by_streamer = false;
     let mut in_bytes = 0usize;
     let mut in_frames = 0u32;
     let mut in_meter = Instant::now();
@@ -399,6 +403,8 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
                     }
                     EngineMsg::PublishStart { session, key } => {
                         publishing = Some(session);
+                        // back on air before the tail of the last one ended: the same stream goes on
+                        stopped_by_streamer = false;
                         engine.set_input_ended(false);
                         if outputs.is_none() {
                             let c = shared.config.lock().unwrap().clone();
@@ -407,6 +413,14 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
                                 enabled = true;
                                 engine.set_target(target(enabled, delay));
                             }
+                            let why = if c.start_enabled {
+                                "\"start every stream with the delay on\" is set"
+                            } else if enabled {
+                                "switched on before going live, or left on by the last stream"
+                            } else {
+                                "\"start every stream with the delay on\" is not set"
+                            };
+                            log::info!("stream starts with the delay {} ({delay}s): {why}", if enabled { "ON" } else { "OFF" });
                             let mut o = Outputs::new(&c, &key);
                             let first: Vec<UpMsg> = last_metadata.iter().map(|m| UpMsg::Metadata(m.clone())).collect();
                             for i in 0..o.slots.len() {
@@ -435,6 +449,21 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
                         }
                     }
                     EngineMsg::Cmd(c) => cmd = Some(c),
+                    EngineMsg::StreamStopped => {
+                        // applied once the delayed tail is sent (below), or now if it already was
+                        stopped_by_streamer = true;
+                        if outputs.is_none() && publishing.is_none() {
+                            stopped_by_streamer = false;
+                            let start_on = shared.config.lock().unwrap().start_enabled;
+                            if enabled != start_on {
+                                auto_off.delay_changed(enabled, start_on, Instant::now());
+                                enabled = start_on;
+                                engine.set_target(target(enabled, delay));
+                                log::info!("stream ended in OBS: delay {} for the next stream, as set", if enabled { "ON" } else { "OFF" });
+                            }
+                        }
+                        continue;
+                    }
                     EngineMsg::DestinationsChanged => {
                         if let Some(o) = &mut outputs {
                             let c = shared.config.lock().unwrap().clone();
@@ -615,6 +644,17 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
                     if let Some(mut o) = outputs.take() {
                         for i in 0..o.slots.len() {
                             o.stop(i);
+                        }
+                    }
+                    // ended by the streamer: the next stream starts as the settings say, not
+                    // with the delay this one was left with (it can still be switched on
+                    // before going live). A connection OBS lost keeps it: no spoilers on return.
+                    if std::mem::take(&mut stopped_by_streamer) {
+                        let start_on = shared.config.lock().unwrap().start_enabled;
+                        if enabled != start_on {
+                            auto_off.delay_changed(enabled, start_on, Instant::now());
+                            enabled = start_on;
+                            log::info!("stream ended in OBS: delay {} for the next stream, as set", if enabled { "ON" } else { "OFF" });
                         }
                     }
                     last_out_ts = 0;
