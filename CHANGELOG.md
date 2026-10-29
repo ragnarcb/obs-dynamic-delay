@@ -2,6 +2,12 @@
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.14.7] - 2026-10-29
+
+### Fixed
+
+- **Turning the delay off left some platforms still delayed.** When a platform drops and reconnects, the relay sends it what it kept during the drop, so viewers miss nothing, and that platform then runs that many seconds behind until **Catch up after a drop**. A log showed Twitch and Kick dropping for about 17 s while YouTube stayed up: from then on, turning the delay off still left those two about 16 s behind, while the panel said the delay was off. Now turning the delay off or lowering it (by hand, from chat, or by the auto-off timer) also brings every platform that fell behind back to the new delay. `scripts/e2e-drop.sh` drops the platform in the middle of a stream and checks it.
+
 ## [0.14.6] - 2026-10-22
 
 ### Fixed

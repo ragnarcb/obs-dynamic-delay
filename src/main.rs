@@ -314,6 +314,16 @@ impl Outputs {
     }
 }
 
+/// A destination that dropped and reconnected runs behind by what it kept during the
+/// drop (see `upstream`). A shorter delay means "closer to live" for every platform,
+/// so that backlog goes too: without this, the streamer turns the delay off and
+/// those platforms stay seconds behind as if it were still on.
+fn catch_up_after_drop(outputs: &Option<Outputs>) {
+    if let Some(o) = outputs {
+        o.send(|| UpMsg::CatchUp);
+    }
+}
+
 fn clone_msg(m: &UpMsg) -> UpMsg {
     match m {
         UpMsg::Metadata(x) => UpMsg::Metadata(x.clone()),
@@ -481,6 +491,7 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
                     continue;
                 }
                 let was_enabled = enabled;
+                let was_target = target(enabled, delay);
                 match cmd {
                     Cmd::On => enabled = true,
                     Cmd::Off => enabled = false,
@@ -599,6 +610,9 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
                     }
                 }
                 engine.set_target(target(enabled, delay));
+                if target(enabled, delay) < was_target {
+                    catch_up_after_drop(&outputs);
+                }
             }
             _ = tick.tick() => {
                 let now = Instant::now();
@@ -607,6 +621,7 @@ async fn run_engine(cfg: Config, mut rx: UnboundedReceiver<EngineMsg>, shared: A
                     // same as "off"
                     enabled = false;
                     engine.set_target(target(enabled, delay));
+                    catch_up_after_drop(&outputs);
                     log::info!("delay OFF ({delay}s), auto-off after {armed} min");
                     shared.event("ok", t!("Auto-off: the delay was turned off after {armed} min.", "Desligou sozinho: o delay foi desligado depois de {armed} min.", "Apagado automático: el delay se desactivó después de {armed} min."));
                     shared.push(serde_json::json!({ "type": "auto_off", "minutes": armed, "delay_seconds": delay }));
